@@ -91,7 +91,8 @@ function formatarTeleParaTela(tele: any) {
     motoboyId: tele.motoboyId,
     motoboy: tele.motoboyNome || tele.motoboy?.nome || "",
     status: statusParaTela(tele.status),
-    criadoEm: formatarData(tele.createdAt),
+    criadoEm: formatarData(tele.dataTele || tele.createdAt),
+dataTele: tele.dataTele,
 
     valorBase: tele.valorBase,
     retorno: tele.retorno,
@@ -167,6 +168,7 @@ export async function POST(request: Request) {
     data: {
       clienteId: cliente?.id,
       solicitante: body.solicitante,
+      dataTele: body.dataTele ? new Date(body.dataTele) : new Date(),
       motoboyId: motoboy?.id,
       motoboyNome: body.motoboy || "",
       status: statusParaBanco(body.status || "Aguardando cliente"),
@@ -226,6 +228,7 @@ export async function PUT(request: Request) {
     where: { id: body.id },
     data: {
       solicitante: body.solicitante,
+      dataTele: body.dataTele ? new Date(body.dataTele) : undefined,
       motoboyId: motoboy?.id || null,
       motoboyNome: body.motoboy || "",
       status: statusParaBanco(body.status),

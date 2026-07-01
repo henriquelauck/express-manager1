@@ -112,7 +112,7 @@ model Tele {
   observacaoGeral String?
 
   paradas         Parada[]
-
+dataTele DateTime @default(now())
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 }

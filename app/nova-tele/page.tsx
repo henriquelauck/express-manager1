@@ -29,6 +29,7 @@ export default function NovaTelePage() {
   const { clientes, recarregarDados } = useExpressManager();
 
   const [solicitante, setSolicitante] = useState("");
+  const [dataTele, setDataTele] = useState(new Date().toISOString().split("T")[0]);
   const [valorBase, setValorBase] = useState("14,00");
   const [observacaoGeral, setObservacaoGeral] = useState("");
   const [salvando, setSalvando] = useState(false);
@@ -141,6 +142,7 @@ export default function NovaTelePage() {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
+        dataTele,
         solicitante,
         motoboyId: null,
         motoboy: "",
@@ -205,6 +207,18 @@ export default function NovaTelePage() {
               </option>
             ))}
           </select>
+          <div className="mb-8">
+  <label className="text-sm font-medium text-slate-600">
+    Data da tele
+  </label>
+
+  <input
+    type="date"
+    value={dataTele}
+    onChange={(e) => setDataTele(e.target.value)}
+    className="w-full mt-2 h-14 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
+  />
+</div>
         </div>
 
         <h2 className="text-2xl font-bold mb-4">Rota</h2>
