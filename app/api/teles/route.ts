@@ -168,7 +168,9 @@ export async function POST(request: Request) {
     data: {
       clienteId: cliente?.id,
       solicitante: body.solicitante,
-      dataTele: body.dataTele ? new Date(body.dataTele) : new Date(),
+      dataTele: body.dataTele
+  ? new Date(`${body.dataTele}T12:00:00`)
+  : new Date(),
       motoboyId: motoboy?.id,
       motoboyNome: body.motoboy || "",
       status: statusParaBanco(body.status || "Aguardando cliente"),
@@ -228,7 +230,9 @@ export async function PUT(request: Request) {
     where: { id: body.id },
     data: {
       solicitante: body.solicitante,
-      dataTele: body.dataTele ? new Date(body.dataTele) : undefined,
+      dataTele: body.dataTele
+  ? new Date(`${body.dataTele}T12:00:00`)
+  : undefined,
       motoboyId: motoboy?.id || null,
       motoboyNome: body.motoboy || "",
       status: statusParaBanco(body.status),
