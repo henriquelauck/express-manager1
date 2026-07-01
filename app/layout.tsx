@@ -1,3 +1,5 @@
+import Sidebar from "@/components/Sidebar";
+import { ExpressManagerProvider } from "@/context/ExpressManagerContext";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -27,7 +29,16 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body>
+  <ExpressManagerProvider>
+    <div className="flex min-h-screen bg-[#f7f8fb]">
+      <Sidebar />
+      <div className="flex-1">
+        {children}
+      </div>
+    </div>
+  </ExpressManagerProvider>
+</body>
     </html>
   );
 }

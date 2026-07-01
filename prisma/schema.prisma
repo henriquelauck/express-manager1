@@ -1,0 +1,136 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  MOTOBOY
+  CLIENTE
+}
+
+enum StatusTele {
+  AGUARDANDO_CLIENTE
+  AGUARDANDO_MOTOBOY
+  EM_ROTA
+  ENTREGUE
+}
+
+enum TipoParada {
+  ENTREGA
+  COLETA
+  TROCAR
+  ENTREGA_E_COLETA
+}
+
+enum Recebimento {
+  PENDENTE
+  ESCRITORIO
+  MOTOBOY
+}
+
+enum FormaCobranca {
+  NA_HORA
+  SEMANAL
+  QUINZENAL
+  MENSAL
+}
+
+model User {
+  id        String   @id @default(cuid())
+  nome      String
+  email     String   @unique
+  senhaHash String?
+  role      Role     @default(ADMIN)
+
+  motoboy   Motoboy?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Cliente {
+  id             String        @id @default(cuid())
+  nome           String
+  telefone       String?
+  endereco1      String?
+  endereco2      String?
+  formaCobranca  FormaCobranca @default(SEMANAL)
+
+  teles          Tele[]
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Motoboy {
+  id        String   @id @default(cuid())
+  nome      String
+  telefone  String?
+  moto      String?
+  placa     String?
+
+  userId    String?  @unique
+  user      User?    @relation(fields: [userId], references: [id])
+
+  teles     Tele[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Tele {
+  id              String          @id @default(cuid())
+
+  clienteId       String?
+  cliente         Cliente?        @relation(fields: [clienteId], references: [id])
+
+  solicitante     String
+
+  motoboyId       String?
+  motoboy         Motoboy?        @relation(fields: [motoboyId], references: [id])
+
+  motoboyNome     String?
+
+  status          StatusTele      @default(AGUARDANDO_CLIENTE)
+  tipoRota        String
+
+  valorBase       Float           @default(0)
+  retorno         Float           @default(0)
+  espera          Float           @default(0)
+  total           Float           @default(0)
+
+  recebimento     Recebimento     @default(PENDENTE)
+  formaCobranca   FormaCobranca   @default(SEMANAL)
+  valorRecebido   Float           @default(0)
+  dataRecebimento DateTime?
+  motoboyRecebedor String?
+  fechamentoId    String?
+
+  observacaoGeral String?
+
+  paradas         Parada[]
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+model Parada {
+  id          String     @id @default(cuid())
+
+  teleId      String
+  tele        Tele       @relation(fields: [teleId], references: [id], onDelete: Cascade)
+
+  tipo        TipoParada
+  cliente     String
+  endereco    String
+  contato     String?
+  observacao  String?
+
+  ordem       Int        @default(1)
+
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
