@@ -28,6 +28,7 @@ export type Tele = {
   status: StatusTele;
 
   criadoEm: string;
+dataTele: string;
 
   valorBase: number;
   retorno: number;

@@ -64,7 +64,9 @@ export default function TelesPage() {
 
   const [modalEdicaoAberto, setModalEdicaoAberto] = useState(false);
   const [teleEditando, setTeleEditando] = useState<any>(null);
-
+const [dataFiltro, setDataFiltro] = useState(
+  new Date().toISOString().split("T")[0]
+);
   useEffect(() => {
     carregarTeles();
   }, []);
@@ -91,9 +93,11 @@ export default function TelesPage() {
     return new Date().toLocaleDateString("pt-BR");
   }
 
-  function ehDeHoje(tele: Tele) {
-    return tele.criadoEm?.split(",")[0] === dataHoje();
-  }
+  function ehDaDataSelecionada(tele: Tele) {
+  if (!tele.dataTele) return false;
+
+  return tele.dataTele.slice(0, 10) === dataFiltro;
+}
 
   function normalizarTelefone(telefone: string) {
     const numeros = telefone?.replace(/\D/g, "") || "";
@@ -336,7 +340,7 @@ Valor da tele: R$ ${tele.valor}`;
 
   function totalPorStatus(status: string) {
     return teles
-      .filter((tele: Tele) => tele.status === status && ehDeHoje(tele))
+      .filter((tele: Tele) => tele.status === status && ehDaDataSelecionada(tele))
       .reduce(
         (total: number, tele: Tele) => total + converterValor(tele.valor),
         0
@@ -350,6 +354,18 @@ Valor da tele: R$ ${tele.valor}`;
           Acompanhe suas teles por status operacional.
         </p>
       </div>
+      <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-6 w-72">
+  <label className="text-sm font-medium text-slate-600">
+    Data das operações
+  </label>
+
+  <input
+    type="date"
+    value={dataFiltro}
+    onChange={(e) => setDataFiltro(e.target.value)}
+    className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
+  />
+</div>
 
       {teles.length === 0 && (
         <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100 max-w-xl">
@@ -363,7 +379,7 @@ Valor da tele: R$ ${tele.valor}`;
       <div className="grid grid-cols-4 gap-5 items-start">
         {statusOptions.map((status) => {
           const telesDoStatus = teles.filter(
-            (tele: Tele) => tele.status === status && ehDeHoje(tele)
+            (tele: Tele) => tele.status === status && ehDaDataSelecionada(tele)
           );
 
           return (

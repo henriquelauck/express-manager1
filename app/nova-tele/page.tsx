@@ -207,7 +207,9 @@ export default function NovaTelePage() {
               </option>
             ))}
           </select>
-          <div className="mb-8">
+</div>
+
+<div className="mb-8">
   <label className="text-sm font-medium text-slate-600">
     Data da tele
   </label>
@@ -219,7 +221,6 @@ export default function NovaTelePage() {
     className="w-full mt-2 h-14 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
   />
 </div>
-        </div>
 
         <h2 className="text-2xl font-bold mb-4">Rota</h2>
 
