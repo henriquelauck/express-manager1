@@ -134,9 +134,10 @@ const [dataFiltro, setDataFiltro] = useState(
     });
 
     if (!resposta.ok) {
-      alert("Erro ao atualizar tele.");
-      return;
-    }
+  const erro = await resposta.text();
+  alert(`Erro ao atualizar tele: ${erro}`);
+  return;
+}
 
     if (recarregar) {
       await recarregarDados();
@@ -211,10 +212,10 @@ const [dataFiltro, setDataFiltro] = useState(
     });
 
     if (!resposta.ok) {
-      alert("Erro ao excluir tele.");
-      return;
-    }
-
+  const erro = await resposta.text();
+  alert(`Erro ao atualizar tele: ${erro}`);
+  return;
+}
     await recarregarDados();
   }
 
