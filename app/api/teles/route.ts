@@ -214,63 +214,77 @@ export async function POST(request: Request) {
   return NextResponse.json(formatarTeleParaTela(tele));
 }
 export async function PUT(request: Request) {
-  const body = await request.json();
+  try {
+    const body = await request.json();
 
-  const motoboy = body.motoboy
-    ? await prisma.motoboy.findFirst({
-        where: { nome: body.motoboy },
-      })
-    : null;
+    const motoboy = body.motoboy
+      ? await prisma.motoboy.findFirst({
+          where: { nome: body.motoboy },
+        })
+      : null;
 
-  await prisma.parada.deleteMany({
-    where: { teleId: body.id },
-  });
+    await prisma.parada.deleteMany({
+      where: { teleId: body.id },
+    });
 
-  const tele = await prisma.tele.update({
-    where: { id: body.id },
-    data: {
-      solicitante: body.solicitante,
-      dataTele: body.dataTele
-  ? new Date(`${body.dataTele}T12:00:00`)
-  : undefined,
-      motoboyId: motoboy?.id || null,
-      motoboyNome: body.motoboy || "",
-      status: statusParaBanco(body.status),
-      tipoRota: body.tipoRota || "Entrega",
+    const tele = await prisma.tele.update({
+      where: { id: body.id },
+      data: {
+        solicitante: body.solicitante,
+        dataTele: body.dataTele
+          ? new Date(`${body.dataTele.slice(0, 10)}T12:00:00`)
+          : undefined,
 
-      valorBase: body.valorBase || Number(String(body.valor || "0").replace(",", ".")),
-      retorno: body.retorno || 0,
-      espera: body.espera || 0,
-      total: body.total || Number(String(body.valor || "0").replace(",", ".")),
+        motoboyId: motoboy?.id || null,
+        motoboyNome: body.motoboy || "",
+        status: statusParaBanco(body.status),
+        tipoRota: body.tipoRota || "Entrega",
 
-      recebimento: recebimentoParaBanco(body.recebimento || "pendente"),
-      formaCobranca: formaCobrancaParaBanco(body.formaCobranca || "semanal"),
-      valorRecebido: body.valorRecebido || 0,
-      motoboyRecebedor: body.motoboyRecebedor || null,
-      fechamentoId: body.fechamentoId || null,
-      observacaoGeral: body.observacaoGeral || "",
+        valorBase:
+          body.valorBase || Number(String(body.valor || "0").replace(",", ".")),
+        retorno: body.retorno || 0,
+        espera: body.espera || 0,
+        total:
+          body.total || Number(String(body.valor || "0").replace(",", ".")),
 
-      paradas: {
-        create: body.paradas.map((parada: any, index: number) => ({
-          tipo: tipoParadaParaBanco(parada.tipo),
-          cliente: parada.cliente || parada.nomeCliente || "",
-          endereco: parada.endereco || "",
-          contato: parada.contato || "",
-          observacao: parada.observacao || "",
-          ordem: index + 1,
-        })),
+        recebimento: recebimentoParaBanco(body.recebimento || "pendente"),
+        formaCobranca: formaCobrancaParaBanco(
+          body.formaCobranca || "semanal"
+        ),
+        valorRecebido: body.valorRecebido || 0,
+        motoboyRecebedor: body.motoboyRecebedor || null,
+        fechamentoId: body.fechamentoId || null,
+        observacaoGeral: body.observacaoGeral || "",
+
+        paradas: {
+          create: body.paradas.map((parada: any, index: number) => ({
+            tipo: tipoParadaParaBanco(parada.tipo),
+            cliente: parada.cliente || parada.nomeCliente || "",
+            endereco: parada.endereco || "",
+            contato: parada.contato || "",
+            observacao: parada.observacao || "",
+            ordem: index + 1,
+          })),
+        },
       },
-    },
-    include: {
-      paradas: {
-        orderBy: { ordem: "asc" },
+      include: {
+        paradas: {
+          orderBy: { ordem: "asc" },
+        },
+        motoboy: true,
+        cliente: true,
       },
-      motoboy: true,
-      cliente: true,
-    },
-  });
+    });
 
-  return NextResponse.json(formatarTeleParaTela(tele));
+    return NextResponse.json(formatarTeleParaTela(tele));
+  } catch (error: any) {
+    return NextResponse.json(
+      {
+        erro: error.message || "Erro desconhecido ao atualizar tele",
+      },
+      { status: 500 }
+    );
+  }
 }
 
 export async function DELETE(request: Request) {
