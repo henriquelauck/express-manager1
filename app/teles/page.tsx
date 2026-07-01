@@ -1,5 +1,6 @@
 "use client";
-
+import { TipoParada } from "@/types/Parada";
+import { Tele } from "@/types/Tele";
 import { useExpressManager } from "@/context/ExpressManagerContext";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -43,34 +44,6 @@ type Parada = {
   observacao: string;
 };
 
-type Tele = {
-  id: string;
-  solicitante: string;
-  tipoRota: string;
-  nomeCliente: string;
-  endereco: string;
-  contato: string;
-  observacao: string;
-  valor: string;
-  status: string;
-  criadoEm: string;
-  motoboy?: string;
-  esperaMinutos?: number;
-  valorBase?: number;
-  retorno?: number;
-  espera?: number;
-  total?: number;
-  paradas?: Parada[];
-  recebimento?: string;
-  formaCobranca?: string;
-  valorRecebido?: number;
-  motoboyRecebedor?: string | null;
-  fechamentoId?: string | null;
-  observacaoGeral?: string;
-  motoboyId?: string | null;
-recebido: boolean;
-dataRecebimento?: string | null;
-};
 
 const statusOptions = [
   "Aguardando cliente",
@@ -133,14 +106,15 @@ export default function TelesPage() {
     if (tele.paradas && tele.paradas.length > 0) return tele.paradas;
 
     return [
-      {
-        tipo: tele.tipoRota,
-        cliente: tele.nomeCliente,
-        endereco: tele.endereco,
-        contato: tele.contato,
-        observacao: tele.observacao,
-      },
-    ];
+  {
+    id: `${tele.id}-parada-1`,
+    tipo: tele.tipoRota as TipoParada,
+    cliente: tele.nomeCliente,
+    endereco: tele.endereco,
+    contato: tele.contato,
+    observacao: tele.observacao,
+  },
+];
   }
 
   async function salvarTeleNoBanco(teleAtualizada: any, recarregar = true) {
@@ -304,8 +278,7 @@ export default function TelesPage() {
   function gerarTextoParadas(tele: Tele, incluirObservacao: boolean) {
     return getParadas(tele)
       .map((parada) => {
-        const nome = parada.cliente || parada.nomeCliente || "";
-
+        const nome = parada.cliente || "";
         let texto = `${parada.tipo}\n${nome}\n${parada.endereco}`;
 
         if (incluirObservacao && parada.observacao) {
