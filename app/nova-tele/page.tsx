@@ -1,8 +1,8 @@
 "use client";
 
-import { useExpressManager } from "@/context/ExpressManagerContext";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useExpressManager } from "@/context/ExpressManagerContext";
 import {
   ArrowRight,
   MapPin,
@@ -12,13 +12,6 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
-
-type Cliente = {
-  nome: string;
-  telefone: string;
-  endereco1: string;
-  endereco2: string;
-};
 
 type TipoParada = "Entrega" | "Coleta" | "Trocar" | "Entrega e coleta";
 
@@ -31,40 +24,14 @@ type Parada = {
   observacao: string;
 };
 
-type Tele = {
-  id: string;
-  solicitante: string;
-  motoboyId: string | null;
-  motoboy: string;
-  status: string;
-  criadoEm: string;
-
-  valorBase: number;
-  retorno: number;
-  espera: number;
-  total: number;
-
-  recebido: boolean;
-  observacaoGeral: string;
-  paradas: Parada[];
-
-  // compatibilidade com a tela Teles atual
-  tipoRota: string;
-  nomeCliente: string;
-  endereco: string;
-  contato: string;
-  observacao: string;
-  valor: string;
-  esperaMinutos: number;
-};
-
 export default function NovaTelePage() {
   const router = useRouter();
+  const { clientes, recarregarDados } = useExpressManager();
 
-  const { clientes, teles, setTeles } = useExpressManager();
   const [solicitante, setSolicitante] = useState("");
   const [valorBase, setValorBase] = useState("14,00");
   const [observacaoGeral, setObservacaoGeral] = useState("");
+  const [salvando, setSalvando] = useState(false);
 
   const [paradas, setParadas] = useState<Parada[]>([
     {
@@ -77,7 +44,6 @@ export default function NovaTelePage() {
     },
   ]);
 
-  
   function atualizarParada(index: number, campo: keyof Parada, valor: string) {
     const novasParadas = [...paradas];
 
@@ -92,8 +58,8 @@ export default function NovaTelePage() {
       );
 
       if (clienteEncontrado) {
-        novasParadas[index].endereco = clienteEncontrado.endereco1;
-        novasParadas[index].contato = clienteEncontrado.telefone;
+        novasParadas[index].endereco = clienteEncontrado.endereco1 || "";
+        novasParadas[index].contato = clienteEncontrado.telefone || "";
       }
     }
 
@@ -128,9 +94,7 @@ export default function NovaTelePage() {
 
   function descobrirTipoRota() {
     if (paradas.length === 1) return paradas[0].tipo;
-
     if (temRetorno()) return "Rota com retorno";
-
     return "Rota com múltiplas paradas";
   }
 
@@ -150,7 +114,7 @@ export default function NovaTelePage() {
     return converterValor(valorBase) + calcularRetorno();
   }
 
-  function criarTele() {
+  async function criarTele() {
     if (!solicitante) {
       alert("Selecione o cliente solicitante.");
       return;
@@ -165,54 +129,52 @@ export default function NovaTelePage() {
       return;
     }
 
-    
+    setSalvando(true);
 
-    const primeiraParada = paradas[0];
     const base = converterValor(valorBase);
     const retorno = calcularRetorno();
     const total = calcularTotal();
 
-    const novaTele: Tele = {
-      id: crypto.randomUUID(),
-      solicitante,
-      motoboyId: null,
-      motoboy: "",
-      status: "Aguardando cliente",
-      criadoEm: new Date().toLocaleString("pt-BR"),
+    const resposta = await fetch("/api/teles", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        solicitante,
+        motoboyId: null,
+        motoboy: "",
+        status: "Aguardando cliente",
 
-      valorBase: base,
-      retorno,
-      espera: 0,
-      total,
+        valorBase: base,
+        retorno,
+        espera: 0,
+        total,
 
-      recebido: false,
+        recebimento: "pendente",
+        formaCobranca: "semanal",
+        valorRecebido: 0,
+        motoboyRecebedor: null,
+        fechamentoId: null,
 
-      recebido: false,
+        observacaoGeral,
+        paradas,
 
-recebimento: "pendente",
-formaCobranca: "semanal",
-valorRecebido: 0,
-dataRecebimento: null,
-motoboyRecebedor: null,
-fechamentoId: null,
+        tipoRota: descobrirTipoRota(),
+        valor: formatarValor(total),
+      }),
+    });
 
-observacaoGeral,
-paradas,
-      observacaoGeral,
-      paradas,
+    if (!resposta.ok) {
+      alert("Erro ao salvar tele.");
+      setSalvando(false);
+      return;
+    }
 
-      tipoRota: descobrirTipoRota(),
-      nomeCliente: primeiraParada.cliente,
-      endereco: primeiraParada.endereco,
-      contato: primeiraParada.contato,
-      observacao: primeiraParada.observacao,
-      valor: formatarValor(total),
-      esperaMinutos: 0,
-    };
+    await recarregarDados();
 
-    setTeles([...teles, novaTele]);
-
-router.push("/teles");
+    setSalvando(false);
+    router.push("/teles");
   }
 
   return (
@@ -237,8 +199,8 @@ router.push("/teles");
           >
             <option value="">Selecione o cliente solicitante</option>
 
-            {clientes.map((cliente, index) => (
-              <option key={index} value={cliente.nome}>
+            {clientes.map((cliente) => (
+              <option key={cliente.id || cliente.nome} value={cliente.nome}>
                 {cliente.nome}
               </option>
             ))}
@@ -335,8 +297,8 @@ router.push("/teles");
         </div>
 
         <datalist id="clientes-lista">
-          {clientes.map((cliente, index) => (
-            <option key={index} value={cliente.nome} />
+          {clientes.map((cliente) => (
+            <option key={cliente.id || cliente.nome} value={cliente.nome} />
           ))}
         </datalist>
 
@@ -393,9 +355,10 @@ router.push("/teles");
         <div className="flex justify-end mt-8">
           <button
             onClick={criarTele}
-            className="bg-emerald-600 text-white px-7 py-4 rounded-2xl flex items-center gap-2 shadow-sm"
+            disabled={salvando}
+            className="bg-emerald-600 text-white px-7 py-4 rounded-2xl flex items-center gap-2 shadow-sm disabled:opacity-50"
           >
-            Continuar
+            {salvando ? "Salvando..." : "Continuar"}
             <ArrowRight size={22} />
           </button>
         </div>

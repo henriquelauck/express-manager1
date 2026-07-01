@@ -1,10 +1,9 @@
 "use client";
-import FloatingButton from "@/components/FloatingButton";
+
 import { useExpressManager } from "@/context/ExpressManagerContext";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-  ClipboardList,
   Pencil,
   Trash2,
   MapPin,
@@ -18,18 +17,20 @@ import {
   Plus,
 } from "lucide-react";
 
+type Cliente = {
+  id?: string;
+  nome: string;
+  telefone: string;
+  endereco1: string;
+  endereco2?: string;
+};
+
 type Motoboy = {
+  id?: string;
   nome: string;
   telefone: string;
   moto: string;
   placa: string;
-};
-
-type Cliente = {
-  nome: string;
-  telefone: string;
-  endereco1: string;
-  endereco2: string;
 };
 
 type Parada = {
@@ -60,6 +61,12 @@ type Tele = {
   espera?: number;
   total?: number;
   paradas?: Parada[];
+  recebimento?: string;
+  formaCobranca?: string;
+  valorRecebido?: number;
+  motoboyRecebedor?: string | null;
+  fechamentoId?: string | null;
+  observacaoGeral?: string;
 };
 
 const statusOptions = [
@@ -70,18 +77,30 @@ const statusOptions = [
 ];
 
 export default function TelesPage() {
-  
-  const { clientes, motoboys, teles, setTeles } = useExpressManager();  
+  const { clientes, motoboys, teles, setTeles, recarregarDados } =
+    useExpressManager();
+
+  const esperaTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const [modalAberto, setModalAberto] = useState(false);
   const [mensagem, setMensagem] = useState("");
   const [telefoneDestino, setTelefoneDestino] = useState("");
+
   const [modalEdicaoAberto, setModalEdicaoAberto] = useState(false);
-const [teleEditando, setTeleEditando] = useState<any>(null);
-  
+  const [teleEditando, setTeleEditando] = useState<any>(null);
+
+  useEffect(() => {
+    carregarTeles();
+  }, []);
+
+  async function carregarTeles() {
+    const resposta = await fetch("/api/teles");
+    const dados = await resposta.json();
+    setTeles(dados);
+  }
 
   function converterValor(valor: string) {
-    return Number(valor.replace(",", "."));
+    return Number(String(valor || "0").replace(",", "."));
   }
 
   function formatarValor(valor: number) {
@@ -92,123 +111,19 @@ const [teleEditando, setTeleEditando] = useState<any>(null);
     return Math.floor(minutos / 15) * 5;
   }
 
+  function dataHoje() {
+    return new Date().toLocaleDateString("pt-BR");
+  }
+
+  function ehDeHoje(tele: Tele) {
+    return tele.criadoEm?.split(",")[0] === dataHoje();
+  }
+
   function normalizarTelefone(telefone: string) {
-    const numeros = telefone.replace(/\D/g, "");
+    const numeros = telefone?.replace(/\D/g, "") || "";
     if (!numeros) return "";
     if (numeros.startsWith("55")) return numeros;
     return `55${numeros}`;
-  }
-
-  function alterarStatus(id: string, novoStatus: string) {
-    setTeles(
-      teles.map((tele) =>
-        tele.id === id ? { ...tele, status: novoStatus } : tele
-      )
-    );
-  }
-
-  function alterarMotoboy(id: string, motoboy: string) {
-    setTeles(
-      teles.map((tele) =>
-        tele.id === id
-          ? {
-              ...tele,
-              motoboy,
-              status: motoboy ? "Em rota" : tele.status,
-            }
-          : tele
-      )
-    );
-  }
-
-  function alterarEspera(id: string, minutos: number) {
-    setTeles(
-      teles.map((tele) => {
-        if (tele.id !== id) return tele;
-
-        const esperaAtual = tele.esperaMinutos || 0;
-        const valorSemEspera =
-          converterValor(tele.valor) - valorEspera(esperaAtual);
-
-        const novoValor = valorSemEspera + valorEspera(minutos);
-
-        return {
-          ...tele,
-          esperaMinutos: minutos,
-          espera: valorEspera(minutos),
-          total: novoValor,
-          valor: formatarValor(novoValor),
-        };
-      })
-    );
-  }
-
-  function excluirTele(id: string) {
-    const confirmar = confirm("Tem certeza que deseja excluir essa tele?");
-    if (!confirmar) return;
-
-    setTeles(teles.filter((tele) => tele.id !== id));
-  }
-
-  function editarTele(id: string) {
-  const tele = teles.find((item) => item.id === id);
-
-  if (!tele) return;
-
-  setTeleEditando({
-    ...tele,
-    paradas: getParadas(tele),
-  });
-
-  setModalEdicaoAberto(true);
-}
-
-function atualizarTeleEditando(campo: string, valor: any) {
-  setTeleEditando({
-    ...teleEditando,
-    [campo]: valor,
-  });
-}
-
-function atualizarParadaEditando(index: number, campo: string, valor: string) {
-  const novasParadas = [...teleEditando.paradas];
-
-  novasParadas[index] = {
-    ...novasParadas[index],
-    [campo]: valor,
-  };
-
-  setTeleEditando({
-    ...teleEditando,
-    paradas: novasParadas,
-  });
-}
-
-function salvarEdicaoTele() {
-  if (!teleEditando) return;
-
-  const primeiraParada = teleEditando.paradas[0];
-
-  setTeles(
-    teles.map((tele) =>
-      tele.id === teleEditando.id
-        ? {
-            ...teleEditando,
-            nomeCliente: primeiraParada.cliente || primeiraParada.nomeCliente,
-            endereco: primeiraParada.endereco,
-            contato: primeiraParada.contato,
-            observacao: primeiraParada.observacao,
-          }
-        : tele
-    )
-  );
-
-  setModalEdicaoAberto(false);
-  setTeleEditando(null);
-}
-
-  function concluirTele(id: string) {
-    alterarStatus(id, "Entregue");
   }
 
   function getParadas(tele: Tele) {
@@ -223,6 +138,164 @@ function salvarEdicaoTele() {
         observacao: tele.observacao,
       },
     ];
+  }
+
+  async function salvarTeleNoBanco(teleAtualizada: any, recarregar = true) {
+    const resposta = await fetch("/api/teles", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ...teleAtualizada,
+        paradas: getParadas(teleAtualizada),
+      }),
+    });
+
+    if (!resposta.ok) {
+      alert("Erro ao atualizar tele.");
+      return;
+    }
+
+    if (recarregar) {
+      await recarregarDados();
+    }
+  }
+
+  async function alterarStatus(id: string, novoStatus: string) {
+    const tele = teles.find((item: Tele) => item.id === id);
+    if (!tele) return;
+
+    await salvarTeleNoBanco({
+      ...tele,
+      status: novoStatus,
+    });
+  }
+
+  async function alterarMotoboy(id: string, motoboy: string) {
+    const tele = teles.find((item: Tele) => item.id === id);
+    if (!tele) return;
+
+    await salvarTeleNoBanco({
+      ...tele,
+      motoboy,
+      status: motoboy ? "Em rota" : tele.status,
+    });
+  }
+
+  function alterarEspera(id: string, minutos: number) {
+    const tele = teles.find((item: Tele) => item.id === id);
+    if (!tele) return;
+
+    const esperaAtual = tele.esperaMinutos || 0;
+    const valorSemEspera =
+      converterValor(tele.valor) - valorEspera(esperaAtual);
+
+    const novoValor = valorSemEspera + valorEspera(minutos);
+
+    const teleAtualizada = {
+      ...tele,
+      esperaMinutos: minutos,
+      espera: valorEspera(minutos),
+      total: novoValor,
+      valor: formatarValor(novoValor),
+      paradas: getParadas(tele),
+    };
+
+    setTeles(
+      teles.map((item: Tele) =>
+        item.id === id ? teleAtualizada : item
+      )
+    );
+
+    if (esperaTimers.current[id]) {
+      clearTimeout(esperaTimers.current[id]);
+    }
+
+    esperaTimers.current[id] = setTimeout(() => {
+      salvarTeleNoBanco(teleAtualizada, false);
+    }, 700);
+  }
+
+  async function excluirTele(id: string) {
+    const confirmar = confirm("Tem certeza que deseja excluir essa tele?");
+    if (!confirmar) return;
+
+    const resposta = await fetch("/api/teles", {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ id }),
+    });
+
+    if (!resposta.ok) {
+      alert("Erro ao excluir tele.");
+      return;
+    }
+
+    await recarregarDados();
+  }
+
+  function editarTele(id: string) {
+    const tele = teles.find((item: Tele) => item.id === id);
+    if (!tele) return;
+
+    setTeleEditando({
+      ...tele,
+      paradas: getParadas(tele),
+    });
+
+    setModalEdicaoAberto(true);
+  }
+
+  function atualizarTeleEditando(campo: string, valor: any) {
+    setTeleEditando({
+      ...teleEditando,
+      [campo]: valor,
+    });
+  }
+
+  function atualizarParadaEditando(index: number, campo: string, valor: string) {
+    const novasParadas = [...teleEditando.paradas];
+
+    novasParadas[index] = {
+      ...novasParadas[index],
+      [campo]: valor,
+    };
+
+    setTeleEditando({
+      ...teleEditando,
+      paradas: novasParadas,
+    });
+  }
+
+  async function salvarEdicaoTele() {
+  if (!teleEditando) return;
+
+  const primeiraParada = teleEditando.paradas[0];
+  const valorNumerico = converterValor(teleEditando.valor);
+
+  await salvarTeleNoBanco({
+    ...teleEditando,
+    valorBase: valorNumerico,
+    total: valorNumerico,
+    valor: formatarValor(valorNumerico),
+
+    nomeCliente: primeiraParada.cliente || primeiraParada.nomeCliente,
+    endereco: primeiraParada.endereco,
+    contato: primeiraParada.contato,
+    observacao: primeiraParada.observacao,
+
+    paradas: teleEditando.paradas,
+  });
+
+  setModalEdicaoAberto(false);
+  setTeleEditando(null);
+}
+
+  function concluirTele(id: string) {
+    alterarStatus(id, "Entregue");
   }
 
   function gerarTextoParadas(tele: Tele, incluirObservacao: boolean) {
@@ -242,7 +315,7 @@ function salvarEdicaoTele() {
   }
 
   function gerarOrcamento(tele: Tele) {
-    const cliente = clientes.find((c) => c.nome === tele.solicitante);
+    const cliente = clientes.find((c: Cliente) => c.nome === tele.solicitante);
     const telefone = cliente?.telefone || "";
 
     const texto = `Olá!
@@ -261,7 +334,7 @@ Aguardamos sua confirmação.`;
   }
 
   function gerarTeleMotoboy(tele: Tele) {
-    const motoboy = motoboys.find((m) => m.nome === tele.motoboy);
+    const motoboy = motoboys.find((m: Motoboy) => m.nome === tele.motoboy);
     const telefone = motoboy?.telefone || "";
 
     const texto = `NOVA TELE
@@ -287,11 +360,13 @@ Valor da tele: R$ ${tele.valor}`;
 
   function totalPorStatus(status: string) {
     return teles
-      .filter((tele) => tele.status === status)
-      .reduce((total, tele) => total + converterValor(tele.valor), 0);
+      .filter((tele: Tele) => tele.status === status && ehDeHoje(tele))
+      .reduce(
+        (total: number, tele: Tele) => total + converterValor(tele.valor),
+        0
+      );
   }
-
-  return (
+    return (
     <main className="min-h-screen bg-[#f7f8fb] p-8">
       <div className="mb-8">
         <h1 className="text-4xl font-bold">Central de Operações</h1>
@@ -311,7 +386,9 @@ Valor da tele: R$ ${tele.valor}`;
 
       <div className="grid grid-cols-4 gap-5 items-start">
         {statusOptions.map((status) => {
-          const telesDoStatus = teles.filter((tele) => tele.status === status);
+          const telesDoStatus = teles.filter(
+            (tele: Tele) => tele.status === status && ehDeHoje(tele)
+          );
 
           return (
             <div
@@ -330,7 +407,7 @@ Valor da tele: R$ ${tele.valor}`;
               </div>
 
               <div className="space-y-4">
-                {telesDoStatus.map((tele) => (
+                {telesDoStatus.map((tele: Tele) => (
                   <TeleCard
                     key={tele.id}
                     tele={tele}
@@ -385,166 +462,209 @@ Valor da tele: R$ ${tele.valor}`;
           </div>
         </div>
       )}
+
       {modalEdicaoAberto && teleEditando && (
-  <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-    <div className="bg-white w-[800px] max-h-[90vh] overflow-y-auto rounded-3xl p-8 shadow-xl">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold">Editar tele</h2>
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white w-[800px] max-h-[90vh] overflow-y-auto rounded-3xl p-8 shadow-xl">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold">Editar tele</h2>
 
-        <button
-          onClick={() => setModalEdicaoAberto(false)}
-          className="w-10 h-10 rounded-xl border border-slate-200 flex items-center justify-center"
-        >
-          <X size={18} />
-        </button>
-      </div>
+              <button
+                onClick={() => setModalEdicaoAberto(false)}
+                className="w-10 h-10 rounded-xl border border-slate-200 flex items-center justify-center"
+              >
+                <X size={18} />
+              </button>
+            </div>
 
-      <div className="grid grid-cols-2 gap-5 mb-6">
-        <div>
-          <label className="text-sm font-medium text-slate-600">
-            Solicitante
-          </label>
-          <select
-            value={teleEditando.solicitante}
-            onChange={(e) =>
-              atualizarTeleEditando("solicitante", e.target.value)
-            }
-            className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4"
-          >
-            {clientes.map((cliente) => (
-              <option key={cliente.id || cliente.nome} value={cliente.nome}>
-                {cliente.nome}
-              </option>
-            ))}
-          </select>
-        </div>
+            <div className="grid grid-cols-2 gap-5 mb-6">
+              <div>
+                <label className="text-sm font-medium text-slate-600">
+                  Solicitante
+                </label>
 
-        <div>
-          <label className="text-sm font-medium text-slate-600">
-            Valor
-          </label>
-          <input
-            value={teleEditando.valor}
-            onChange={(e) => atualizarTeleEditando("valor", e.target.value)}
-            className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4"
-          />
-        </div>
+                <select
+                  value={teleEditando.solicitante}
+                  onChange={(e) =>
+                    atualizarTeleEditando("solicitante", e.target.value)
+                  }
+                  className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4"
+                >
+                  {clientes.map((cliente: Cliente) => (
+                    <option key={cliente.id || cliente.nome} value={cliente.nome}>
+                      {cliente.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-        <div>
-          <label className="text-sm font-medium text-slate-600">
-            Motoboy
-          </label>
-          <select
-            value={teleEditando.motoboy || ""}
-            onChange={(e) => atualizarTeleEditando("motoboy", e.target.value)}
-            className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4"
-          >
-            <option value="">Selecionar</option>
-            {motoboys.map((motoboy) => (
-              <option key={motoboy.id || motoboy.nome} value={motoboy.nome}>
-                {motoboy.nome}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="text-sm font-medium text-slate-600">
-            Status
-          </label>
-          <select
-            value={teleEditando.status}
-            onChange={(e) => atualizarTeleEditando("status", e.target.value)}
-            className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4"
-          >
-            {statusOptions.map((status) => (
-              <option key={status}>{status}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      <h3 className="text-xl font-bold mb-4">Paradas</h3>
-
-      <div className="space-y-5">
-        {teleEditando.paradas.map((parada: any, index: number) => (
-          <div key={index} className="bg-slate-50 rounded-2xl p-5">
-            <p className="font-bold mb-4">Parada {index + 1}</p>
-
-            <div className="grid grid-cols-2 gap-4">
-              <input
-                value={parada.tipo}
-                onChange={(e) =>
-                  atualizarParadaEditando(index, "tipo", e.target.value)
+              <InputModal
+                label="Valor"
+                value={teleEditando.valor}
+                onChange={(value: string) =>
+                  atualizarTeleEditando("valor", value)
                 }
-                className="h-12 rounded-xl border border-slate-200 px-4"
               />
 
-              <input
-                value={parada.cliente || parada.nomeCliente || ""}
-                onChange={(e) =>
-                  atualizarParadaEditando(index, "cliente", e.target.value)
-                }
-                className="h-12 rounded-xl border border-slate-200 px-4"
-                placeholder="Nome do cliente"
-              />
+              <div>
+                <label className="text-sm font-medium text-slate-600">
+                  Motoboy
+                </label>
 
-              <input
-                value={parada.contato || ""}
-                onChange={(e) =>
-                  atualizarParadaEditando(index, "contato", e.target.value)
-                }
-                className="h-12 rounded-xl border border-slate-200 px-4"
-                placeholder="Contato"
-              />
+                <select
+                  value={teleEditando.motoboy || ""}
+                  onChange={(e) =>
+                    atualizarTeleEditando("motoboy", e.target.value)
+                  }
+                  className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4"
+                >
+                  <option value="">Selecionar</option>
+                  {motoboys.map((motoboy: Motoboy) => (
+                    <option key={motoboy.id || motoboy.nome} value={motoboy.nome}>
+                      {motoboy.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-              <input
-                value={parada.endereco || ""}
-                onChange={(e) =>
-                  atualizarParadaEditando(index, "endereco", e.target.value)
-                }
-                className="h-12 rounded-xl border border-slate-200 px-4"
-                placeholder="Endereço"
-              />
+              <div>
+                <label className="text-sm font-medium text-slate-600">
+                  Status
+                </label>
 
-              <input
-                value={parada.observacao || ""}
-                onChange={(e) =>
-                  atualizarParadaEditando(index, "observacao", e.target.value)
-                }
-                className="col-span-2 h-12 rounded-xl border border-slate-200 px-4"
-                placeholder="Observação"
-              />
+                <select
+                  value={teleEditando.status}
+                  onChange={(e) =>
+                    atualizarTeleEditando("status", e.target.value)
+                  }
+                  className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4"
+                >
+                  {statusOptions.map((status) => (
+                    <option key={status}>{status}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <h3 className="text-xl font-bold mb-4">Paradas</h3>
+
+            <div className="space-y-5">
+              {teleEditando.paradas.map((parada: any, index: number) => (
+                <div key={index} className="bg-slate-50 rounded-2xl p-5">
+                  <p className="font-bold mb-4">Parada {index + 1}</p>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <InputModal
+                      value={parada.tipo}
+                      onChange={(value: string) =>
+                        atualizarParadaEditando(index, "tipo", value)
+                      }
+                    />
+
+                    <InputModal
+                      value={parada.cliente || parada.nomeCliente || ""}
+                      onChange={(value: string) =>
+                        atualizarParadaEditando(index, "cliente", value)
+                      }
+                      placeholder="Nome do cliente"
+                    />
+
+                    <InputModal
+                      value={parada.contato || ""}
+                      onChange={(value: string) =>
+                        atualizarParadaEditando(index, "contato", value)
+                      }
+                      placeholder="Contato"
+                    />
+
+                    <InputModal
+                      value={parada.endereco || ""}
+                      onChange={(value: string) =>
+                        atualizarParadaEditando(index, "endereco", value)
+                      }
+                      placeholder="Endereço"
+                    />
+
+                    <InputModal
+                      value={parada.observacao || ""}
+                      onChange={(value: string) =>
+                        atualizarParadaEditando(index, "observacao", value)
+                      }
+                      placeholder="Observação"
+                      className="col-span-2"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end gap-3 mt-8">
+              <button
+                onClick={() => setModalEdicaoAberto(false)}
+                className="px-5 py-3 rounded-xl border border-slate-200"
+              >
+                Cancelar
+              </button>
+
+              <button
+                onClick={salvarEdicaoTele}
+                className="px-5 py-3 rounded-xl bg-emerald-600 text-white"
+              >
+                Salvar alterações
+              </button>
             </div>
           </div>
-        ))}
-      </div>
+        </div>
+      )}
 
-      <div className="flex justify-end gap-3 mt-8">
-        <button
-          onClick={() => setModalEdicaoAberto(false)}
-          className="px-5 py-3 rounded-xl border border-slate-200"
-        >
-          Cancelar
-        </button>
-
-        <button
-          onClick={salvarEdicaoTele}
-          className="px-5 py-3 rounded-xl bg-emerald-600 text-white"
-        >
-          Salvar alterações
-        </button>
-      </div>
-    </div>
-  </div>
-)}
       <Link
-  href="/nova-tele"
-  className="fixed bottom-8 right-8 w-16 h-16 rounded-full bg-emerald-600 text-white shadow-xl flex items-center justify-center hover:bg-emerald-700 transition"
->
-  <Plus size={34} />
-</Link>
+        href="/nova-tele"
+        className="fixed bottom-8 right-8 w-16 h-16 rounded-full bg-emerald-600 text-white shadow-xl flex items-center justify-center hover:bg-emerald-700 transition"
+      >
+        <Plus size={34} />
+      </Link>
     </main>
+  );
+}
+function StatusBadge({ status }: { status: string }) {
+  let classes = "bg-slate-100 text-slate-700";
+
+  if (status === "Aguardando cliente") {
+    classes = "bg-orange-100 text-orange-700";
+  }
+
+  if (status === "Aguardando motoboy disponível") {
+    classes = "bg-blue-100 text-blue-700";
+  }
+
+  if (status === "Em rota") {
+    classes = "bg-emerald-100 text-emerald-700";
+  }
+
+  if (status === "Entregue") {
+    classes = "bg-slate-900 text-white";
+  }
+
+  return (
+    <span className={`inline-flex px-3 py-1 rounded-xl text-xs ${classes}`}>
+      {status}
+    </span>
+  );
+}
+function InputModal({ label, value, onChange, placeholder, className }: any) {
+  return (
+    <div className={className}>
+      {label && (
+        <label className="text-sm font-medium text-slate-600">{label}</label>
+      )}
+
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4"
+      />
+    </div>
   );
 }
 
@@ -577,17 +697,11 @@ function TeleCard({
         </div>
 
         <div className="flex gap-2">
-          <button
-            onClick={() => editarTele(tele.id)}
-            className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center"
-          >
+          <button onClick={() => editarTele(tele.id)} className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center">
             <Pencil size={16} />
           </button>
 
-          <button
-            onClick={() => excluirTele(tele.id)}
-            className="w-9 h-9 rounded-xl bg-white border border-red-100 text-red-600 flex items-center justify-center"
-          >
+          <button onClick={() => excluirTele(tele.id)} className="w-9 h-9 rounded-xl bg-white border border-red-100 text-red-600 flex items-center justify-center">
             <Trash2 size={16} />
           </button>
         </div>
@@ -597,88 +711,42 @@ function TeleCard({
         {getParadas(tele).map((parada: Parada, index: number) => (
           <div key={index} className="bg-white rounded-2xl p-3">
             <p className="font-bold text-slate-900">{parada.tipo}</p>
+            <p className="flex items-center gap-2 mt-2"><User size={15} /> {parada.cliente || parada.nomeCliente}</p>
+            <p className="flex items-start gap-2 mt-2"><MapPin size={15} className="mt-1" /><span>{parada.endereco}</span></p>
 
-            <p className="flex items-center gap-2 mt-2">
-              <User size={15} /> {parada.cliente || parada.nomeCliente}
-            </p>
-
-            <p className="flex items-start gap-2 mt-2">
-              <MapPin size={15} className="mt-1" />
-              <span>{parada.endereco}</span>
-            </p>
-
-            {parada.contato && (
-              <p className="flex items-center gap-2 mt-2">
-                <Phone size={15} /> {parada.contato}
-              </p>
-            )}
-
-            {parada.observacao && (
-              <p className="bg-slate-50 rounded-xl p-2 mt-2">
-                Obs: {parada.observacao}
-              </p>
-            )}
+            {parada.contato && <p className="flex items-center gap-2 mt-2"><Phone size={15} /> {parada.contato}</p>}
+            {parada.observacao && <p className="bg-slate-50 rounded-xl p-2 mt-2">Obs: {parada.observacao}</p>}
           </div>
         ))}
       </div>
 
       <div className="mt-4 space-y-3">
         <div>
-          <label className="text-xs font-medium text-slate-600 flex items-center gap-2">
-            <Bike size={14} />
-            Motoboy
-          </label>
-
-          <select
-            value={tele.motoboy || ""}
-            onChange={(e) => alterarMotoboy(tele.id, e.target.value)}
-            className="w-full mt-2 h-11 rounded-xl border border-slate-200 px-3 outline-none focus:border-emerald-500 text-sm"
-          >
+          <label className="text-xs font-medium text-slate-600 flex items-center gap-2"><Bike size={14} /> Motoboy</label>
+          <select value={tele.motoboy || ""} onChange={(e) => alterarMotoboy(tele.id, e.target.value)} className="w-full mt-2 h-11 rounded-xl border border-slate-200 px-3 outline-none focus:border-emerald-500 text-sm">
             <option value="">Selecionar</option>
-
-            {motoboys.map((motoboy: Motoboy, index: number) => (
-              <option key={index} value={motoboy.nome}>
-                {motoboy.nome}
-              </option>
+            {motoboys.map((motoboy: Motoboy) => (
+              <option key={motoboy.id || motoboy.nome} value={motoboy.nome}>{motoboy.nome}</option>
             ))}
           </select>
         </div>
 
         <div>
-          <label className="text-xs font-medium text-slate-600 flex items-center gap-2">
-            <Timer size={14} />
-            Espera
-          </label>
-
-          <input
-            type="number"
-            min="0"
-            value={espera}
-            onChange={(e) => alterarEspera(tele.id, Number(e.target.value))}
-            className="w-full mt-2 h-11 rounded-xl border border-slate-200 px-3 outline-none focus:border-emerald-500 text-sm"
-          />
+          <label className="text-xs font-medium text-slate-600 flex items-center gap-2"><Timer size={14} /> Espera</label>
+          <input type="number" min="0" value={espera} onChange={(e) => alterarEspera(tele.id, Number(e.target.value))} className="w-full mt-2 h-11 rounded-xl border border-slate-200 px-3 outline-none focus:border-emerald-500 text-sm" />
         </div>
 
         <div>
           <label className="text-xs font-medium text-slate-600">Status</label>
-
-          <select
-            value={tele.status}
-            onChange={(e) => alterarStatus(tele.id, e.target.value)}
-            className="w-full mt-2 h-11 rounded-xl border border-slate-200 px-3 outline-none focus:border-emerald-500 text-sm"
-          >
-            {statusOptions.map((status) => (
-              <option key={status}>{status}</option>
-            ))}
+          <select value={tele.status} onChange={(e) => alterarStatus(tele.id, e.target.value)} className="w-full mt-2 h-11 rounded-xl border border-slate-200 px-3 outline-none focus:border-emerald-500 text-sm">
+            {statusOptions.map((status) => <option key={status}>{status}</option>)}
           </select>
         </div>
 
         <div className="bg-emerald-50 rounded-2xl p-3">
           <div className="flex justify-between text-xs">
             <span>Base</span>
-            <strong>
-              R$ {formatarValor(tele.valorBase || converterValor(tele.valor))}
-            </strong>
+            <strong>R$ {formatarValor(tele.valorBase || converterValor(tele.valor))}</strong>
           </div>
 
           <div className="flex justify-between text-xs mt-1">
@@ -697,57 +765,20 @@ function TeleCard({
           </div>
         </div>
 
-        <button
-          onClick={() => gerarOrcamento(tele)}
-          className="w-full h-11 rounded-xl bg-emerald-600 text-white flex items-center justify-center gap-2 text-sm"
-        >
-          <MessageCircle size={16} />
-          Gerar orçamento
+        <button onClick={() => gerarOrcamento(tele)} className="w-full h-11 rounded-xl bg-emerald-600 text-white flex items-center justify-center gap-2 text-sm">
+          <MessageCircle size={16} /> Gerar orçamento
         </button>
 
-        <button
-          onClick={() => gerarTeleMotoboy(tele)}
-          className="w-full h-11 rounded-xl bg-slate-900 text-white flex items-center justify-center gap-2 text-sm"
-        >
-          <Send size={16} />
-          Gerar tele
+        <button onClick={() => gerarTeleMotoboy(tele)} className="w-full h-11 rounded-xl bg-slate-900 text-white flex items-center justify-center gap-2 text-sm">
+          <Send size={16} /> Gerar tele
         </button>
 
         {tele.status !== "Entregue" && (
-          <button
-            onClick={() => concluirTele(tele.id)}
-            className="w-full h-11 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm"
-          >
+          <button onClick={() => concluirTele(tele.id)} className="w-full h-11 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm">
             Concluir entrega
           </button>
         )}
       </div>
     </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  let classes = "bg-slate-100 text-slate-700";
-
-  if (status === "Aguardando cliente") {
-    classes = "bg-orange-100 text-orange-700";
-  }
-
-  if (status === "Aguardando motoboy disponível") {
-    classes = "bg-blue-100 text-blue-700";
-  }
-
-  if (status === "Em rota") {
-    classes = "bg-emerald-100 text-emerald-700";
-  }
-
-  if (status === "Entregue") {
-    classes = "bg-slate-900 text-white";
-  }
-
-  return (
-    <span className={`inline-flex px-3 py-1 rounded-xl text-xs ${classes}`}>
-      {status}
-    </span>
   );
 }

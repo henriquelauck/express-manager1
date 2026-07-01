@@ -4,7 +4,6 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { Cliente } from "@/types/Cliente";
 import { Motoboy } from "@/types/Motoboy";
 import { Tele } from "@/types/Tele";
-import { carregarDados, salvarDados } from "@/lib/storage";
 
 type ExpressManagerContextType = {
   clientes: Cliente[];
@@ -14,6 +13,8 @@ type ExpressManagerContextType = {
   setClientes: (clientes: Cliente[]) => void;
   setMotoboys: (motoboys: Motoboy[]) => void;
   setTeles: (teles: Tele[]) => void;
+
+  recarregarDados: () => Promise<void>;
 };
 
 const ExpressManagerContext = createContext<ExpressManagerContextType | null>(
@@ -25,37 +26,31 @@ export function ExpressManagerProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const [carregou, setCarregou] = useState(false);
-
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [motoboys, setMotoboys] = useState<Motoboy[]>([]);
   const [teles, setTeles] = useState<Tele[]>([]);
 
-  useEffect(() => {
-    setClientes(carregarDados<Cliente[]>("clientes", []));
-    setMotoboys(carregarDados<Motoboy[]>("motoboys", []));
-    setTeles(carregarDados<Tele[]>("teles", []));
-    setCarregou(true);
-  }, []);
+  async function recarregarDados() {
+    const [respostaClientes, respostaMotoboys, respostaTeles] =
+      await Promise.all([
+        fetch("/api/clientes"),
+        fetch("/api/motoboys"),
+        fetch("/api/teles"),
+      ]);
 
-  useEffect(() => {
-  async function carregarTudo() {
-    const respostaClientes = await fetch("/api/clientes");
     const clientesBanco = await respostaClientes.json();
-
-    const respostaMotoboys = await fetch("/api/motoboys");
     const motoboysBanco = await respostaMotoboys.json();
+    const telesBanco = await respostaTeles.json();
 
     setClientes(clientesBanco);
     setMotoboys(motoboysBanco);
-
-    setTeles(carregarDados<Tele[]>("teles", []));
-
-    setCarregou(true);
+    setTeles(telesBanco);
   }
 
-  carregarTudo();
-}, []);
+  useEffect(() => {
+    recarregarDados();
+  }, []);
+
   return (
     <ExpressManagerContext.Provider
       value={{
@@ -65,6 +60,7 @@ export function ExpressManagerProvider({
         setClientes,
         setMotoboys,
         setTeles,
+        recarregarDados,
       }}
     >
       {children}
