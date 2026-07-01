@@ -67,6 +67,9 @@ type Tele = {
   motoboyRecebedor?: string | null;
   fechamentoId?: string | null;
   observacaoGeral?: string;
+  motoboyId?: string | null;
+recebido: boolean;
+dataRecebimento?: string | null;
 };
 
 const statusOptions = [
