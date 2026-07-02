@@ -1,34 +1,53 @@
 "use client";
 
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { ExpressManagerProvider } from "@/context/ExpressManagerContext";
-import LoginGestor from "@/components/LoginGestor";
 
 export default function AppProtegido({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const [logado, setLogado] = useState(false);
+  const pathname = usePathname();
+  const router = useRouter();
+
   const [carregando, setCarregando] = useState(true);
+  const [usuario, setUsuario] = useState<any>(null);
+
+  const rotaLogin = pathname === "/login";
 
   useEffect(() => {
-    const tipoLogin = localStorage.getItem("express_tipo_login");
+    async function verificarLogin() {
+      if (rotaLogin) {
+        setCarregando(false);
+        return;
+      }
 
-    if (tipoLogin === "gestor") {
-      setLogado(true);
+      const resposta = await fetch("/api/auth/me");
+
+      if (!resposta.ok) {
+        router.push("/login");
+        return;
+      }
+
+      const dados = await resposta.json();
+      setUsuario(dados.usuario);
+      setCarregando(false);
     }
 
-    setCarregando(false);
-  }, []);
+    verificarLogin();
+  }, [rotaLogin, router]);
 
-  if (carregando) {
-    return null;
+  if (carregando) return null;
+
+  if (rotaLogin) {
+    return <>{children}</>;
   }
 
-  if (!logado) {
-    return <LoginGestor onEntrar={() => setLogado(true)} />;
+  if (usuario?.role === "MOTOBOY") {
+    return <>{children}</>;
   }
 
   return (
