@@ -61,7 +61,7 @@ export default function TelesPage() {
   const [modalAberto, setModalAberto] = useState(false);
   const [mensagem, setMensagem] = useState("");
   const [telefoneDestino, setTelefoneDestino] = useState("");
-
+  const [motoboyFiltro, setMotoboyFiltro] = useState("todos");
   const [modalEdicaoAberto, setModalEdicaoAberto] = useState(false);
   const [teleEditando, setTeleEditando] = useState<any>(null);
 const [dataFiltro, setDataFiltro] = useState(
@@ -97,6 +97,12 @@ const [dataFiltro, setDataFiltro] = useState(
   if (!tele.dataTele) return false;
 
   return tele.dataTele.slice(0, 10) === dataFiltro;
+}
+function ehDoMotoboySelecionado(tele: Tele) {
+  if (motoboyFiltro === "todos") return true;
+  if (motoboyFiltro === "sem-motoboy") return !tele.motoboy;
+
+  return tele.motoboy === motoboyFiltro;
 }
 
   function normalizarTelefone(telefone: string) {
@@ -341,7 +347,9 @@ Valor da tele: R$ ${tele.valor}`;
 
   function totalPorStatus(status: string) {
     return teles
-      .filter((tele: Tele) => tele.status === status && ehDaDataSelecionada(tele))
+      .filter((tele: Tele) => tele.status === status &&
+ehDaDataSelecionada(tele) &&
+ehDoMotoboySelecionado(tele))
       .reduce(
         (total: number, tele: Tele) => total + converterValor(tele.valor),
         0
@@ -367,6 +375,26 @@ Valor da tele: R$ ${tele.valor}`;
     className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
   />
 </div>
+<div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-6 w-72">
+  <label className="text-sm font-medium text-slate-600">
+    Motoboy
+  </label>
+
+  <select
+    value={motoboyFiltro}
+    onChange={(e) => setMotoboyFiltro(e.target.value)}
+    className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
+  >
+    <option value="todos">Todos</option>
+    <option value="sem-motoboy">Sem motoboy</option>
+
+    {motoboys.map((motoboy: Motoboy) => (
+      <option key={motoboy.id || motoboy.nome} value={motoboy.nome}>
+        {motoboy.nome}
+      </option>
+    ))}
+  </select>
+</div>
 
       {teles.length === 0 && (
         <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100 max-w-xl">
@@ -380,8 +408,11 @@ Valor da tele: R$ ${tele.valor}`;
       <div className="grid grid-cols-4 gap-5 items-start">
         {statusOptions.map((status) => {
           const telesDoStatus = teles.filter(
-            (tele: Tele) => tele.status === status && ehDaDataSelecionada(tele)
-          );
+  (tele: Tele) =>
+    tele.status === status &&
+    ehDaDataSelecionada(tele) &&
+    ehDoMotoboySelecionado(tele)
+);
 
           return (
             <div
