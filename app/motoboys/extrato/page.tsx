@@ -55,13 +55,17 @@ export default function ExtratoMotoboyPage() {
   }, [teles, motoboySelecionado, dataInicio, dataFim]);
 
   const total = telesDoMotoboy.reduce(
-    (soma: number, tele: any) => soma + converterValor(tele.valor),
-    0
-  );
+  (soma: number, tele: any) => soma + converterValor(tele.valor),
+  0
+);
 
-  const recebidoMotoboy = telesDoMotoboy
-    .filter((tele: any) => tele.recebimento === "motoboy")
-    .reduce((soma: number, tele: any) => soma + converterValor(tele.valor), 0);
+const recebidoMotoboy = telesDoMotoboy
+  .filter((tele: any) => tele.recebimento === "motoboy")
+  .reduce((soma: number, tele: any) => soma + converterValor(tele.valor), 0);
+
+const valorMotoboy = total * 0.8;
+const jaRecebeu = recebidoMotoboy * 0.8;
+const aReceber = valorMotoboy - jaRecebeu;
 
   const textoExtrato = useMemo(() => {
     if (!motoboySelecionado) return "";
@@ -86,11 +90,20 @@ export default function ExtratoMotoboyPage() {
     });
 
     texto += `Total de teles - ${telesDoMotoboy.length}\n`;
-    texto += `Total produzido - R$${formatarValor(total)}\n`;
-    texto += `Recebido pelo motoboy - R$${formatarValor(recebidoMotoboy)}`;
+    texto += `Total bruto - R$${formatarValor(total)}\n`;
+    texto += `Valor do motoboy - R$${formatarValor(valorMotoboy)}\n`;
+    texto += `Já recebeu - R$${formatarValor(jaRecebeu)}\n`;
+    texto += `A receber - R$${formatarValor(aReceber)}`;
 
     return texto;
-  }, [motoboySelecionado, telesDoMotoboy, total, recebidoMotoboy]);
+  }, [
+  motoboySelecionado,
+  telesDoMotoboy,
+  total,
+  valorMotoboy,
+  jaRecebeu,
+  aReceber,
+]);
 
   function copiarExtrato() {
     navigator.clipboard.writeText(textoExtrato);
@@ -144,11 +157,15 @@ export default function ExtratoMotoboyPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-6 mb-8">
-        <Card titulo="Teles realizadas" valor={`${telesDoMotoboy.length}`} icon={<FileText size={26} />} />
-        <Card titulo="Total produzido" valor={`R$ ${formatarValor(total)}`} icon={<DollarSign size={26} />} />
-        <Card titulo="Em mãos do motoboy" valor={`R$ ${formatarValor(recebidoMotoboy)}`} icon={<Bike size={26} />} />
-      </div>
+      <div className="grid grid-cols-4 gap-6 mb-8">
+  <Card titulo="Teles realizadas" valor={`${telesDoMotoboy.length}`} icon={<FileText size={26} />} />
+
+  <Card titulo="Total bruto" valor={`R$ ${formatarValor(total)}`} icon={<DollarSign size={26} />} />
+
+  <Card titulo="Valor motoboy" valor={`R$ ${formatarValor(valorMotoboy)}`} icon={<Bike size={26} />} />
+
+  <Card titulo="Já recebeu" valor={`R$ ${formatarValor(jaRecebeu)}`} icon={<DollarSign size={26} />} />
+</div>
 
       <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100 max-w-5xl">
         <textarea
