@@ -74,26 +74,48 @@ const telesPeriodo = useMemo(() => {
 
   return tele.nomeCliente;
 }
-  function alterarRecebimento(id: string, recebimento: string) {
-    setTeles(
-      teles.map((tele: any) =>
-        tele.id === id
-          ? {
-              ...tele,
-              recebimento,
-              recebido: recebimento !== "pendente",
-              valorRecebido: recebimento === "pendente" ? 0 : converterValor(tele.valor),
-              dataRecebimento:
-                recebimento === "pendente"
-                  ? null
-                  : new Date().toLocaleString("pt-BR"),
-              motoboyRecebedor:
-                recebimento === "motoboy" ? tele.motoboy || null : null,
-            }
-          : tele
-      )
-    );
+  async function alterarRecebimento(id: string, recebimento: string) {
+  const tele = teles.find((item: any) => item.id === id);
+  if (!tele) return;
+
+  const resposta = await fetch("/api/teles/recebimento", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      id: tele.id,
+      valor: tele.valor,
+      recebimento,
+      motoboy: tele.motoboy,
+    }),
+  });
+
+  if (!resposta.ok) {
+    alert("Erro ao salvar recebimento.");
+    return;
   }
+
+  setTeles(
+    teles.map((item: any) =>
+      item.id === id
+        ? {
+            ...item,
+            recebimento,
+            recebido: recebimento !== "pendente",
+            valorRecebido:
+              recebimento === "pendente" ? 0 : converterValor(tele.valor),
+            dataRecebimento:
+              recebimento === "pendente"
+                ? null
+                : new Date().toISOString(),
+            motoboyRecebedor:
+              recebimento === "motoboy" ? tele.motoboy || null : null,
+          }
+        : item
+    )
+  );
+}
 
   const pendentes = telesPeriodo.filter(
   (tele: any) => (tele.recebimento || "pendente") === "pendente"

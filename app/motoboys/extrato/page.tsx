@@ -64,7 +64,7 @@ const recebidoMotoboy = telesDoMotoboy
   .reduce((soma: number, tele: any) => soma + converterValor(tele.valor), 0);
 
 const valorMotoboy = total * 0.8;
-const jaRecebeu = recebidoMotoboy * 0.8;
+const jaRecebeu = recebidoMotoboy;
 const aReceber = valorMotoboy - jaRecebeu;
 
   const textoExtrato = useMemo(() => {
