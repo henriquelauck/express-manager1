@@ -115,22 +115,26 @@ export default function MotoboyPage() {
 function CardFinanceiro({ titulo, dados }: any) {
   return (
     <div className="bg-white rounded-3xl p-5 border shadow-sm">
-      <p className="text-slate-500">{titulo}</p>
-
-      <h2 className="text-2xl font-bold mt-2">
-        R$ {dados.bruto.toFixed(2)}
-      </h2>
-
       <p className="text-sm text-slate-500 mt-2">
-        Líquido:{" "}
-        <strong className="text-emerald-700">
-          R$ {dados.liquido.toFixed(2)}
-        </strong>
-      </p>
+  Líquido:
+  <strong className="text-emerald-700">
+    R$ {dados.liquido.toFixed(2)}
+  </strong>
+</p>
 
-      <p className="text-sm text-slate-400">
-        {dados.quantidade} entregas
-      </p>
+<p className="text-sm text-slate-500">
+  Já recebeu:
+  <strong className="text-blue-600">
+    R$ {dados.recebido.toFixed(2)}
+  </strong>
+</p>
+
+<p className="text-sm text-slate-500">
+  A receber:
+  <strong className="text-orange-600">
+    R$ {dados.aReceber.toFixed(2)}
+  </strong>
+</p>
     </div>
   );
 }
@@ -173,9 +177,17 @@ function calcularValores(teles: any[]) {
     0
   );
 
+  const valorMotoboy = bruto * 0.8;
+
+  const jaRecebeu = teles
+    .filter((tele) => tele.recebimento === "motoboy")
+    .reduce((total, tele) => total + Number(tele.total || 0), 0);
+
   return {
     bruto,
-    liquido: bruto * 0.8,
+    liquido: valorMotoboy,
+    recebido: jaRecebeu,
+    aReceber: valorMotoboy - jaRecebeu,
     quantidade: teles.length,
   };
 }
