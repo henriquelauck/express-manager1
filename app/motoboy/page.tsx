@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle, MapPin, Phone, MessageCircle, Truck } from "lucide-react";
+import Link from "next/link";
 
 export default function MotoboyPage() {
   const [usuario, setUsuario] = useState<any>(null);
@@ -20,30 +20,29 @@ export default function MotoboyPage() {
     setCarregando(false);
   }
 
-  async function atualizarStatus(id: string, status: string) {
-    await fetch("/api/motoboys/atualizar-tele", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status }),
-    });
-
-    await carregarDados();
-  }
-
   useEffect(() => {
     carregarDados();
   }, []);
 
-  const telesPendentes = useMemo(() => {
-    return teles.filter((tele) => tele.status !== "ENTREGUE");
+  const telesHoje = useMemo(() => {
+    const hoje = new Date();
+
+    return teles.filter((tele) =>
+      mesmaData(new Date(tele.dataTele), hoje)
+    );
   }, [teles]);
 
-  const proximaTele = telesPendentes[0];
-  const primeiraParada = proximaTele?.paradas?.[0];
+  const entregasAndamento = telesHoje.filter(
+    (tele) => tele.status !== "ENTREGUE"
+  );
 
-  const totalHoje = teles.reduce((total, tele) => {
-    return total + Number(tele.total || 0);
-  }, 0);
+  const entregasConcluidas = telesHoje.filter(
+    (tele) => tele.status === "ENTREGUE"
+  );
+
+  const financeiro = useMemo(() => {
+    return calcularValores(telesHoje);
+  }, [telesHoje]);
 
   if (carregando) {
     return (
@@ -54,117 +53,57 @@ export default function MotoboyPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f7f8fb] p-5 text-slate-900">
-      <div className="max-w-md mx-auto">
-        <header className="mb-6">
-          <p className="text-slate-500">Painel do motoboy</p>
-          <h1 className="text-3xl font-bold">
-            Olá, {usuario?.nome || "Motoboy"} 👋
-          </h1>
-        </header>
+    <main className="min-h-screen bg-[#f7f8fb] p-5">
+      <div className="max-w-5xl mx-auto">
+        <h1 className="text-3xl font-bold">
+          Olá, {usuario?.nome || "Motoboy"} 👋
+        </h1>
 
-        <section className="grid grid-cols-3 gap-3 mb-5">
-          <Resumo titulo="Teles" valor={teles.length} />
-          <Resumo titulo="Pendentes" valor={telesPendentes.length} />
-          <Resumo titulo="Total" valor={`R$ ${totalHoje.toFixed(2)}`} />
+        <p className="text-slate-500 mt-2">
+          Resumo das suas entregas de hoje.
+        </p>
+
+        <div className="mt-5">
+          <Link
+            href="/motoboy/extrato"
+            className="block w-full bg-slate-900 text-white text-center py-4 rounded-2xl font-semibold hover:bg-slate-800 transition"
+          >
+            📄 Ver extrato detalhado
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+          <CardFinanceiro titulo="Hoje" dados={financeiro} />
+        </div>
+
+        <section className="bg-white rounded-3xl p-6 mt-8 shadow-sm border">
+          <h2 className="text-2xl font-bold mb-4">
+            Entregas em andamento hoje
+          </h2>
+
+          {entregasAndamento.length === 0 ? (
+            <p className="text-slate-500">Nenhuma entrega em andamento hoje.</p>
+          ) : (
+            <div className="space-y-4">
+              {entregasAndamento.map((tele) => (
+                <CardTele key={tele.id} tele={tele} />
+              ))}
+            </div>
+          )}
         </section>
 
-        {proximaTele ? (
-          <section className="bg-white rounded-[28px] p-6 shadow-sm border mb-5">
-            <div className="flex items-center gap-2 text-emerald-700 font-semibold mb-4">
-              <Truck size={20} />
-              Próxima tele
-            </div>
+        <section className="bg-white rounded-3xl p-6 mt-8 shadow-sm border">
+          <h2 className="text-2xl font-bold mb-4">
+            Entregas concluídas hoje
+          </h2>
 
-            <h2 className="text-2xl font-bold">{proximaTele.solicitante}</h2>
-
-            <p className="text-slate-500 mt-1">
-              {primeiraParada?.cliente || "Sem cliente informado"}
-            </p>
-
-            <div className="mt-5 space-y-3">
-              <Info icon={<MapPin size={18} />} texto={primeiraParada?.endereco} />
-              <Info icon={<Phone size={18} />} texto={primeiraParada?.contato || "Sem telefone"} />
-            </div>
-
-            <div className="flex items-center justify-between mt-6">
-              <span className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-sm">
-                {formatarStatus(proximaTele.status)}
-              </span>
-
-              <strong className="text-2xl">
-                R$ {Number(proximaTele.total).toFixed(2)}
-              </strong>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 mt-6">
-              <a
-                href={criarLinkMaps(primeiraParada?.endereco)}
-                target="_blank"
-                className="h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center gap-2 font-semibold"
-              >
-                <MapPin size={18} />
-                Rota
-              </a>
-
-              <a
-                href={criarLinkWhatsApp(primeiraParada?.contato)}
-                target="_blank"
-                className="h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center gap-2 font-semibold"
-              >
-                <MessageCircle size={18} />
-                WhatsApp
-              </a>
-
-              <button
-                onClick={() => atualizarStatus(proximaTele.id, "Em rota")}
-                className="h-12 rounded-2xl bg-slate-900 text-white font-semibold"
-              >
-                Iniciar
-              </button>
-
-              <button
-                onClick={() => atualizarStatus(proximaTele.id, "Entregue")}
-                className="h-12 rounded-2xl bg-green-700 text-white flex items-center justify-center gap-2 font-semibold"
-              >
-                <CheckCircle size={18} />
-                Finalizar
-              </button>
-            </div>
-          </section>
-        ) : (
-          <section className="bg-white rounded-[28px] p-6 shadow-sm border mb-5 text-center">
-            <h2 className="text-2xl font-bold">Tudo certo por aqui ✅</h2>
-            <p className="text-slate-500 mt-2">
-              Você não possui teles pendentes.
-            </p>
-          </section>
-        )}
-
-        <section className="bg-white rounded-[28px] p-5 shadow-sm border">
-          <h2 className="text-xl font-bold mb-4">Próximas da fila</h2>
-
-          {telesPendentes.slice(1).length === 0 ? (
-            <p className="text-slate-500 text-sm">
-              Nenhuma outra tele pendente.
-            </p>
+          {entregasConcluidas.length === 0 ? (
+            <p className="text-slate-500">Nenhuma entrega concluída hoje.</p>
           ) : (
-            <div className="space-y-3">
-              {telesPendentes.slice(1).map((tele) => {
-                const parada = tele.paradas?.[0];
-
-                return (
-                  <div key={tele.id} className="border rounded-2xl p-4">
-                    <strong>{tele.solicitante}</strong>
-                    <p className="text-sm text-slate-500">
-                      {parada?.cliente}
-                    </p>
-                    <p className="text-sm text-slate-500">
-                      {parada?.endereco}
-                    </p>
-                  </div>
-                );
-              })}
+            <div className="space-y-4">
+              {entregasConcluidas.map((tele) => (
+                <CardTele key={tele.id} tele={tele} concluida />
+              ))}
             </div>
           )}
         </section>
@@ -173,22 +112,76 @@ export default function MotoboyPage() {
   );
 }
 
-function Resumo({ titulo, valor }: any) {
+function CardFinanceiro({ titulo, dados }: any) {
   return (
-    <div className="bg-white rounded-2xl p-4 shadow-sm border">
-      <p className="text-xs text-slate-500">{titulo}</p>
-      <strong className="text-lg">{valor}</strong>
+    <div className="bg-white rounded-3xl p-5 border shadow-sm">
+      <p className="text-slate-500">{titulo}</p>
+
+      <h2 className="text-2xl font-bold mt-2">
+        R$ {dados.bruto.toFixed(2)}
+      </h2>
+
+      <p className="text-sm text-slate-500 mt-2">
+        Líquido:{" "}
+        <strong className="text-emerald-700">
+          R$ {dados.liquido.toFixed(2)}
+        </strong>
+      </p>
+
+      <p className="text-sm text-slate-400">
+        {dados.quantidade} entregas
+      </p>
     </div>
   );
 }
 
-function Info({ icon, texto }: any) {
+function CardTele({ tele, concluida = false }: any) {
+  const parada = tele.paradas?.[0];
+
   return (
-    <div className="flex gap-2 text-slate-600">
-      <span className="text-slate-400">{icon}</span>
-      <span>{texto || "Não informado"}</span>
+    <div className="border rounded-2xl p-4">
+      <div className="flex justify-between gap-4">
+        <div>
+          <strong>{tele.solicitante}</strong>
+          <p className="text-slate-600">{parada?.cliente}</p>
+          <p className="text-sm text-slate-500">{parada?.endereco}</p>
+        </div>
+
+        <div className="text-right">
+          <span
+            className={`px-3 py-1 rounded-full text-sm ${
+              concluida
+                ? "bg-green-100 text-green-700"
+                : "bg-orange-100 text-orange-700"
+            }`}
+          >
+            {formatarStatus(tele.status)}
+          </span>
+
+          <p className="font-bold mt-3">
+            R$ {Number(tele.total || 0).toFixed(2)}
+          </p>
+        </div>
+      </div>
     </div>
   );
+}
+
+function calcularValores(teles: any[]) {
+  const bruto = teles.reduce(
+    (total, tele) => total + Number(tele.total || 0),
+    0
+  );
+
+  return {
+    bruto,
+    liquido: bruto * 0.8,
+    quantidade: teles.length,
+  };
+}
+
+function mesmaData(data1: Date, data2: Date) {
+  return data1.toDateString() === data2.toDateString();
 }
 
 function formatarStatus(status: string) {
@@ -200,16 +193,4 @@ function formatarStatus(status: string) {
   };
 
   return mapa[status] || status;
-}
-
-function criarLinkMaps(endereco?: string) {
-  if (!endereco) return "#";
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(endereco)}`;
-}
-
-function criarLinkWhatsApp(telefone?: string) {
-  if (!telefone) return "#";
-
-  const numero = telefone.replace(/\D/g, "");
-  return `https://wa.me/55${numero}`;
 }

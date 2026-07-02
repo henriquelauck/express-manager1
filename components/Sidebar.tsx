@@ -33,10 +33,10 @@ export default function Sidebar() {
         <MenuLink href="/motoboys" icon={<Bike />} text="Motoboys" />
         <MenuLink href="/motoboys/extrato" icon={<ClipboardList />} text="Extrato Motoboys" />
         <MenuLink href="/financeiro" icon={<DollarSign />} text="Financeiro" />
-        <MenuLink href="/relatorios" icon={<BarChart3 />} text="Relatórios" />
         <MenuLink href="/configuracoes" icon={<Settings />} text="Configurações" />
+        <MenuLink href="/configuracoes/logins" icon={<Settings />} text="Logins Motoboys"/>
         <MenuLink href="/extrato-geral" icon={<FileText />} text="Extrato Geral" />
-        <MenuLink href="/painel-operacional" icon={<Truck />} text="Painel Operacional" />
+                
       </nav>
     </aside>
   );

@@ -20,20 +20,20 @@ export async function GET() {
   }
 
   const teles = await prisma.tele.findMany({
-    where: {
-      motoboyId: usuario.motoboy.id,
+  where: {
+    motoboyId: usuario.motoboy.id,
+  },
+  include: {
+    paradas: {
+      orderBy: { ordem: "asc" },
     },
-    include: {
-      paradas: {
-        orderBy: { ordem: "asc" },
-      },
-      cliente: true,
-      motoboy: true,
-    },
-    orderBy: {
-      dataTele: "desc",
-    },
-  });
+    cliente: true,
+    motoboy: true,
+  },
+  orderBy: {
+    dataTele: "desc",
+  },
+});
 
   return NextResponse.json(teles);
 }
