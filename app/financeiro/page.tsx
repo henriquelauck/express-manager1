@@ -47,6 +47,17 @@ export default function FinanceiroPage() {
     const [dia, mes, ano] = dataBR.split("/");
     return `${ano}-${mes}-${dia}`;
   }
+  function ehDoPeriodo(tele: any) {
+  const dataTele = dataParaComparar(dataDaTele(tele.criadoEm));
+
+  if (dataInicio && dataTele < dataInicio) return false;
+  if (dataFim && dataTele > dataFim) return false;
+
+  return true;
+}
+const telesPeriodo = useMemo(() => {
+  return teles.filter((tele: any) => ehDoPeriodo(tele));
+}, [teles, dataInicio, dataFim]);
 
   function nomeDestino(tele: any) {
   if (tele.paradas?.length > 0) {
@@ -84,16 +95,44 @@ export default function FinanceiroPage() {
     );
   }
 
-  const pendentes = teles.filter((tele: any) => (tele.recebimento || "pendente") === "pendente");
-  const recebidosEscritorio = teles.filter((tele: any) => tele.recebimento === "escritorio");
-  const recebidosMotoboy = teles.filter((tele: any) => tele.recebimento === "motoboy");
-  const fechamentoSemanal = teles.filter((tele: any) => tele.formaCobranca === "semanal");
+  const pendentes = telesPeriodo.filter(
+  (tele: any) => (tele.recebimento || "pendente") === "pendente"
+);
 
-  const totalPendente = pendentes.reduce((total, tele) => total + converterValor(tele.valor), 0);
-  const totalEscritorio = recebidosEscritorio.reduce((total, tele) => total + converterValor(tele.valor), 0);
-  const totalMotoboy = recebidosMotoboy.reduce((total, tele) => total + converterValor(tele.valor), 0);
-  const totalGeral = teles.reduce((total, tele) => total + converterValor(tele.valor), 0);
-  const ticketMedio = teles.length > 0 ? totalGeral / teles.length : 0;
+const recebidosEscritorio = telesPeriodo.filter(
+  (tele: any) => tele.recebimento === "escritorio"
+);
+
+const recebidosMotoboy = telesPeriodo.filter(
+  (tele: any) => tele.recebimento === "motoboy"
+);
+
+const fechamentoSemanal = telesPeriodo.filter(
+  (tele: any) => tele.formaCobranca === "semanal"
+);
+
+const totalPendente = pendentes.reduce(
+  (total, tele) => total + converterValor(tele.valor),
+  0
+);
+
+const totalEscritorio = recebidosEscritorio.reduce(
+  (total, tele) => total + converterValor(tele.valor),
+  0
+);
+
+const totalMotoboy = recebidosMotoboy.reduce(
+  (total, tele) => total + converterValor(tele.valor),
+  0
+);
+
+const totalGeral = telesPeriodo.reduce(
+  (total, tele) => total + converterValor(tele.valor),
+  0
+);
+
+const ticketMedio =
+  telesPeriodo.length > 0 ? totalGeral / telesPeriodo.length : 0;
 
   const saldoCobrarCliente = fechamentoSemanal.reduce((total, tele: any) => {
     if (tele.recebimento === "motoboy" || tele.recebimento === "escritorio") {
@@ -218,7 +257,31 @@ export default function FinanceiroPage() {
           Controle financeiro completo das teles.
         </p>
       </div>
+<div className="grid grid-cols-2 gap-5 mb-8 bg-white rounded-3xl p-6 shadow-sm border border-slate-100 max-w-3xl">
+  <div>
+    <label className="text-sm font-medium text-slate-600">
+      Data inicial
+    </label>
+    <input
+      type="date"
+      value={dataInicio}
+      onChange={(e) => setDataInicio(e.target.value)}
+      className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
+    />
+  </div>
 
+  <div>
+    <label className="text-sm font-medium text-slate-600">
+      Data final
+    </label>
+    <input
+      type="date"
+      value={dataFim}
+      onChange={(e) => setDataFim(e.target.value)}
+      className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
+    />
+  </div>
+</div>
       <div className="grid grid-cols-4 gap-6 mb-8">
         <ResumoCard titulo="A receber" valor={`R$ ${formatarValor(totalPendente)}`} icon={<Clock size={26} />} />
         <ResumoCard titulo="Recebido escritório" valor={`R$ ${formatarValor(totalEscritorio)}`} icon={<Building2 size={26} />} />
