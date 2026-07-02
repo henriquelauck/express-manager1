@@ -166,7 +166,9 @@ export default function ExtratoGeralPage() {
     texto += `${data}\n`;
 
     telesDoDia.forEach((tele: any) => {
-  const parada = tele.paradas?.[0];
+  const parada =
+    tele.paradas?.find((p: any) => p.cliente !== tele.solicitante) ||
+    tele.paradas?.[0];
 
   const nomeLinha =
     parada?.cliente ||
@@ -175,7 +177,6 @@ export default function ExtratoGeralPage() {
 
   texto += `- ${nomeLinha} - R$${tele.valor}\n`;
 });
-
     texto += `\n`;
   });
 
