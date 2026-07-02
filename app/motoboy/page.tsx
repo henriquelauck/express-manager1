@@ -72,10 +72,6 @@ export default function MotoboyPage() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-          <CardFinanceiro titulo="Hoje" dados={financeiro} />
-        </div>
-
         <section className="bg-white rounded-3xl p-6 mt-8 shadow-sm border">
           <h2 className="text-2xl font-bold mb-4">
             Entregas em andamento hoje
@@ -112,32 +108,6 @@ export default function MotoboyPage() {
   );
 }
 
-function CardFinanceiro({ titulo, dados }: any) {
-  return (
-    <div className="bg-white rounded-3xl p-5 border shadow-sm">
-      <p className="text-sm text-slate-500 mt-2">
-  Líquido:
-  <strong className="text-emerald-700">
-    R$ {dados.liquido.toFixed(2)}
-  </strong>
-</p>
-
-<p className="text-sm text-slate-500">
-  Já recebeu:
-  <strong className="text-blue-600">
-    R$ {dados.recebido.toFixed(2)}
-  </strong>
-</p>
-
-<p className="text-sm text-slate-500">
-  A receber:
-  <strong className="text-orange-600">
-    R$ {dados.aReceber.toFixed(2)}
-  </strong>
-</p>
-    </div>
-  );
-}
 
 function CardTele({ tele, concluida = false }: any) {
   const parada = tele.paradas?.[0];

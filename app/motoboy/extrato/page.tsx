@@ -46,10 +46,9 @@ export default function ExtratoMotoboyPage() {
   );
 
   const liquido = bruto * 0.8;
-  const recebido = telesFiltradas.reduce(
-  (total, tele) => total + Number(tele.valorRecebido || 0),
-  0
-);
+  const recebido = telesFiltradas
+  .filter((tele) => tele.recebimento === "motoboy")
+  .reduce((total, tele) => total + Number(tele.total || 0), 0);
 
 const aReceber = liquido - recebido;
 
@@ -118,7 +117,7 @@ const aReceber = liquido - recebido;
 
         </div>
 
-        <div className="grid md:grid-cols-3 gap-4 mt-6">
+        <div className="grid md:grid-cols-5 gap-4 mt-6">
 
           <Resumo
             titulo="Entregas"
