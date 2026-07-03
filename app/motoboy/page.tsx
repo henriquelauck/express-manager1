@@ -153,16 +153,7 @@ const ganhouTrocaOleo = brutoSemana >= META_TROCA_OLEO;
       </p>
     </>
   )}
-  <div className="mt-6 flex justify-end">
-  <button
-    onClick={sair}
-    className="text-red-600 hover:text-red-700 font-semibold flex items-center gap-2"
-  >
-    <LogOut size={18} />
-    Sair
-  </button>
-</div>
-</div>
+  </div>
 
         <section className="bg-white rounded-3xl p-5 md:p-6 mt-8 shadow-sm border">
           <h2 className="text-2xl font-bold mb-4">
