@@ -48,19 +48,22 @@ export default function LoginPage() {
         <p className="text-slate-500 mb-8">Entre para acessar o sistema.</p>
 
         <input
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full h-12 border rounded-xl px-4 mb-4"
-          placeholder="E-mail"
-        />
+  type="email"
+  value={email}
+  autoComplete="off"
+  onChange={(e) => setEmail(e.target.value)}
+  className="w-full h-12 border rounded-xl px-4 mb-4"
+  placeholder="E-mail"
+/>
 
-        <input
-          type="password"
-          value={senha}
-          onChange={(e) => setSenha(e.target.value)}
-          className="w-full h-12 border rounded-xl px-4"
-          placeholder="Senha"
-        />
+<input
+  type="password"
+  value={senha}
+  autoComplete="off"
+  onChange={(e) => setSenha(e.target.value)}
+  className="w-full h-12 border rounded-xl px-4"
+  placeholder="Senha"
+/>
 
         {erro && <p className="text-red-600 text-sm mt-4">{erro}</p>}
 
