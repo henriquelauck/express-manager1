@@ -1,4 +1,9 @@
 "use client";
+import PageContainer from "@/components/ui/PageContainer";
+import PageHeader from "@/components/ui/PageHeader";
+import PageGrid from "@/components/ui/PageGrid";
+import Card from "@/components/ui/Card";
+import FormGrid from "@/components/ui/FormGrid";
 import { TipoParada } from "@/types/Parada";
 import { Tele } from "@/types/Tele";
 import { useExpressManager } from "@/context/ExpressManagerContext";
@@ -356,47 +361,48 @@ ehDoMotoboySelecionado(tele))
       );
   }
     return (
-    <main className="min-h-screen bg-[#f7f8fb] p-8">
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold">Central de Operações</h1>
-        <p className="text-slate-500 mt-2">
-          Acompanhe suas teles por status operacional.
-        </p>
-      </div>
-      <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-6 w-72">
-  <label className="text-sm font-medium text-slate-600">
-    Data das operações
-  </label>
+  <PageContainer>
+     <PageHeader
+  titulo="Central de Operações"
+  descricao="Gerencie todas as teles."
+/>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 max-w-3xl">
+  <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+    <label className="text-sm font-medium text-slate-600">
+      Data das operações
+    </label>
 
-  <input
-    type="date"
-    value={dataFiltro}
-    onChange={(e) => setDataFiltro(e.target.value)}
-    className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
-  />
+    <input
+      type="date"
+      value={dataFiltro}
+      onChange={(e) => setDataFiltro(e.target.value)}
+      className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
+    />
+  </div>
+
+  <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+    <label className="text-sm font-medium text-slate-600">
+      Motoboy
+    </label>
+
+    <select
+      value={motoboyFiltro}
+      onChange={(e) => setMotoboyFiltro(e.target.value)}
+      className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
+    >
+      <option value="todos">Todos</option>
+      <option value="sem-motoboy">Sem motoboy</option>
+
+      {motoboys.map((motoboy: Motoboy) => (
+        <option key={motoboy.id || motoboy.nome} value={motoboy.nome}>
+          {motoboy.nome}
+        </option>
+      ))}
+    </select>
+  </div>
 </div>
-<div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-6 w-72">
-  <label className="text-sm font-medium text-slate-600">
-    Motoboy
-  </label>
 
-  <select
-    value={motoboyFiltro}
-    onChange={(e) => setMotoboyFiltro(e.target.value)}
-    className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
-  >
-    <option value="todos">Todos</option>
-    <option value="sem-motoboy">Sem motoboy</option>
-
-    {motoboys.map((motoboy: Motoboy) => (
-      <option key={motoboy.id || motoboy.nome} value={motoboy.nome}>
-        {motoboy.nome}
-      </option>
-    ))}
-  </select>
-</div>
-
-      {teles.length === 0 && (
+            {teles.length === 0 && (
         <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100 max-w-xl">
           <h2 className="text-xl font-bold">Nenhuma tele cadastrada</h2>
           <p className="text-slate-500 mt-2">
@@ -405,7 +411,7 @@ ehDoMotoboySelecionado(tele))
         </div>
       )}
 
-      <div className="grid grid-cols-4 gap-5 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 items-start">
         {statusOptions.map((status) => {
           const telesDoStatus = teles.filter(
   (tele: Tele) =>
@@ -458,7 +464,7 @@ ehDoMotoboySelecionado(tele))
 
       {modalAberto && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-          <div className="bg-white w-[650px] rounded-3xl p-8 shadow-xl">
+          <div className="bg-white w-[95vw] max-w-[650px] rounded-3xl p-5 md:p-8 shadow-xl">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-2xl font-bold">Mensagem pronta</h2>
 
@@ -489,7 +495,7 @@ ehDoMotoboySelecionado(tele))
 
       {modalEdicaoAberto && teleEditando && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-          <div className="bg-white w-[800px] max-h-[90vh] overflow-y-auto rounded-3xl p-8 shadow-xl">
+          <div className="bg-white w-[95vw] max-w-[800px] max-h-[90vh] overflow-y-auto rounded-3xl p-5 md:p-8 shadow-xl">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold">Editar tele</h2>
 
@@ -501,7 +507,7 @@ ehDoMotoboySelecionado(tele))
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-5 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
               <div>
                 <label className="text-sm font-medium text-slate-600">
                   Solicitante
@@ -577,7 +583,7 @@ ehDoMotoboySelecionado(tele))
                 <div key={index} className="bg-slate-50 rounded-2xl p-5">
                   <p className="font-bold mb-4">Parada {index + 1}</p>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <InputModal
                       value={parada.tipo}
                       onChange={(value: string) =>
@@ -615,14 +621,14 @@ ehDoMotoboySelecionado(tele))
                         atualizarParadaEditando(index, "observacao", value)
                       }
                       placeholder="Observação"
-                      className="col-span-2"
+                     className="md:col-span-2"
                     />
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className="flex justify-end gap-3 mt-8">
+            <div className="flex flex-col md:flex-row md:justify-between gap-4">
               <button
                 onClick={() => setModalEdicaoAberto(false)}
                 className="px-5 py-3 rounded-xl border border-slate-200"
@@ -643,13 +649,14 @@ ehDoMotoboySelecionado(tele))
 
       <Link
         href="/nova-tele"
-        className="fixed bottom-8 right-8 w-16 h-16 rounded-full bg-emerald-600 text-white shadow-xl flex items-center justify-center hover:bg-emerald-700 transition"
+        className="fixed bottom-5 right-5 md:bottom-8 md:right-8 w-14 h-14 md:w-16 md:h-16 rounded-full bg-emerald-600 text-white shadow-xl flex items-center justify-center hover:bg-emerald-700 transition z-40"
       >
         <Plus size={34} />
-      </Link>
-    </main>
+            </Link>
+    </PageContainer>
   );
 }
+
 function StatusBadge({ status }: { status: string }) {
   let classes = "bg-slate-100 text-slate-700";
 
@@ -712,20 +719,26 @@ function TeleCard({
   const acrescimoEspera = valorEspera(espera);
 
   return (
-    <div className="bg-[#f7f8fb] rounded-3xl p-4 border border-slate-100">
-      <div className="flex items-start justify-between mb-4">
+    <div className="bg-[#f7f8fb] rounded-3xl p-4 md:p-5 border border-slate-100 shadow-sm hover:shadow-md transition">
+      <div className="flex items-start justify-between gap-3 mb-4">
         <div>
-          <h3 className="font-bold">{tele.tipoRota}</h3>
+          <h3 className="font-bold text-lg">{tele.tipoRota}</h3>
           <p className="text-sm text-slate-500">{tele.solicitante}</p>
           <p className="text-xs text-slate-400">{tele.criadoEm}</p>
         </div>
 
-        <div className="flex gap-2">
-          <button onClick={() => editarTele(tele.id)} className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center">
+        <div className="flex gap-2 shrink-0">
+          <button
+            onClick={() => editarTele(tele.id)}
+            className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center"
+          >
             <Pencil size={16} />
           </button>
 
-          <button onClick={() => excluirTele(tele.id)} className="w-9 h-9 rounded-xl bg-white border border-red-100 text-red-600 flex items-center justify-center">
+          <button
+            onClick={() => excluirTele(tele.id)}
+            className="w-10 h-10 rounded-xl bg-white border border-red-100 text-red-600 flex items-center justify-center"
+          >
             <Trash2 size={16} />
           </button>
         </div>
@@ -733,76 +746,135 @@ function TeleCard({
 
       <div className="space-y-3 text-sm text-slate-600">
         {getParadas(tele).map((parada: Parada, index: number) => (
-          <div key={index} className="bg-white rounded-2xl p-3">
+          <div key={index} className="bg-white rounded-2xl p-4">
             <p className="font-bold text-slate-900">{parada.tipo}</p>
-            <p className="flex items-center gap-2 mt-2"><User size={15} /> {parada.cliente || parada.nomeCliente}</p>
-            <p className="flex items-start gap-2 mt-2"><MapPin size={15} className="mt-1" /><span>{parada.endereco}</span></p>
 
-            {parada.contato && <p className="flex items-center gap-2 mt-2"><Phone size={15} /> {parada.contato}</p>}
-            {parada.observacao && <p className="bg-slate-50 rounded-xl p-2 mt-2">Obs: {parada.observacao}</p>}
+            <p className="flex items-center gap-2 mt-2">
+              <User size={15} /> {parada.cliente || parada.nomeCliente}
+            </p>
+
+            <p className="flex items-start gap-2 mt-2">
+              <MapPin size={15} className="mt-1 shrink-0" />
+              <span>{parada.endereco}</span>
+            </p>
+
+            {parada.contato && (
+              <p className="flex items-center gap-2 mt-2">
+                <Phone size={15} /> {parada.contato}
+              </p>
+            )}
+
+            {parada.observacao && (
+              <p className="bg-slate-50 rounded-xl p-2 mt-2">
+                Obs: {parada.observacao}
+              </p>
+            )}
           </div>
         ))}
       </div>
 
       <div className="mt-4 space-y-3">
         <div>
-          <label className="text-xs font-medium text-slate-600 flex items-center gap-2"><Bike size={14} /> Motoboy</label>
-          <select value={tele.motoboy || ""} onChange={(e) => alterarMotoboy(tele.id, e.target.value)} className="w-full mt-2 h-11 rounded-xl border border-slate-200 px-3 outline-none focus:border-emerald-500 text-sm">
+          <label className="text-xs font-medium text-slate-600 flex items-center gap-2">
+            <Bike size={14} /> Motoboy
+          </label>
+
+          <select
+            value={tele.motoboy || ""}
+            onChange={(e) => alterarMotoboy(tele.id, e.target.value)}
+            className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-3 outline-none focus:border-emerald-500 text-sm bg-white"
+          >
             <option value="">Selecionar</option>
             {motoboys.map((motoboy: Motoboy) => (
-              <option key={motoboy.id || motoboy.nome} value={motoboy.nome}>{motoboy.nome}</option>
+              <option key={motoboy.id || motoboy.nome} value={motoboy.nome}>
+                {motoboy.nome}
+              </option>
             ))}
           </select>
         </div>
 
-        <div>
-          <label className="text-xs font-medium text-slate-600 flex items-center gap-2"><Timer size={14} /> Espera</label>
-          <input type="number" min="0" value={espera} onChange={(e) => alterarEspera(tele.id, Number(e.target.value))} className="w-full mt-2 h-11 rounded-xl border border-slate-200 px-3 outline-none focus:border-emerald-500 text-sm" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-medium text-slate-600 flex items-center gap-2">
+              <Timer size={14} /> Espera
+            </label>
+
+            <input
+              type="number"
+              min="0"
+              value={espera}
+              onChange={(e) => alterarEspera(tele.id, Number(e.target.value))}
+              className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-3 outline-none focus:border-emerald-500 text-sm bg-white"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-slate-600">Status</label>
+
+            <select
+              value={tele.status}
+              onChange={(e) => alterarStatus(tele.id, e.target.value)}
+              className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-3 outline-none focus:border-emerald-500 text-sm bg-white"
+            >
+              {statusOptions.map((status) => (
+                <option key={status}>{status}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        <div>
-          <label className="text-xs font-medium text-slate-600">Status</label>
-          <select value={tele.status} onChange={(e) => alterarStatus(tele.id, e.target.value)} className="w-full mt-2 h-11 rounded-xl border border-slate-200 px-3 outline-none focus:border-emerald-500 text-sm">
-            {statusOptions.map((status) => <option key={status}>{status}</option>)}
-          </select>
-        </div>
+        <div className="bg-emerald-50 rounded-2xl p-4 space-y-2">
+          <LinhaValor
+            label="Base"
+            valor={`R$ ${formatarValor(
+              tele.valorBase || converterValor(tele.valor)
+            )}`}
+          />
 
-        <div className="bg-emerald-50 rounded-2xl p-3">
-          <div className="flex justify-between text-xs">
-            <span>Base</span>
-            <strong>R$ {formatarValor(tele.valorBase || converterValor(tele.valor))}</strong>
-          </div>
+          <LinhaValor label="Retorno" valor={`R$ ${formatarValor(tele.retorno || 0)}`} />
 
-          <div className="flex justify-between text-xs mt-1">
-            <span>Retorno</span>
-            <strong>R$ {formatarValor(tele.retorno || 0)}</strong>
-          </div>
+          <LinhaValor label="Espera" valor={`R$ ${formatarValor(acrescimoEspera)}`} />
 
-          <div className="flex justify-between text-xs mt-1">
-            <span>Espera</span>
-            <strong>R$ {formatarValor(acrescimoEspera)}</strong>
-          </div>
-
-          <div className="flex justify-between text-base font-bold text-emerald-700 border-t border-emerald-100 mt-2 pt-2">
+          <div className="flex justify-between border-t border-emerald-100 pt-2 text-emerald-700 font-bold">
             <span>Total</span>
             <span>R$ {tele.valor}</span>
           </div>
         </div>
 
-        <button onClick={() => gerarOrcamento(tele)} className="w-full h-11 rounded-xl bg-emerald-600 text-white flex items-center justify-center gap-2 text-sm">
-          <MessageCircle size={16} /> Gerar orçamento
-        </button>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <button
+            onClick={() => gerarOrcamento(tele)}
+            className="w-full h-12 rounded-xl bg-emerald-600 text-white flex items-center justify-center gap-2 text-sm font-semibold"
+          >
+            <MessageCircle size={16} /> Orçamento
+          </button>
 
-        <button onClick={() => gerarTeleMotoboy(tele)} className="w-full h-11 rounded-xl bg-slate-900 text-white flex items-center justify-center gap-2 text-sm">
-          <Send size={16} /> Gerar tele
-        </button>
+          <button
+            onClick={() => gerarTeleMotoboy(tele)}
+            className="w-full h-12 rounded-xl bg-slate-900 text-white flex items-center justify-center gap-2 text-sm font-semibold"
+          >
+            <Send size={16} /> Gerar tele
+          </button>
+        </div>
 
         {tele.status !== "Entregue" && (
-          <button onClick={() => concluirTele(tele.id)} className="w-full h-11 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm">
+          <button
+            onClick={() => concluirTele(tele.id)}
+            className="w-full h-12 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-semibold"
+          >
             Concluir entrega
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+function LinhaValor({ label, valor }: any) {
+  return (
+    <div className="flex justify-between text-sm">
+      <span>{label}</span>
+      <strong>{valor}</strong>
     </div>
   );
 }

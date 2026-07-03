@@ -1,5 +1,6 @@
 "use client";
-
+import PageContainer from "@/components/ui/PageContainer";
+import PageHeader from "@/components/ui/PageHeader";
 import { useMemo, useState } from "react";
 import {
   CheckCircle,
@@ -272,14 +273,12 @@ const ticketMedio =
   }
 
   return (
-    <main className="min-h-screen bg-[#f7f8fb] p-8">
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold">Financeiro</h1>
-        <p className="text-slate-500 mt-2">
-          Controle financeiro completo das teles.
-        </p>
-      </div>
-<div className="grid grid-cols-2 gap-5 mb-8 bg-white rounded-3xl p-6 shadow-sm border border-slate-100 max-w-3xl">
+    <PageContainer>
+      <PageHeader
+  titulo="Financeiro"
+  descricao="Controle financeiro completo das teles."
+/>
+<div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8 bg-white rounded-3xl p-6 shadow-sm border border-slate-100 max-w-3xl">
   <div>
     <label className="text-sm font-medium text-slate-600">
       Data inicial
@@ -304,14 +303,14 @@ const ticketMedio =
     />
   </div>
 </div>
-      <div className="grid grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
         <ResumoCard titulo="A receber" valor={`R$ ${formatarValor(totalPendente)}`} icon={<Clock size={26} />} />
         <ResumoCard titulo="Recebido escritório" valor={`R$ ${formatarValor(totalEscritorio)}`} icon={<Building2 size={26} />} />
         <ResumoCard titulo="Em mãos motoboys" valor={`R$ ${formatarValor(totalMotoboy)}`} icon={<Bike size={26} />} />
         <ResumoCard titulo="Saldo a cobrar" valor={`R$ ${formatarValor(saldoCobrarCliente)}`} icon={<DollarSign size={26} />} />
       </div>
 
-      <div className="grid grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
         <ResumoCard titulo="Total geral" valor={`R$ ${formatarValor(totalGeral)}`} icon={<DollarSign size={26} />} />
         <ResumoCard titulo="Ticket médio" valor={`R$ ${formatarValor(ticketMedio)}`} icon={<FileText size={26} />} />
         <ResumoCard titulo="Fechamento semanal" valor={`R$ ${formatarValor(fechamentoSemanal.reduce((t, tele) => t + converterValor(tele.valor), 0))}`} icon={<CalendarDays size={26} />} />
@@ -329,7 +328,7 @@ const ticketMedio =
       </div>
 
       {aba !== "resumo" && aba !== "extrato" && (
-        <div className="grid grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
           {listaAtual.map((tele: any) => (
             <div key={tele.id} className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
               <div className="flex items-start justify-between mb-5">
@@ -375,7 +374,7 @@ const ticketMedio =
       )}
 
       {aba === "resumo" && (
-        <div className="grid grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
           {resumo.map((item) => (
             <div key={item.cliente} className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
               <h2 className="text-xl font-bold">{item.cliente}</h2>
@@ -396,7 +395,7 @@ const ticketMedio =
         <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100 max-w-5xl">
           <h2 className="text-2xl font-bold mb-6">Extrato por cliente</h2>
 
-          <div className="grid grid-cols-3 gap-5 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
             <div>
               <label className="text-sm font-medium text-slate-600">Cliente</label>
               <select
@@ -440,11 +439,11 @@ const ticketMedio =
             className="w-full h-96 rounded-2xl border border-slate-200 p-5 outline-none bg-slate-50"
           />
 
-          <div className="flex gap-3 mt-5">
+          <div className="flex flex-col md:flex-row gap-3 mt-5">
             <button
               onClick={copiarExtrato}
               disabled={!textoExtrato}
-              className="h-12 px-6 rounded-xl bg-slate-900 text-white flex items-center gap-2 disabled:opacity-40"
+              className="w-full md:w-auto h-12 px-6 rounded-xl bg-slate-900 text-white flex items-center gap-2 disabled:opacity-40"
             >
               <Copy size={18} />
               Copiar extrato
@@ -453,7 +452,7 @@ const ticketMedio =
             <button
               onClick={enviarWhatsApp}
               disabled={!textoExtrato}
-              className="h-12 px-6 rounded-xl bg-emerald-600 text-white flex items-center gap-2 disabled:opacity-40"
+              className="w-full md:w-auto h-12 px-6 rounded-xl bg-emerald-600 text-white flex items-center gap-2 disabled:opacity-40"
             >
               <MessageCircle size={18} />
               Enviar WhatsApp
@@ -461,7 +460,7 @@ const ticketMedio =
           </div>
         </div>
       )}
-    </main>
+    </PageContainer>
   );
 }
 

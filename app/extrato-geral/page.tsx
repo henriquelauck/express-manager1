@@ -1,5 +1,6 @@
 "use client";
-
+import PageContainer from "@/components/ui/PageContainer";
+import PageHeader from "@/components/ui/PageHeader";
 import { useMemo, useState } from "react";
 import { Copy, DollarSign, FileText, Bike, Users } from "lucide-react";
 import { useExpressManager } from "@/context/ExpressManagerContext";
@@ -200,16 +201,14 @@ export default function ExtratoGeralPage() {
 </button>
 
   return (
-    <main className="min-h-screen bg-[#f7f8fb] p-8">
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold">Extrato Geral</h1>
-        <p className="text-slate-500 mt-2">
-          Centro financeiro com filtros detalhados.
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+  titulo="Extrato Geral"
+  descricao="Centro financeiro com filtros detalhados."
+/>
 
       <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100 mb-8">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-5">
           <FiltroData label="Data inicial" value={dataInicio} onChange={setDataInicio} />
           <FiltroData label="Data final" value={dataFim} onChange={setDataFim} />
 
@@ -254,7 +253,7 @@ export default function ExtratoGeralPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-5 gap-6 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8">
         <Card titulo="Teles" valor={`${telesFiltradas.length}`} icon={<FileText size={26} />} />
         <Card titulo="Faturamento" valor={`R$ ${formatarValor(total)}`} icon={<DollarSign size={26} />} />
         <Card titulo="Escritório" valor={`R$ ${formatarValor(recebidoEscritorio)}`} icon={<DollarSign size={26} />} />
@@ -272,7 +271,7 @@ export default function ExtratoGeralPage() {
             {telesFiltradas.map((tele: any) => (
               <div
                 key={tele.id}
-                className="grid grid-cols-6 gap-4 items-center bg-slate-50 rounded-2xl p-4"
+                className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4 items-center bg-slate-50 rounded-2xl p-4"
               >
                 <div>
                   <p className="text-xs text-slate-500">Data</p>
@@ -299,7 +298,7 @@ export default function ExtratoGeralPage() {
                   <strong>{tele.recebimento || "pendente"}</strong>
                 </div>
 
-                <div className="text-right">
+                <div className="md:text-right">
                   <p className="text-xs text-slate-500">Valor</p>
                   <strong>R$ {tele.valor}</strong>
                 </div>
@@ -309,12 +308,12 @@ export default function ExtratoGeralPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-6 mb-8">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
         <Resumo titulo="Resumo por cliente" itens={resumoClientes} formatarValor={formatarValor} />
         <Resumo titulo="Resumo por motoboy" itens={resumoMotoboys} formatarValor={formatarValor} />
       </div>
 <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 mb-8">
-  <div className="flex justify-between items-center mb-5">
+  <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-5">
     <h2 className="text-2xl font-bold">Extrato por dia</h2>
 
     <button
@@ -322,7 +321,7 @@ export default function ExtratoGeralPage() {
         navigator.clipboard.writeText(textoPorDia);
         alert("Extrato por dia copiado!");
       }}
-      className="h-12 px-6 rounded-xl bg-emerald-600 text-white flex items-center gap-2"
+      className="w-full md:w-auto h-12 px-6 rounded-xl bg-emerald-600 text-white flex items-center gap-2"
     >
       <Copy size={18} />
       Copiar extrato por dia
@@ -332,7 +331,7 @@ export default function ExtratoGeralPage() {
   <textarea
     value={textoPorDia}
     readOnly
-    className="w-full h-96 rounded-2xl border border-slate-200 p-5 outline-none bg-slate-50 whitespace-pre-wrap"
+    className="w-full h-72 md:h-96 rounded-2xl border border-slate-200 p-5 outline-none bg-slate-50 whitespace-pre-wrap"
   />
 </div>
       <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100 max-w-5xl">
@@ -350,7 +349,7 @@ export default function ExtratoGeralPage() {
           Copiar extrato
         </button>
       </div>
-    </main>
+    </PageContainer>
   );
 }
 

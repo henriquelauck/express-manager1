@@ -1,5 +1,6 @@
 "use client";
-
+import PageContainer from "@/components/ui/PageContainer";
+import PageHeader from "@/components/ui/PageHeader";
 import { useState } from "react";
 import { Plus, Users, Pencil, Phone, MapPin, List } from "lucide-react";
 import { useExpressManager } from "@/context/ExpressManagerContext";
@@ -72,19 +73,19 @@ export default function ClientesPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f7f8fb] p-8">
-      <div className="flex items-center justify-between mb-8">
+    <PageContainer>
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-4xl font-bold">Clientes</h1>
-          <p className="text-slate-500 mt-2">
-            Cadastre, edite e consulte seus clientes.
-          </p>
+          <PageHeader
+  titulo="Clientes"
+  descricao="Cadastre, edite e consulte seus clientes."
+/>
         </div>
 
-        <div className="flex gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full lg:w-auto">
           <button
             onClick={() => setTela("lista")}
-            className={`px-6 py-4 rounded-2xl flex items-center gap-2 shadow-sm ${
+            className={`px-6 py-4 rounded-2xl flex items-center justify-center gap-2 shadow-sm ${
               tela === "lista"
                 ? "bg-emerald-600 text-white"
                 : "bg-white text-slate-700"
@@ -96,7 +97,7 @@ export default function ClientesPage() {
 
           <button
             onClick={abrirCadastro}
-            className={`px-6 py-4 rounded-2xl flex items-center gap-2 shadow-sm ${
+            className={`px-6 py-4 rounded-2xl flex items-center justify-center gap-2 shadow-sm ${
               tela === "cadastro"
                 ? "bg-emerald-600 text-white"
                 : "bg-white text-slate-700"
@@ -109,13 +110,13 @@ export default function ClientesPage() {
       </div>
 
       {tela === "lista" && (
-        <div className="grid grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {clientes.map((cliente, index) => (
             <div
               key={cliente.id || index}
               className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100"
             >
-              <div className="flex items-start justify-between mb-6">
+              <div className="flex items-start justify-between gap-3 mb-6">
                 <div className="flex items-center gap-4">
                   <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center">
                     <Users size={30} />
@@ -167,7 +168,7 @@ export default function ClientesPage() {
       )}
 
       {tela === "cadastro" && (
-        <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100 max-w-3xl">
+        <div className="bg-white rounded-3xl p-5 md:p-8 shadow-sm border border-slate-100 max-w-3xl">
           <h2 className="text-2xl font-bold mb-6">
             {editandoIndex !== null ? "Editar cliente" : "Cadastrar cliente"}
           </h2>
@@ -204,10 +205,10 @@ export default function ClientesPage() {
             />
           </div>
 
-          <div className="flex justify-end gap-3 mt-8">
+          <div className="flex flex-col md:flex-row md:justify-end gap-3 mt-8">
             <button
               onClick={() => setTela("lista")}
-              className="px-5 py-3 rounded-xl border border-slate-200"
+              className="w-full md:w-auto px-5 py-3 rounded-xl border border-slate-200"
             >
               Cancelar
             </button>
@@ -215,7 +216,7 @@ export default function ClientesPage() {
             <button
               onClick={salvarCliente}
               disabled={salvando}
-              className="px-5 py-3 rounded-xl bg-emerald-600 text-white disabled:opacity-50"
+              className="w-full md:w-autopx-5 py-3 rounded-xl bg-emerald-600 text-white disabled:opacity-50"
             >
               {salvando
                 ? "Salvando..."
@@ -226,7 +227,7 @@ export default function ClientesPage() {
           </div>
         </div>
       )}
-    </main>
+    </PageContainer>
   );
 }
 

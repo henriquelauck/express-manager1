@@ -1,5 +1,6 @@
 "use client";
-
+import PageContainer from "@/components/ui/PageContainer";
+import PageHeader from "@/components/ui/PageHeader";
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useExpressManager } from "@/context/ExpressManagerContext";
@@ -23,7 +24,13 @@ type Parada = {
   contato: string;
   observacao: string;
 };
+function gerarId() {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
 
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 export default function NovaTelePage() {
   const router = useRouter();
   const { clientes, recarregarDados } = useExpressManager();
@@ -36,7 +43,7 @@ export default function NovaTelePage() {
 
   const [paradas, setParadas] = useState<Parada[]>([
     {
-      id: crypto.randomUUID(),
+      id: gerarId(),
       tipo: "Entrega",
       cliente: "",
       endereco: "",
@@ -71,7 +78,7 @@ export default function NovaTelePage() {
     setParadas([
       ...paradas,
       {
-        id: crypto.randomUUID(),
+        id: gerarId(),
         tipo: "Entrega",
         cliente: "",
         endereco: "",
@@ -180,15 +187,15 @@ export default function NovaTelePage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f7f8fb] p-8">
+    <PageContainer>
       <div className="mb-8">
-        <h1 className="text-4xl font-bold">Nova Tele</h1>
-        <p className="text-slate-500 mt-2">
-          Monte a rota com uma ou várias paradas.
-        </p>
+        <PageHeader
+    titulo="Nova Tele"
+    descricao="Cadastre uma nova operação."
+/>
       </div>
 
-      <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100 max-w-5xl">
+      <div className="bg-white rounded-3xl p-4 md:p-8 shadow-sm border border-slate-100 max-w-5xl">
         <div className="mb-8">
           <label className="text-sm font-medium text-slate-600">
             Cliente solicitante
@@ -241,7 +248,7 @@ export default function NovaTelePage() {
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
                   <label className="text-sm font-medium text-slate-600">
                     Tipo da parada
@@ -289,7 +296,7 @@ export default function NovaTelePage() {
                   }
                 />
 
-                <div className="col-span-2">
+                <div className="md:col-span-2">
                   <Input
                     label="Observação"
                     icon={<FileText size={18} />}
@@ -325,7 +332,7 @@ export default function NovaTelePage() {
           Adicionar parada
         </button>
 
-        <div className="grid grid-cols-2 gap-5 mt-8">
+        <div className="grid-cols-1 md:grid-cols-2">
           <Input
             label="Valor base"
             value={valorBase}
@@ -338,7 +345,7 @@ export default function NovaTelePage() {
             onChange={setObservacaoGeral}
           />
 
-          <div className="col-span-2 bg-slate-50 rounded-2xl p-5">
+          <div className="md:col-span-2 bg-slate-50 rounded-2xl p-5">
             <div className="flex justify-between text-sm mb-2">
               <span>Valor base</span>
               <strong>R$ {formatarValor(converterValor(valorBase))}</strong>
@@ -367,18 +374,18 @@ export default function NovaTelePage() {
           </div>
         </div>
 
-        <div className="flex justify-end mt-8">
+        <div className="mt-8 flex justify-end">
           <button
             onClick={criarTele}
             disabled={salvando}
-            className="bg-emerald-600 text-white px-7 py-4 rounded-2xl flex items-center gap-2 shadow-sm disabled:opacity-50"
+            className="w-full md:w-auto bg-emerald-600 text-white px-7 py-4 rounded-2xl flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
           >
             {salvando ? "Salvando..." : "Continuar"}
             <ArrowRight size={22} />
           </button>
         </div>
       </div>
-    </main>
+    </PageContainer>
   );
 }
 

@@ -1,5 +1,6 @@
 "use client";
-
+import PageContainer from "@/components/ui/PageContainer";
+import PageHeader from "@/components/ui/PageHeader";
 import Link from "next/link";
 import { Search, MessageCircle, Bell, Truck, Heart, User, Package, Calendar, Fuel, FileText, Plus } from "lucide-react";
 import { useExpressManager } from "@/context/ExpressManagerContext";
@@ -67,29 +68,26 @@ export default function Dashboard() {
     .reduce((total, tele) => total + converterValor(tele.valor), 0);
 
   return (
-    <main className="min-h-screen bg-[#f7f8fb] text-[#0f172a]">
-      <section className="flex-1 p-8">
-        <header className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-4xl font-bold">Olá, Henrique! 👋</h1>
-            <p className="text-slate-500 mt-2">
-              Aqui está o resumo da sua operação hoje.
-            </p>
-          </div>
+  <PageContainer>
+        <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-5 mb-8">
+  <PageHeader
+    titulo="Olá, Henrique! 👋"
+    descricao="Aqui está o resumo da sua operação hoje."
+  />
 
-          <div className="flex items-center gap-5">
-            <div className="w-[330px] h-16 bg-white rounded-2xl shadow-sm flex items-center px-6 gap-3">
-              <Search className="text-slate-500" />
-              <span className="text-slate-500">Buscar...</span>
-            </div>
+  <div className="hidden md:flex items-center gap-5">
+    <div className="w-[330px] h-16 bg-white rounded-2xl shadow-sm flex items-center px-6 gap-3">
+      <Search className="text-slate-500" />
+      <span className="text-slate-500">Buscar...</span>
+    </div>
 
-            <CircleButton icon={<MessageCircle />} />
-            <CircleButton icon={<Bell />} alert />
-            <div className="w-16 h-16 rounded-full bg-slate-300" />
-          </div>
-        </header>
+    <CircleButton icon={<MessageCircle />} />
+    <CircleButton icon={<Bell />} alert />
+    <div className="w-16 h-16 rounded-full bg-slate-300" />
+  </div>
+</div>
 
-        <div className="grid grid-cols-4 gap-6 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-6">
           <Card
             title="Faturamento hoje"
             value={`R$ ${formatarValor(faturamentoHoje)}`}
@@ -119,7 +117,7 @@ export default function Dashboard() {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-6 mb-6">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
           <Panel title="Teles em andamento" button="Ver todas">
             {telesEmAndamento.slice(0, 5).map((tele: any, index: number) => (
               <Tele
@@ -172,7 +170,7 @@ export default function Dashboard() {
           </Panel>
         </div>
 
-        <div className="grid grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           <Panel title="Próximas coletas" button="Ver todas">
             {telesEmAndamento.slice(0, 3).map((tele: any) => (
               <Collect
@@ -231,7 +229,7 @@ export default function Dashboard() {
             />
           </Panel>
         </div>
-      </section>
+    
 
       <Link
         href="/nova-tele"
@@ -239,7 +237,7 @@ export default function Dashboard() {
       >
         <Plus size={34} />
       </Link>
-    </main>
+  </PageContainer>
   );
 }
 

@@ -1,5 +1,6 @@
 "use client";
-
+import PageContainer from "@/components/ui/PageContainer";
+import PageHeader from "@/components/ui/PageHeader";
 import { useState } from "react";
 import {
   Plus,
@@ -121,25 +122,25 @@ function resumoMotoboy(nome: string, periodo: "hoje" | "semana" | "mes") {
   };
 }
   return (
-    <main className="min-h-screen bg-[#f7f8fb] p-8">
-      <div className="flex items-center justify-between mb-8">
+    <PageContainer>
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-4xl font-bold">Motoboys</h1>
-          <p className="text-slate-500 mt-2">
-            Cadastre e acompanhe o desempenho dos motoboys.
-          </p>
+          <PageHeader
+  titulo="Motoboys"
+  descricao="Cadastre e acompanhe o desempenho dos motoboys."
+/>
         </div>
 
         <button
           onClick={abrirCadastro}
-          className="bg-emerald-600 text-white px-6 py-4 rounded-2xl flex items-center gap-2 shadow-sm"
+          className="w-full lg:w-auto bg-emerald-600 text-white px-6 py-4 rounded-2xl flex items-center justify-center gap-2 shadow-sm"
         >
           <Plus size={22} />
           Cadastrar motoboy
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         {motoboys.map((motoboy, index) => (
           <div
             key={motoboy.id || index}
@@ -165,7 +166,7 @@ function resumoMotoboy(nome: string, periodo: "hoje" | "semana" | "mes") {
               </button>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
   <Resumo
     titulo="Hoje"
     entregas={resumoMotoboy(motoboy.nome, "hoje").entregas}
@@ -192,7 +193,7 @@ function resumoMotoboy(nome: string, periodo: "hoje" | "semana" | "mes") {
 
       {modalAberto && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-          <div className="bg-white w-[500px] rounded-3xl p-8 shadow-xl">
+          <div className="bg-white w-[95vw] max-w-[500px] rounded-3xl p-5 md:p-8 shadow-xl">
             <h2 className="text-2xl font-bold mb-6">
               {editandoIndex !== null ? "Editar motoboy" : "Cadastrar motoboy"}
             </h2>
@@ -231,17 +232,17 @@ function resumoMotoboy(nome: string, periodo: "hoje" | "semana" | "mes") {
               />
             </div>
 
-            <div className="flex justify-end gap-3 mt-8">
+            <div className="flex flex-col md:flex-row md:justify-end gap-3 mt-8">
               <button
                 onClick={() => setModalAberto(false)}
-                className="px-5 py-3 rounded-xl border border-slate-200"
+                className="w-full md:w-auto px-5 py-3 rounded-xl border border-slate-200"
               >
                 Cancelar
               </button>
 
               <button
                 onClick={salvarMotoboy}
-                className="px-5 py-3 rounded-xl bg-emerald-600 text-white"
+                className="w-full md:w-auto px-5 py-3 rounded-xl bg-emerald-600 text-white"
               >
                 {editandoIndex !== null
                   ? "Salvar alterações"
@@ -251,7 +252,7 @@ function resumoMotoboy(nome: string, periodo: "hoje" | "semana" | "mes") {
           </div>
         </div>
       )}
-    </main>
+    </PageContainer>
   );
 }
 
