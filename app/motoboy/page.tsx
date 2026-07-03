@@ -29,14 +29,7 @@ export default function MotoboyPage() {
     setCarregando(false);
   }
 
-  async function sair() {
-  await fetch("/api/auth/logout", {
-    method: "POST",
-  });
-
-  window.location.href = "/login";
-}
-
+  
   useEffect(() => {
     carregarDados();
   }, []);
