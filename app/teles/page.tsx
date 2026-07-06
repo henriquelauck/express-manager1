@@ -366,8 +366,10 @@ ehDoMotoboySelecionado(tele))
   titulo="Central de Operações"
   descricao="Gerencie todas as teles."
 />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 max-w-3xl">
-  <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 max-w-3xl">
+ <div
+  className={`rounded-3xl p-4 border ${corColuna(status)}`}
+>
     <label className="text-sm font-medium text-slate-600">
       Data das operações
     </label>
@@ -423,7 +425,7 @@ ehDoMotoboySelecionado(tele))
           return (
             <div
               key={status}
-              className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 min-h-[500px]"
+              className={`rounded-3xl p-4 shadow-sm border min-h-[500px] ${corColuna(status)}`}
             >
               <div className="mb-5">
                 <div className="flex items-center justify-between">
@@ -655,6 +657,27 @@ ehDoMotoboySelecionado(tele))
             </Link>
     </PageContainer>
   );
+}
+function corColuna(status: string) {
+  const texto = String(status).toLowerCase();
+
+  if (texto.includes("aguardando cliente")) {
+    return "bg-slate-200 border-slate-400";
+  }
+
+  if (texto.includes("aguardando motoboy")) {
+    return "bg-orange-200 border-orange-400";
+  }
+
+  if (texto.includes("rota")) {
+    return "bg-sky-200 border-sky-400";
+  }
+
+  if (texto.includes("entregue")) {
+    return "bg-emerald-200 border-emerald-400";
+  }
+
+  return "bg-white border-slate-200";
 }
 
 function StatusBadge({ status }: { status: string }) {
