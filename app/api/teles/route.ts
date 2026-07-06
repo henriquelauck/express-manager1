@@ -223,7 +223,7 @@ export async function PUT(request: Request) {
         })
       : null;
 
-    await prisma.parada.deleteMany({
+    await prisma.teleParada.deleteMany({
       where: { teleId: body.id },
     });
 

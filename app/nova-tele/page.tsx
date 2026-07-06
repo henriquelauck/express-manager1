@@ -115,8 +115,12 @@ export default function NovaTelePage() {
   }
 
   function calcularRetorno() {
-    return temRetorno() ? 5 : 0;
-  }
+  const petexame = solicitante.toLowerCase().includes("petexame");
+
+  if (petexame) return 0;
+
+  return temRetorno() ? 5 : 0;
+}
 
   function calcularTotal() {
     return converterValor(valorBase) + calcularRetorno();

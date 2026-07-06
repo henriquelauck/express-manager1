@@ -58,8 +58,14 @@ export default function AppProtegido({
 
   if (rotaLogin) return <>{children}</>;
 
-  if (usuario?.role === "MOTOBOY") return <>{children}</>;
+  if (usuario?.role === "MOTOBOY") {
+  if (!pathname.startsWith("/motoboy")) {
+    router.push("/motoboy");
+    return null;
+  }
 
+  return <>{children}</>;
+}
   return (
     <ExpressManagerProvider>
       <div className="min-h-screen bg-[#f7f8fb]">

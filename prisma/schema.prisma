@@ -39,6 +39,23 @@ enum FormaCobranca {
   MENSAL
 }
 
+enum TipoMovimentoFinanceiro {
+  CLIENTE
+  ESCRITORIO
+  AJUSTE
+}
+
+enum RecebedorFechamento {
+  ESCRITORIO
+  MOTOBOY
+}
+
+enum StatusFechamento {
+  ABERTO
+  FECHADO
+  CANCELADO
+}
+
 model User {
   id        String   @id @default(cuid())
   nome      String
@@ -52,85 +69,137 @@ model User {
 }
 
 model Cliente {
-  id             String        @id @default(cuid())
-  nome           String
-  telefone       String?
-  endereco1      String?
-  endereco2      String?
-  formaCobranca  FormaCobranca @default(SEMANAL)
+  id            String        @id @default(cuid())
+  nome          String
+  telefone      String?
+  endereco1     String?
+  endereco2     String?
+  formaCobranca FormaCobranca @default(SEMANAL)
 
-  teles          Tele[]
+  teles        Tele[]
+  fechamentos FechamentoFinanceiro[]
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Motoboy {
-  id        String   @id @default(cuid())
-  nome      String
-  telefone  String?
-  moto      String?
-  placa     String?
+  id       String  @id @default(cuid())
+  nome     String
+  telefone String?
+  moto     String?
+  placa    String?
 
-  userId    String?  @unique
-  user      User?    @relation(fields: [userId], references: [id])
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id])
 
-  teles     Tele[]
+  teles      Tele[]
+  movimentos MovimentoFinanceiroMotoboy[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model Tele {
-  id              String          @id @default(cuid())
+  id String @id @default(cuid())
 
-  clienteId       String?
-  cliente         Cliente?        @relation(fields: [clienteId], references: [id])
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id])
 
-  solicitante     String
+  solicitante String
 
-  motoboyId       String?
-  motoboy         Motoboy?        @relation(fields: [motoboyId], references: [id])
+  motoboyId String?
+  motoboy   Motoboy? @relation(fields: [motoboyId], references: [id])
 
-  motoboyNome     String?
+  motoboyNome String?
 
-  status          StatusTele      @default(AGUARDANDO_CLIENTE)
-  tipoRota        String
+  status   StatusTele @default(AGUARDANDO_CLIENTE)
+  tipoRota String
 
-  valorBase       Float           @default(0)
-  retorno         Float           @default(0)
-  espera          Float           @default(0)
-  total           Float           @default(0)
+  valorBase Float @default(0)
+  retorno   Float @default(0)
+  espera    Float @default(0)
+  total     Float @default(0)
 
-  recebimento     Recebimento     @default(PENDENTE)
-  formaCobranca   FormaCobranca   @default(SEMANAL)
-  valorRecebido   Float           @default(0)
+  recebimento     Recebimento   @default(PENDENTE)
+  formaCobranca   FormaCobranca @default(SEMANAL)
+  valorRecebido   Float         @default(0)
   dataRecebimento DateTime?
   motoboyRecebedor String?
-  fechamentoId    String?
+
+  fechamentoId String?
+  fechamento   FechamentoFinanceiro? @relation(fields: [fechamentoId], references: [id])
 
   observacaoGeral String?
 
-  paradas         Parada[]
-dataTele DateTime @default(now())
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  paradas TeleParada[]
+
+  dataTele  DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
-model Parada {
-  id          String     @id @default(cuid())
+model FechamentoFinanceiro {
+  id String @id @default(cuid())
 
-  teleId      String
-  tele        Tele       @relation(fields: [teleId], references: [id], onDelete: Cascade)
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id])
 
-  tipo        TipoParada
-  cliente     String
-  endereco    String
-  contato     String?
-  observacao  String?
+  clienteNome String
 
-  ordem       Int        @default(1)
+  dataInicio DateTime
+  dataFim    DateTime
 
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  totalBruto Float @default(0)
+
+  recebedorTipo RecebedorFechamento @default(ESCRITORIO)
+  motoboyRecebedorId String?
+  motoboyRecebedorNome String?
+
+  status StatusFechamento @default(FECHADO)
+
+  teles Tele[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MovimentoFinanceiroMotoboy {
+  id String @id @default(cuid())
+
+  motoboyId String
+  motoboy   Motoboy @relation(fields: [motoboyId], references: [id])
+
+  tipo TipoMovimentoFinanceiro
+
+  valor Float
+
+  clienteNome String?
+  descricao String?
+
+  teleId       String?
+  fechamentoId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TeleParada {
+  id String @id @default(cuid())
+
+  teleId String
+  tele   Tele @relation(fields: [teleId], references: [id], onDelete: Cascade)
+
+  tipo       TipoParada
+  cliente    String
+  endereco   String
+  contato    String?
+  observacao String?
+
+  ordem Int @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("Parada")
 }

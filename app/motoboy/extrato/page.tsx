@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 export default function ExtratoMotoboyPage() {
   const [teles, setTeles] = useState<any[]>([]);
+  const [movimentos, setMovimentos] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(true);
 
   const [dataInicio, setDataInicio] = useState("");
@@ -15,7 +16,11 @@ export default function ExtratoMotoboyPage() {
       const resposta = await fetch("/api/motoboys/minhas-teles");
       const dados = await resposta.json();
 
+      const financeiroRes = await fetch("/api/motoboys/meu-financeiro");
+      const financeiroDados = await financeiroRes.json();
+
       setTeles(Array.isArray(dados) ? dados : []);
+      setMovimentos(Array.isArray(financeiroDados) ? financeiroDados : []);
       setCarregando(false);
     }
 
@@ -36,6 +41,18 @@ export default function ExtratoMotoboyPage() {
     return "";
   }
 
+  function formatarData(data: any) {
+    if (!data) return "-";
+
+    return new Date(data).toLocaleDateString("pt-BR", {
+      timeZone: "America/Sao_Paulo",
+    });
+  }
+
+  function formatarValor(valor: number) {
+    return valor.toFixed(2).replace(".", ",");
+  }
+
   const telesFiltradas = useMemo(() => {
     return teles.filter((tele: any) => {
       const dataTele = dataDaTele(tele);
@@ -47,6 +64,19 @@ export default function ExtratoMotoboyPage() {
     });
   }, [teles, dataInicio, dataFim]);
 
+  const movimentosFiltrados = useMemo(() => {
+    return movimentos.filter((movimento: any) => {
+      const dataMovimento = new Date(movimento.criadoEm)
+        .toISOString()
+        .slice(0, 10);
+
+      if (dataInicio && dataMovimento < dataInicio) return false;
+      if (dataFim && dataMovimento > dataFim) return false;
+
+      return true;
+    });
+  }, [movimentos, dataInicio, dataFim]);
+
   const bruto = telesFiltradas.reduce(
     (total, tele) => total + Number(tele.total || 0),
     0
@@ -54,10 +84,30 @@ export default function ExtratoMotoboyPage() {
 
   const liquido = bruto * 0.8;
 
-  const recebido = telesFiltradas
-    .filter((tele) => String(tele.recebimento || "").toLowerCase() === "motoboy")
-    .reduce((total, tele) => total + Number(tele.total || 0), 0);
+  const recebidoClienteAntigo = telesFiltradas
+    .filter((tele) => {
+      const recebimento = String(tele.recebimento || "").toLowerCase();
 
+      const jaTemMovimento = movimentosFiltrados.some(
+        (movimento) =>
+          movimento.tipo === "CLIENTE" &&
+          movimento.fechamentoId &&
+          movimento.fechamentoId === tele.fechamentoId
+      );
+
+      return recebimento === "motoboy" && !jaTemMovimento;
+    })
+    .reduce(
+      (total, tele) => total + Number(tele.valorRecebido || tele.total || 0),
+      0
+    );
+
+  const recebidoMovimentos = movimentosFiltrados.reduce(
+    (total, movimento) => total + Number(movimento.valor || 0),
+    0
+  );
+
+  const recebido = recebidoClienteAntigo + recebidoMovimentos;
   const aReceber = liquido - recebido;
 
   if (carregando) {
@@ -109,11 +159,72 @@ export default function ExtratoMotoboyPage() {
 
         <div className="grid md:grid-cols-5 gap-4 mt-6">
           <Resumo titulo="Entregas" valor={telesFiltradas.length} />
-          <Resumo titulo="Bruto" valor={`R$ ${bruto.toFixed(2)}`} />
-          <Resumo titulo="Líquido" valor={`R$ ${liquido.toFixed(2)}`} />
-          <Resumo titulo="Recebido" valor={`R$ ${recebido.toFixed(2)}`} />
-          <Resumo titulo="A receber" valor={`R$ ${aReceber.toFixed(2)}`} />
+          <Resumo titulo="Bruto" valor={`R$ ${formatarValor(bruto)}`} />
+          <Resumo titulo="Líquido" valor={`R$ ${formatarValor(liquido)}`} />
+          <Resumo titulo="Recebido" valor={`R$ ${formatarValor(recebido)}`} />
+          <Resumo titulo="A receber" valor={`R$ ${formatarValor(aReceber)}`} />
         </div>
+
+        <section className="bg-white rounded-3xl border mt-8 shadow-sm">
+          <div className="p-6 border-b">
+            <h2 className="font-bold text-xl">Histórico financeiro</h2>
+            <p className="text-sm text-slate-500 mt-1">
+              Valores que você já recebeu no período filtrado.
+            </p>
+          </div>
+
+          {movimentosFiltrados.length === 0 && recebidoClienteAntigo === 0 ? (
+            <div className="p-8 text-center text-slate-500">
+              Nenhum recebimento encontrado nesse período.
+            </div>
+          ) : (
+            <div className="divide-y">
+              {movimentosFiltrados.map((movimento) => (
+                <div
+                  key={movimento.id}
+                  className="p-5 flex justify-between gap-4"
+                >
+                  <div>
+                    <strong>
+                      {movimento.tipo === "CLIENTE"
+                        ? movimento.clienteNome || "Cliente"
+                        : movimento.tipo === "ESCRITORIO"
+                        ? "Escritório"
+                        : "Ajuste"}
+                    </strong>
+
+                    <p className="text-sm text-slate-500 mt-1">
+                      {formatarData(movimento.criadoEm)}
+                    </p>
+
+                    <p className="text-sm text-slate-500 mt-1">
+                      {movimento.descricao || "Recebimento"}
+                    </p>
+                  </div>
+
+                  <strong className="text-emerald-700 whitespace-nowrap">
+                    R$ {formatarValor(Number(movimento.valor || 0))}
+                  </strong>
+                </div>
+              ))}
+
+              {recebidoClienteAntigo > 0 && (
+                <div className="p-5 flex justify-between gap-4">
+                  <div>
+                    <strong>Recebimentos antigos</strong>
+                    <p className="text-sm text-slate-500 mt-1">
+                      Pagamentos registrados antes do novo financeiro.
+                    </p>
+                  </div>
+
+                  <strong className="text-emerald-700 whitespace-nowrap">
+                    R$ {formatarValor(recebidoClienteAntigo)}
+                  </strong>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
 
         <section className="bg-white rounded-3xl border mt-8 shadow-sm">
           <div className="p-6 border-b">
@@ -130,7 +241,7 @@ export default function ExtratoMotoboyPage() {
 
               return (
                 <div key={tele.id} className="border-b last:border-b-0 p-5">
-                  <div className="flex justify-between">
+                  <div className="flex justify-between gap-4">
                     <div>
                       <strong>{tele.solicitante}</strong>
 
@@ -151,11 +262,11 @@ export default function ExtratoMotoboyPage() {
                       </span>
 
                       <p className="font-bold text-lg mt-4">
-                        R$ {Number(tele.total).toFixed(2)}
+                        R$ {Number(tele.total || 0).toFixed(2)}
                       </p>
 
                       <p className="text-emerald-700 font-semibold">
-                        Líquido R$ {(Number(tele.total) * 0.8).toFixed(2)}
+                        Líquido R$ {(Number(tele.total || 0) * 0.8).toFixed(2)}
                       </p>
                     </div>
                   </div>
