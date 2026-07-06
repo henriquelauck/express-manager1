@@ -31,13 +31,19 @@ export default function FechamentosPage() {
     return "";
   }
 
+  function saldoTele(tele: any) {
+    const total = converterValor(tele.total || tele.valor);
+    const recebido = converterValor(tele.valorRecebido || 0);
+    return Math.max(total - recebido, 0);
+  }
+
   const clientesComFechamento = useMemo(() => {
     return clientes
-      .filter((cliente: any) => cliente.formaCobranca !== "na_hora")
+      .filter((cliente: any) => String(cliente.formaCobranca).toUpperCase() !== "NA_HORA")
       .map((cliente: any) => {
         const telesCliente = teles.filter((tele: any) => {
           if (tele.solicitante !== cliente.nome) return false;
-          if (tele.fechamentoId) return false;
+          if (saldoTele(tele) <= 0) return false;
 
           const dataTele = dataDaTele(tele);
 
@@ -48,7 +54,7 @@ export default function FechamentosPage() {
         });
 
         const total = telesCliente.reduce(
-          (soma: number, tele: any) => soma + converterValor(tele.valor),
+          (soma: number, tele: any) => soma + saldoTele(tele),
           0
         );
 
@@ -79,7 +85,7 @@ export default function FechamentosPage() {
           };
         }
 
-        acc[nome].total += converterValor(tele.valor);
+        acc[nome].total += saldoTele(tele);
         acc[nome].quantidade += 1;
 
         return acc;
@@ -118,7 +124,7 @@ export default function FechamentosPage() {
     });
 
     if (invalida) {
-      alert("Verifique os valores recebidos. Não pode ser maior que o total do motoboy.");
+      alert("Verifique os valores recebidos. Não pode ser maior que o saldo aberto.");
       return;
     }
 
@@ -157,7 +163,7 @@ export default function FechamentosPage() {
     <PageContainer>
       <PageHeader
         titulo="Fechamentos Financeiros"
-        descricao="Feche clientes por período e registre quanto cada motoboy recebeu."
+        descricao="Feche clientes por período e mantenha pendente o que foi pago parcialmente."
       />
 
       <div className="bg-white rounded-3xl p-5 md:p-6 shadow-sm border border-slate-100 mb-8">
@@ -199,11 +205,11 @@ export default function FechamentosPage() {
               <p className="text-sm text-slate-500 mt-1">{cliente.formaCobranca}</p>
 
               <div className="bg-slate-50 rounded-2xl p-4 mt-5">
-                <p className="text-sm text-slate-500">Teles abertas</p>
+                <p className="text-sm text-slate-500">Teles em aberto</p>
                 <h3 className="text-2xl font-bold">{cliente.teles.length}</h3>
 
-                <p className="text-sm text-slate-500 mt-4">Total bruto</p>
-                <h3 className="text-2xl font-bold text-emerald-700">
+                <p className="text-sm text-slate-500 mt-4">Saldo aberto</p>
+                <h3 className="text-2xl font-bold text-orange-600">
                   R$ {formatarValor(cliente.total)}
                 </h3>
               </div>
@@ -226,7 +232,8 @@ export default function FechamentosPage() {
             <h2 className="text-2xl font-bold">Fechar {clienteSelecionado.nome}</h2>
 
             <p className="text-slate-500 mt-2">
-              {clienteSelecionado.teles.length} teles • R$ {formatarValor(clienteSelecionado.total)}
+              {clienteSelecionado.teles.length} teles abertas • R${" "}
+              {formatarValor(clienteSelecionado.total)}
             </p>
 
             <div className="mt-6 space-y-4">
@@ -247,7 +254,7 @@ export default function FechamentosPage() {
                         <p className="text-sm text-slate-500">{item.quantidade} teles</p>
                       </div>
 
-                      <strong className="text-emerald-700">
+                      <strong className="text-orange-600">
                         R$ {formatarValor(item.total)}
                       </strong>
                     </div>
@@ -260,26 +267,25 @@ export default function FechamentosPage() {
 
                         <select
                           value={item.recebedorTipo}
-                         onChange={(e) => {
-  const tipo = e.target.value;
+                          onChange={(e) => {
+                            const tipo = e.target.value;
+                            const novas = [...distribuicoes];
 
-  const novas = [...distribuicoes];
+                            const jaDigitou =
+                              Number(
+                                String(novas[index].valorRecebido || "0").replace(",", ".")
+                              ) > 0;
 
-  const jaDigitou =
-    Number(
-      String(novas[index].valorRecebido || "0").replace(",", ".")
-    ) > 0;
+                            novas[index] = {
+                              ...novas[index],
+                              recebedorTipo: tipo,
+                              valorRecebido: jaDigitou
+                                ? novas[index].valorRecebido
+                                : String(novas[index].total).replace(".", ","),
+                            };
 
-  novas[index] = {
-    ...novas[index],
-    recebedorTipo: tipo,
-    valorRecebido: jaDigitou
-      ? novas[index].valorRecebido
-      : String(novas[index].total).replace(".", ","),
-  };
-
-  setDistribuicoes(novas);
-}}
+                            setDistribuicoes(novas);
+                          }}
                           className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500 bg-white"
                         >
                           <option value="ESCRITORIO">Escritório</option>
@@ -289,7 +295,7 @@ export default function FechamentosPage() {
 
                       <div>
                         <label className="text-sm font-medium text-slate-600">
-                          Valor recebido
+                          Valor recebido agora
                         </label>
 
                         <input
@@ -305,14 +311,14 @@ export default function FechamentosPage() {
 
                     <div className="mt-4 bg-white rounded-xl p-3 text-sm">
                       <div className="flex justify-between">
-                        <span>Já recebeu</span>
+                        <span>Recebeu agora</span>
                         <strong>R$ {formatarValor(valorRecebido)}</strong>
                       </div>
 
                       <div className="flex justify-between mt-1">
-                        <span>Falta receber</span>
+                        <span>Vai continuar pendente</span>
                         <strong className={falta > 0 ? "text-orange-600" : "text-emerald-700"}>
-                          R$ {formatarValor(falta)}
+                          R$ {formatarValor(Math.max(falta, 0))}
                         </strong>
                       </div>
                     </div>

@@ -121,10 +121,10 @@ model Tele {
   espera    Float @default(0)
   total     Float @default(0)
 
-  recebimento     Recebimento   @default(PENDENTE)
-  formaCobranca   FormaCobranca @default(SEMANAL)
-  valorRecebido   Float         @default(0)
-  dataRecebimento DateTime?
+  recebimento      Recebimento   @default(PENDENTE)
+  formaCobranca    FormaCobranca @default(SEMANAL)
+  valorRecebido    Float         @default(0)
+  dataRecebimento  DateTime?
   motoboyRecebedor String?
 
   fechamentoId String?
@@ -152,13 +152,33 @@ model FechamentoFinanceiro {
 
   totalBruto Float @default(0)
 
-  recebedorTipo RecebedorFechamento @default(ESCRITORIO)
-  motoboyRecebedorId String?
-  motoboyRecebedorNome String?
+  recebedorTipo          RecebedorFechamento @default(ESCRITORIO)
+  motoboyRecebedorId     String?
+  motoboyRecebedorNome   String?
 
-  status StatusFechamento @default(FECHADO)
+  status StatusFechamento @default(ABERTO)
 
   teles Tele[]
+  itens FechamentoFinanceiroItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model FechamentoFinanceiroItem {
+  id String @id @default(cuid())
+
+  fechamentoId String
+  fechamento   FechamentoFinanceiro @relation(fields: [fechamentoId], references: [id], onDelete: Cascade)
+
+  motoboyId   String?
+  motoboyNome String
+
+  totalBruto    Float @default(0)
+  valorRecebido Float @default(0)
+  saldo         Float @default(0)
+
+  recebedorTipo RecebedorFechamento @default(ESCRITORIO)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -175,7 +195,7 @@ model MovimentoFinanceiroMotoboy {
   valor Float
 
   clienteNome String?
-  descricao String?
+  descricao   String?
 
   teleId       String?
   fechamentoId String?
