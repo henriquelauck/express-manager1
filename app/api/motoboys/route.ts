@@ -43,3 +43,15 @@ export async function PUT(request: Request) {
 
   return NextResponse.json(motoboy);
 }
+
+export async function DELETE(request: Request) {
+  const body = await request.json();
+
+  await prisma.motoboy.delete({
+    where: {
+      id: body.id,
+    },
+  });
+
+  return NextResponse.json({ ok: true });
+}

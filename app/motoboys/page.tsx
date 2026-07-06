@@ -5,10 +5,10 @@ import { useState } from "react";
 import {
   Plus,
   Bike,
-  Phone,
   ClipboardList,
   DollarSign,
   Pencil,
+  Trash2,
 } from "lucide-react";
 import { useExpressManager } from "@/context/ExpressManagerContext";
 import { Motoboy } from "@/types/Motoboy";
@@ -75,6 +75,35 @@ export default function MotoboysPage() {
   setEditandoIndex(null);
   setModalAberto(false);
 }
+
+async function excluirMotoboy(id: string) {
+  const confirmar = confirm(
+    "Tem certeza que deseja excluir este motoboy?"
+  );
+
+  if (!confirmar) return;
+
+  const resposta = await fetch("/api/motoboys", {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ id }),
+  });
+
+  if (!resposta.ok) {
+    alert("Erro ao excluir motoboy.");
+    return;
+  }
+
+  const respostaLista = await fetch("/api/motoboys");
+  const motoboysAtualizados = await respostaLista.json();
+
+  setMotoboys(motoboysAtualizados);
+
+  alert("Motoboy excluído com sucesso.");
+}
+
 function converterValor(valor: string) {
   return Number(valor.replace(",", "."));
 }
@@ -158,12 +187,21 @@ function resumoMotoboy(nome: string, periodo: "hoje" | "semana" | "mes") {
                 </div>
               </div>
 
-              <button
-                onClick={() => abrirEdicao(index)}
-                className="w-10 h-10 rounded-xl border border-slate-200 flex items-center justify-center hover:bg-slate-50"
-              >
-                <Pencil size={18} />
-              </button>
+              <div className="flex gap-2">
+  <button
+    onClick={() => abrirEdicao(index)}
+    className="w-10 h-10 rounded-xl border border-slate-200 flex items-center justify-center hover:bg-slate-50"
+  >
+    <Pencil size={18} />
+  </button>
+
+  <button
+    onClick={() => excluirMotoboy(motoboy.id)}
+    className="w-10 h-10 rounded-xl border border-red-100 text-red-600 flex items-center justify-center hover:bg-red-50"
+  >
+    <Trash2 size={18} />
+  </button>
+</div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
