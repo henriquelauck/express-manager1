@@ -159,27 +159,79 @@ export default function ExtratoFinanceiro() {
     grupos[dataFormatada].push(tele);
   });
 
+  function clienteResponsavelCobranca(tele: any) {
+  const paradas = tele.paradas || [];
+  const solicitante = String(tele.solicitante || "").trim().toLowerCase();
+
+  const paradaComCobranca = paradas.find((p: any) =>
+    String(p.observacao || "").toLowerCase().includes("cobrar")
+  );
+
+  if (paradaComCobranca) {
+    return (
+      paradaComCobranca.cliente ||
+      paradaComCobranca.nomeCliente ||
+      tele.nomeCliente ||
+      tele.solicitante
+    );
+  }
+
+  const paradaDestino = paradas.find((p: any) => {
+    const nome = String(p.cliente || p.nomeCliente || "")
+      .trim()
+      .toLowerCase();
+
+    return nome && nome !== solicitante;
+  });
+
+  return (
+    paradaDestino?.cliente ||
+    paradaDestino?.nomeCliente ||
+    tele.nomeCliente ||
+    tele.solicitante
+  );
+}
+
   let texto = "";
 
   Object.entries(grupos).forEach(([data, telesDoDia]) => {
     texto += `${data}\n`;
 
-    telesDoDia.forEach((tele: any) => {
-  const parada =
-    tele.paradas?.find((p: any) => p.cliente !== tele.solicitante) ||
-    tele.paradas?.[0];
+   telesDoDia.forEach((tele: any) => {
+  const totalTele = converterValor(tele.total || tele.valor);
+  let valorRecebido = converterValor(tele.valorRecebido || 0);
 
-  const nomeLinha =
-    parada?.cliente ||
-    tele.nomeCliente ||
-    tele.solicitante;
+  const paradas = tele.paradas || [];
+  const textoObs = paradas
+    .map((p: any) => String(p.observacao || ""))
+    .join(" ")
+    .toLowerCase();
 
-  texto += `- ${nomeLinha} - R$${tele.valor}\n`;
+  const matchCobrar = textoObs.match(/cobrar\s*-?\s*r?\$?\s*([\d,.]+)/i);
+
+  if (matchCobrar) {
+    valorRecebido = converterValor(matchCobrar[1]);
+  }
+
+  const saldo = Math.max(totalTele - valorRecebido, 0);
+
+  if (saldo <= 0) return;
+
+  const nomeLinha = clienteResponsavelCobranca(tele);
+
+  texto += `- ${nomeLinha} - R$${formatarValor(saldo)}\n`;
 });
     texto += `\n`;
   });
 
-  texto += `Total - R$${formatarValor(total)}`;
+  const totalSaldo = telesFiltradas.reduce((soma: number, tele: any) => {
+  const totalTele = converterValor(tele.total || tele.valor);
+  const valorRecebido = converterValor(tele.valorRecebido || 0);
+
+  return soma + Math.max(totalTele - valorRecebido, 0);
+}, 0);
+
+texto += `Total - R$${formatarValor(totalSaldo)}`;
 
   return texto;
 }, [telesFiltradas, total]);

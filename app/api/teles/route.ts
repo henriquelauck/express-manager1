@@ -92,7 +92,9 @@ function formatarTeleParaTela(tele: any) {
     motoboy: tele.motoboyNome || tele.motoboy?.nome || "",
     status: statusParaTela(tele.status),
     criadoEm: formatarData(tele.dataTele || tele.createdAt),
-dataTele: tele.dataTele,
+    dataTele: tele.dataTele,
+    distanciaKm: tele.distanciaKm,
+    tempoMinutos: tele.tempoMinutos,
 
     valorBase: tele.valorBase,
     retorno: tele.retorno,
@@ -180,6 +182,9 @@ export async function POST(request: Request) {
       retorno: body.retorno || 0,
       espera: body.espera || 0,
       total: body.total || Number(String(body.valor || "0").replace(",", ".")),
+
+      distanciaKm: body.distanciaKm || null,
+tempoMinutos: body.tempoMinutos || null,
 
       recebimento: recebimentoParaBanco(body.recebimento || "pendente"),
       formaCobranca: formaCobrancaParaBanco(body.formaCobranca || "semanal"),

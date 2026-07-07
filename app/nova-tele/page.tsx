@@ -40,7 +40,8 @@ export default function NovaTelePage() {
   const [valorBase, setValorBase] = useState("14,00");
   const [observacaoGeral, setObservacaoGeral] = useState("");
   const [salvando, setSalvando] = useState(false);
-
+const [calculandoRota, setCalculandoRota] = useState(false);
+const [rotaCalculada, setRotaCalculada] = useState<any>(null);
   const [paradas, setParadas] = useState<Parada[]>([
     {
       id: gerarId(),
@@ -126,6 +127,47 @@ export default function NovaTelePage() {
     return converterValor(valorBase) + calcularRetorno();
   }
 
+async function calcularRota() {
+  const enderecosIncompletos = paradas.some((parada) => !parada.endereco);
+
+  if (enderecosIncompletos) {
+    alert("Preencha o endereço de todas as paradas.");
+    return;
+  }
+
+  if (paradas.length < 2) {
+    alert("Adicione pelo menos duas paradas para calcular a rota.");
+    return;
+  }
+
+  setCalculandoRota(true);
+
+  const resposta = await fetch("/api/maps/calcular-rota", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      paradas: paradas.map((parada) => ({
+        endereco: parada.endereco,
+      })),
+      temRetorno: temRetorno(),
+    }),
+  });
+
+  const dados = await resposta.json();
+
+  setCalculandoRota(false);
+
+  if (!resposta.ok) {
+    alert(dados.erro || "Erro ao calcular rota.");
+    return;
+  }
+
+  setRotaCalculada(dados);
+  setValorBase(formatarValor(dados.valorSugerido - calcularRetorno()));
+}
+
   async function criarTele() {
     if (!solicitante) {
       alert("Selecione o cliente solicitante.");
@@ -163,6 +205,8 @@ export default function NovaTelePage() {
         retorno,
         espera: 0,
         total,
+        distanciaKm: rotaCalculada?.distanciaKm || null,
+        tempoMinutos: rotaCalculada?.duracaoMin || null,
 
         recebimento: "pendente",
         formaCobranca: "semanal",
@@ -349,6 +393,55 @@ export default function NovaTelePage() {
             onChange={setObservacaoGeral}
           />
 
+<button
+  type="button"
+  onClick={calcularRota}
+  disabled={calculandoRota}
+  className="w-full md:col-span-2 h-14 rounded-2xl bg-slate-900 text-white flex items-center justify-center gap-2 disabled:opacity-50"
+>
+  {calculandoRota ? "Calculando rota..." : "Calcular rota"}
+</button>
+
+{rotaCalculada && (
+  <div className="md:col-span-2 bg-emerald-50 border border-emerald-100 rounded-2xl p-5 text-sm text-emerald-800">
+    <p>
+      Distância: <strong>{rotaCalculada.distanciaKm.toFixed(1)} km</strong>
+    </p>
+
+    <p>
+      Tempo estimado: <strong>{rotaCalculada.duracaoMin} min</strong>
+    </p>
+
+    <p>
+      Valor sugerido:{" "}
+      <strong>R$ {formatarValor(rotaCalculada.valorSugerido)}</strong>
+    </p>
+
+{rotaCalculada?.enderecosEncontrados && (
+  <div className="mt-3 space-y-1">
+    <p className="font-bold">Endereços encontrados:</p>
+
+    {rotaCalculada.enderecosEncontrados.map((endereco: string, index: number) => (
+      <p key={index}>
+        {index + 1}. {endereco}
+      </p>
+    ))}
+  </div>
+)}
+
+    {rotaCalculada.origemEncontrada && (
+      <p className="mt-2">
+        Origem encontrada: <strong>{rotaCalculada.origemEncontrada}</strong>
+      </p>
+    )}
+
+    {rotaCalculada.destinoEncontrado && (
+      <p>
+        Destino encontrado: <strong>{rotaCalculada.destinoEncontrado}</strong>
+      </p>
+    )}
+  </div>
+)}
           <div className="md:col-span-2 bg-slate-50 rounded-2xl p-5">
             <div className="flex justify-between text-sm mb-2">
               <span>Valor base</span>
