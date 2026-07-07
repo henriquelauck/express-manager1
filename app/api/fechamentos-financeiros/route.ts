@@ -54,6 +54,9 @@ export async function POST(request: Request) {
           lte: fim,
         },
       },
+      orderBy: {
+        dataTele: "asc",
+      },
     });
 
     const teles = todasTeles.filter((tele) => {
@@ -61,10 +64,20 @@ export async function POST(request: Request) {
       return saldo > 0.009;
     });
 
-    const totalBruto = teles.reduce(
-      (total, tele) => total + (Number(tele.total || 0) - Number(tele.valorRecebido || 0)),
-      0
-    );
+    const totalBruto = teles.reduce((total, tele) => {
+      return total + (Number(tele.total || 0) - Number(tele.valorRecebido || 0));
+    }, 0);
+
+    const totalRecebidoAgora = distribuicoes.reduce((total: number, item: any) => {
+      return total + converterValor(item.valorRecebido);
+    }, 0);
+
+    if (totalRecebidoAgora > totalBruto + 0.009) {
+      return NextResponse.json(
+        { erro: "O valor recebido não pode ser maior que o total em aberto." },
+        { status: 400 }
+      );
+    }
 
     const fechamento = await prisma.fechamentoFinanceiro.create({
       data: {
@@ -78,52 +91,46 @@ export async function POST(request: Request) {
       },
     });
 
-    let fechamentoQuitado = true;
+    let valorRestanteGlobal = totalRecebidoAgora;
 
-    for (const distribuicao of distribuicoes) {
-      const telesDoMotoboy = teles.filter(
-        (tele) => (tele.motoboyNome || "") === distribuicao.motoboyNome
+    for (const tele of teles) {
+      const totalTele = Number(tele.total || 0);
+      const recebidoAnterior = Number(tele.valorRecebido || 0);
+      const saldoTele = Math.max(totalTele - recebidoAnterior, 0);
+
+      const recebidoAgora = Math.min(valorRestanteGlobal, saldoTele);
+      valorRestanteGlobal -= recebidoAgora;
+
+      const novoRecebido = recebidoAnterior + recebidoAgora;
+      const quitouTele = novoRecebido >= totalTele - 0.009;
+
+      const distribuicaoRecebedora = distribuicoes.find(
+        (item: any) => converterValor(item.valorRecebido) > 0
       );
 
-      let valorRestanteParaAplicar = converterValor(distribuicao.valorRecebido);
+      await prisma.tele.update({
+        where: { id: tele.id },
+        data: {
+          fechamentoId: quitouTele ? fechamento.id : null,
+          recebimento:
+            novoRecebido > 0
+              ? distribuicaoRecebedora?.recebedorTipo === "MOTOBOY"
+                ? "MOTOBOY"
+                : "ESCRITORIO"
+              : "PENDENTE",
+          valorRecebido: novoRecebido,
+          dataRecebimento: novoRecebido > 0 ? new Date() : null,
+          motoboyRecebedor:
+            novoRecebido > 0 &&
+            distribuicaoRecebedora?.recebedorTipo === "MOTOBOY"
+              ? distribuicaoRecebedora.motoboyNome
+              : null,
+        },
+      });
+    }
+
+    for (const distribuicao of distribuicoes) {
       const valorRecebidoInformado = converterValor(distribuicao.valorRecebido);
-
-      for (const tele of telesDoMotoboy) {
-        const totalTele = Number(tele.total || 0);
-        const recebidoAnterior = Number(tele.valorRecebido || 0);
-        const saldoTele = Math.max(totalTele - recebidoAnterior, 0);
-
-        const recebidoAgora = Math.min(valorRestanteParaAplicar, saldoTele);
-        valorRestanteParaAplicar -= recebidoAgora;
-
-        const novoRecebido = recebidoAnterior + recebidoAgora;
-        const quitouTele = novoRecebido >= totalTele - 0.009;
-
-        if (!quitouTele) fechamentoQuitado = false;
-
-        await prisma.tele.update({
-          where: { id: tele.id },
-          data: {
-            fechamentoId: quitouTele ? fechamento.id : null,
-            recebimento:
-              novoRecebido > 0
-                ? distribuicao.recebedorTipo === "MOTOBOY"
-                  ? "MOTOBOY"
-                  : "ESCRITORIO"
-                : "PENDENTE",
-            valorRecebido: novoRecebido,
-            dataRecebimento: novoRecebido > 0 ? new Date() : null,
-            motoboyRecebedor:
-              novoRecebido > 0 && distribuicao.recebedorTipo === "MOTOBOY"
-                ? distribuicao.motoboyNome
-                : null,
-          },
-        });
-      }
-
-      const saldo = Math.max(Number(distribuicao.total || 0) - valorRecebidoInformado, 0);
-
-      if (saldo > 0.009) fechamentoQuitado = false;
 
       await prisma.fechamentoFinanceiroItem.create({
         data: {
@@ -132,7 +139,7 @@ export async function POST(request: Request) {
           motoboyNome: distribuicao.motoboyNome,
           totalBruto: Number(distribuicao.total || 0),
           valorRecebido: valorRecebidoInformado,
-          saldo,
+          saldo: 0,
           recebedorTipo: distribuicao.recebedorTipo,
         },
       });
@@ -154,6 +161,8 @@ export async function POST(request: Request) {
         });
       }
     }
+
+    const fechamentoQuitado = totalRecebidoAgora >= totalBruto - 0.009;
 
     await prisma.fechamentoFinanceiro.update({
       where: { id: fechamento.id },

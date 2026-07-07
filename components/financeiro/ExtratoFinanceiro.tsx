@@ -335,7 +335,6 @@ export default function ExtratoFinanceiro() {
       </div>
       </>
 );
-  );
 }
 
 function FiltroData({ label, value, onChange }: any) {

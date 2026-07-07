@@ -21,6 +21,7 @@ import {
   Send,
   X,
   Plus,
+  Copy,
 } from "lucide-react";
 
 type Cliente = {
@@ -350,6 +351,15 @@ Valor da tele: R$ ${tele.valor}`;
     window.open(`https://wa.me/${telefoneDestino}?text=${texto}`, "_blank");
   }
 
+  async function copiarMensagem() {
+  try {
+    await navigator.clipboard.writeText(mensagem);
+    alert("Mensagem copiada!");
+  } catch {
+    alert("Não foi possível copiar a mensagem.");
+  }
+}
+
   function totalPorStatus(status: string) {
     return teles
       .filter((tele: Tele) => tele.status === status &&
@@ -484,13 +494,23 @@ ehDoMotoboySelecionado(tele))
               className="w-full h-80 rounded-2xl border border-slate-200 p-4 outline-none focus:border-emerald-500"
             />
 
-            <button
-              onClick={enviarWhatsApp}
-              className="w-full mt-5 h-14 rounded-2xl bg-emerald-600 text-white flex items-center justify-center gap-2"
-            >
-              <MessageCircle size={22} />
-              Enviar no WhatsApp
-            </button>
+            <div className="grid grid-cols-2 gap-3 mt-5">
+  <button
+    onClick={copiarMensagem}
+    className="h-14 rounded-2xl border border-slate-200 bg-white text-slate-700 flex items-center justify-center gap-2 hover:bg-slate-50"
+  >
+    <Copy size={20} />
+    Copiar
+  </button>
+
+  <button
+    onClick={enviarWhatsApp}
+    className="h-14 rounded-2xl bg-emerald-600 text-white flex items-center justify-center gap-2"
+  >
+    <MessageCircle size={22} />
+    WhatsApp
+  </button>
+</div>
           </div>
         </div>
       )}

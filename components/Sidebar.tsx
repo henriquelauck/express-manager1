@@ -11,11 +11,9 @@ import {
   Bike,
   DollarSign,
   Package,
-  FileText,
   KeyRound,
   LogOut,
   User,
-  ReceiptText,
 } from "lucide-react";
 
 export default function Sidebar() {
@@ -54,14 +52,21 @@ export default function Sidebar() {
         <MenuLink href="/" icon={<Home />} text="Dashboard" ativo={pathname === "/"} />
         <MenuLink href="/nova-tele" icon={<Truck />} text="Nova Tele" ativo={pathname === "/nova-tele"} />
         <MenuLink href="/teles" icon={<ClipboardList />} text="Operações" ativo={pathname === "/teles"} />
-        <MenuLink href="/financeiro" icon={<DollarSign />} text="Financeiro" ativo={pathname === "/financeiro"} />
-        <MenuLink href="/fechamentos" icon={<ReceiptText />}text="Fechamentos" ativo={pathname === "/fechamentos"}/>
-        <MenuLink href="/extrato-geral" icon={<FileText />} text="Extrato Geral" ativo={pathname === "/extrato-geral"} />
-                <div className="border-t border-slate-100 my-4" />
+        <MenuLink
+  href="/financeiro"
+  icon={<DollarSign />}
+  text="Financeiro"
+  ativo={
+    pathname === "/financeiro" ||
+    pathname === "/fechamentos" ||
+    pathname === "/extrato-geral" ||
+    pathname === "/motoboys/extrato"
+  }
+/>
+         <div className="border-t border-slate-100 my-4" />
 
         <MenuLink href="/clientes" icon={<Users />} text="Clientes" ativo={pathname === "/clientes"} />
         <MenuLink href="/motoboys" icon={<Bike />} text="Motoboys" ativo={pathname === "/motoboys"} />
-        <MenuLink href="/motoboys/extrato" icon={<DollarSign />} text="Financeiro Motoboys" ativo={pathname === "/motoboys/extrato"} />
         <MenuLink href="/configuracoes/logins" icon={<KeyRound />} text="Logins Motoboys" ativo={pathname === "/configuracoes/logins"} />
       </nav>
 
