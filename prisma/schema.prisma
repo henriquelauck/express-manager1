@@ -120,8 +120,9 @@ model Tele {
   retorno   Float @default(0)
   espera    Float @default(0)
   total     Float @default(0)
+
   distanciaKm  Float?
-tempoMinutos Int?
+  tempoMinutos Int?
 
   recebimento      Recebimento   @default(PENDENTE)
   formaCobranca    FormaCobranca @default(SEMANAL)
@@ -201,6 +202,9 @@ model MovimentoFinanceiroMotoboy {
 
   teleId       String?
   fechamentoId String?
+
+  dataReferenciaInicio DateTime?
+  dataReferenciaFim    DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

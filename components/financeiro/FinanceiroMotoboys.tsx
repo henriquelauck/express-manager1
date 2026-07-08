@@ -19,6 +19,8 @@ export default function FinanceiroMotoboys() {
   const [modalAberto, setModalAberto] = useState(false);
   const [valorPagamento, setValorPagamento] = useState("");
   const [descricaoPagamento, setDescricaoPagamento] = useState("PIX semanal");
+  const [dataReferenciaInicio, setDataReferenciaInicio] = useState("");
+const [dataReferenciaFim, setDataReferenciaFim] = useState("");
   const [salvando, setSalvando] = useState(false);
 
 async function excluirMovimento(id: string) {
@@ -96,25 +98,29 @@ async function excluirMovimento(id: string) {
   }, [teles, motoboySelecionado, dataInicio, dataFim]);
 
   const movimentosDoMotoboy = useMemo(() => {
-    return movimentosFinanceirosMotoboy.filter((movimento: any) => {
-      if (!motoboyAtual) return false;
-      if (movimento.motoboyId !== motoboyAtual.id) return false;
+  return movimentosFinanceirosMotoboy.filter((movimento: any) => {
+    if (!motoboyAtual) return false;
+    if (movimento.motoboyId !== motoboyAtual.id) return false;
 
-      const dataMovimento = new Date(movimento.criadoEm)
-        .toISOString()
-        .slice(0, 10);
+    const inicio = movimento.dataReferenciaInicio
+      ? movimento.dataReferenciaInicio.slice(0, 10)
+      : new Date(movimento.criadoEm).toISOString().slice(0, 10);
 
-      if (dataInicio && dataMovimento < dataInicio) return false;
-      if (dataFim && dataMovimento > dataFim) return false;
+    const fim = movimento.dataReferenciaFim
+      ? movimento.dataReferenciaFim.slice(0, 10)
+      : new Date(movimento.criadoEm).toISOString().slice(0, 10);
 
-      return true;
-    });
-  }, [
-    movimentosFinanceirosMotoboy,
-    motoboyAtual,
-    dataInicio,
-    dataFim,
-  ]);
+    if (dataInicio && fim < dataInicio) return false;
+    if (dataFim && inicio > dataFim) return false;
+
+    return true;
+  });
+}, [
+  movimentosFinanceirosMotoboy,
+  motoboyAtual,
+  dataInicio,
+  dataFim,
+]);
 
   const totalBruto = telesDoMotoboy.reduce(
     (soma: number, tele: any) => soma + converterValor(tele.valor),
@@ -259,10 +265,12 @@ const historicoFinanceiro = [
   }
 
   function abrirPagamento() {
-    setValorPagamento(saldo > 0 ? formatarValor(saldo) : "");
-    setDescricaoPagamento("PIX semanal");
-    setModalAberto(true);
-  }
+  setValorPagamento(saldo > 0 ? formatarValor(saldo) : "");
+  setDescricaoPagamento("PIX semanal");
+  setDataReferenciaInicio(dataInicio || "");
+  setDataReferenciaFim(dataFim || "");
+  setModalAberto(true);
+}
 
   async function registrarPagamento() {
     if (!motoboyAtual) return;
@@ -286,6 +294,8 @@ const historicoFinanceiro = [
         tipo: "ESCRITORIO",
         valor,
         descricao: descricaoPagamento || "Pagamento escritório",
+        dataReferenciaInicio,
+dataReferenciaFim,
       }),
     });
 
@@ -427,9 +437,42 @@ const historicoFinanceiro = [
     R$ {formatarValor(Number(movimento.valor || 0))}
   </strong>
 
-  {!String(movimento.id).startsWith("tele-") && (
-    <button
-      onClick={() => excluirMovimento(movimento.id)}
+ {String(movimento.id).startsWith("tele-") ? (
+  <button
+    onClick={async () => {
+      const confirmar = confirm("Desconsiderar este recebimento antigo?");
+      if (!confirmar) return;
+
+      const teleId = String(movimento.id).replace("tele-", "");
+
+      const resposta = await fetch("/api/teles/recebimento", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: teleId,
+          recebimento: "pendente",
+          valor: 0,
+        }),
+      });
+
+      if (!resposta.ok) {
+        alert("Erro ao desconsiderar recebimento.");
+        return;
+      }
+
+      await recarregarDados();
+      alert("Recebimento desconsiderado.");
+    }}
+    className="w-9 h-9 rounded-xl bg-orange-50 text-orange-600 hover:bg-orange-100 flex items-center justify-center"
+    title="Desconsiderar recebimento antigo"
+  >
+    <Trash2 size={16} />
+  </button>
+) : (
+  <button
+    onClick={() => excluirMovimento(movimento.id)}
       className="w-9 h-9 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 flex items-center justify-center"
       title="Excluir recebimento"
     >
@@ -481,6 +524,32 @@ const historicoFinanceiro = [
               <label className="text-sm font-medium text-slate-600">
                 Observação
               </label>
+<div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+  <div>
+    <label className="text-sm font-medium text-slate-600">
+      Referente de
+    </label>
+    <input
+      type="date"
+      value={dataReferenciaInicio}
+      onChange={(e) => setDataReferenciaInicio(e.target.value)}
+      className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
+    />
+  </div>
+
+  <div>
+    <label className="text-sm font-medium text-slate-600">
+      Referente até
+    </label>
+    <input
+      type="date"
+      value={dataReferenciaFim}
+      onChange={(e) => setDataReferenciaFim(e.target.value)}
+      className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
+    />
+  </div>
+</div>
+
               <input
                 value={descricaoPagamento}
                 onChange={(e) => setDescricaoPagamento(e.target.value)}

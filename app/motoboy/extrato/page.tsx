@@ -49,33 +49,41 @@ export default function ExtratoMotoboyPage() {
     });
   }
 
-  function formatarValor(valor: number) {
+    function formatarValor(valor: number) {
     return valor.toFixed(2).replace(".", ",");
   }
+const telesFiltradas = useMemo(() => {
+  return teles.filter((tele: any) => {
+    const dataTele = dataDaTele(tele);
 
-  const telesFiltradas = useMemo(() => {
-    return teles.filter((tele: any) => {
-      const dataTele = dataDaTele(tele);
+    if (dataInicio && dataTele < dataInicio) return false;
 
-      if (dataInicio && dataTele < dataInicio) return false;
-      if (dataFim && dataTele > dataFim) return false;
+    const dataFinalFiltro =
+      dataFim || dataInicio || new Date().toISOString().slice(0, 10);
 
-      return true;
-    });
-  }, [teles, dataInicio, dataFim]);
+    if (dataTele > dataFinalFiltro) return false;
 
-  const movimentosFiltrados = useMemo(() => {
-    return movimentos.filter((movimento: any) => {
-      const dataMovimento = new Date(movimento.criadoEm)
-        .toISOString()
-        .slice(0, 10);
+    return true;
+  });
+}, [teles, dataInicio, dataFim]);
 
-      if (dataInicio && dataMovimento < dataInicio) return false;
-      if (dataFim && dataMovimento > dataFim) return false;
+ const movimentosFiltrados = useMemo(() => {
+  return movimentos.filter((movimento: any) => {
+    const inicio = movimento.dataReferenciaInicio
+      ? movimento.dataReferenciaInicio.slice(0, 10)
+      : new Date(movimento.criadoEm).toISOString().slice(0, 10);
 
-      return true;
-    });
-  }, [movimentos, dataInicio, dataFim]);
+    const fim = movimento.dataReferenciaFim
+      ? movimento.dataReferenciaFim.slice(0, 10)
+      : new Date(movimento.criadoEm).toISOString().slice(0, 10);
+
+    if (dataInicio && fim < dataInicio) return false;
+    if (dataFim && inicio > dataFim) return false;
+
+    return true;
+  });
+}, [movimentos, dataInicio, dataFim]);
+
 
   const bruto = telesFiltradas.reduce(
     (total, tele) => total + Number(tele.total || 0),
@@ -194,7 +202,20 @@ export default function ExtratoMotoboyPage() {
                     </strong>
 
                     <p className="text-sm text-slate-500 mt-1">
-                      {formatarData(movimento.criadoEm)}
+                     {movimento.dataReferenciaInicio ? (
+  <>
+    {formatarData(movimento.criadoEm)}
+    <br />
+    <span className="text-xs text-slate-400">
+      Referente a{" "}
+      {formatarData(movimento.dataReferenciaInicio)}
+      {movimento.dataReferenciaFim &&
+        ` até ${formatarData(movimento.dataReferenciaFim)}`}
+    </span>
+  </>
+) : (
+  formatarData(movimento.criadoEm)
+)}
                     </p>
 
                     <p className="text-sm text-slate-500 mt-1">

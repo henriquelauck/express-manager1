@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+function dataOuNull(data: any) {
+  if (!data) return null;
+  return new Date(`${data}T12:00:00`);
+}
+
 export async function GET() {
   const movimentos = await prisma.movimentoFinanceiroMotoboy.findMany({
     include: {
@@ -22,6 +27,8 @@ export async function GET() {
       descricao: movimento.descricao,
       teleId: movimento.teleId,
       fechamentoId: movimento.fechamentoId,
+      dataReferenciaInicio: movimento.dataReferenciaInicio,
+      dataReferenciaFim: movimento.dataReferenciaFim,
       criadoEm: movimento.createdAt,
     }))
   );
@@ -46,6 +53,8 @@ export async function POST(request: Request) {
       descricao: body.descricao || "",
       teleId: body.teleId || null,
       fechamentoId: body.fechamentoId || null,
+      dataReferenciaInicio: dataOuNull(body.dataReferenciaInicio),
+      dataReferenciaFim: dataOuNull(body.dataReferenciaFim),
     },
     include: {
       motoboy: true,
@@ -62,6 +71,8 @@ export async function POST(request: Request) {
     descricao: movimento.descricao,
     teleId: movimento.teleId,
     fechamentoId: movimento.fechamentoId,
+    dataReferenciaInicio: movimento.dataReferenciaInicio,
+    dataReferenciaFim: movimento.dataReferenciaFim,
     criadoEm: movimento.createdAt,
   });
 }
