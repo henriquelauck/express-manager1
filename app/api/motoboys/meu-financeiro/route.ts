@@ -31,16 +31,18 @@ export async function GET() {
   });
 
   return NextResponse.json(
-    movimentos.map((movimento) => ({
-      id: movimento.id,
-      motoboyId: movimento.motoboyId,
-      tipo: movimento.tipo,
-      valor: movimento.valor,
-      clienteNome: movimento.clienteNome,
-      descricao: movimento.descricao,
-      teleId: movimento.teleId,
-      fechamentoId: movimento.fechamentoId,
-      criadoEm: movimento.createdAt,
-    }))
-  );
+  movimentos.map((movimento) => ({
+    id: movimento.id,
+    motoboyId: movimento.motoboyId,
+    tipo: movimento.tipo,
+    valor: movimento.valor,
+    clienteNome: movimento.clienteNome,
+    descricao: movimento.descricao,
+    teleId: movimento.teleId,
+    fechamentoId: movimento.fechamentoId,
+    dataReferenciaInicio: movimento.dataReferenciaInicio,
+    dataReferenciaFim: movimento.dataReferenciaFim,
+    criadoEm: movimento.createdAt,
+  }))
+);
 }
