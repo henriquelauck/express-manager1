@@ -12,9 +12,14 @@ function calcularValor(
 ) {
   let valor = 14;
 
-  const foraNH =
-    cidadeOrigem !== "Novo Hamburgo" ||
-    cidadeDestino !== "Novo Hamburgo";
+  const normalizarCidade = (cidade: string) =>
+  String(cidade || "")
+    .trim()
+    .toLowerCase();
+
+const foraNH =
+  normalizarCidade(cidadeOrigem) !== "novo hamburgo" ||
+  normalizarCidade(cidadeDestino) !== "novo hamburgo";
 
   const minimo = foraNH ? 15 : 14;
 
