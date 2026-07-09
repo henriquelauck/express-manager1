@@ -12,6 +12,7 @@ export default function FechamentosFinanceiro() {
   const [clienteSelecionado, setClienteSelecionado] = useState<any>(null);
   const [distribuicoes, setDistribuicoes] = useState<any[]>([]);
   const [fechando, setFechando] = useState(false);
+  const [recebimentos, setRecebimentos] = useState<any[]>([]);
 
   function converterValor(valor: any) {
     return Number(String(valor || "0").replace(",", "."));
@@ -91,6 +92,16 @@ export default function FechamentosFinanceiro() {
     ) as any[];
 
     setDistribuicoes(grupos);
+
+    setRecebimentos([
+  {
+    recebedorTipo: "ESCRITORIO",
+    motoboyId: null,
+    motoboyNome: "",
+    valorRecebido: formatarValor(cliente.total),
+  },
+]);
+
     setClienteSelecionado(cliente);
   }
 
@@ -111,7 +122,7 @@ export default function FechamentosFinanceiro() {
       return;
     }
 
-    const invalida = distribuicoes.some((item) => {
+    const invalida = recebimentos.some((item) => {
   const valorRecebido = converterValor(item.valorRecebido);
 
   if (item.recebedorTipo === "MOTOBOY" && !item.motoboyId) return true;
@@ -120,10 +131,9 @@ export default function FechamentosFinanceiro() {
   return false;
 });
 
-const totalRecebidoAgora = distribuicoes.reduce((soma, item) => {
+const totalRecebidoAgora = recebimentos.reduce((soma, item) => {
   return soma + converterValor(item.valorRecebido);
 }, 0);
-
 if (invalida) {
   alert("Verifique os valores recebidos.");
   return;
@@ -142,11 +152,12 @@ if (totalRecebidoAgora > clienteSelecionado.total) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        clienteNome: clienteSelecionado.nome,
-        dataInicio,
-        dataFim,
-        distribuicoes,
-      }),
+  clienteNome: clienteSelecionado.nome,
+  dataInicio,
+  dataFim,
+  distribuicoes,
+  recebimentos,
+}),
     });
 
     if (!resposta.ok) {
@@ -159,8 +170,8 @@ if (totalRecebidoAgora > clienteSelecionado.total) {
     await recarregarDados();
 
     setClienteSelecionado(null);
-    setDistribuicoes([]);
-    setFechando(false);
+setDistribuicoes([]);
+setRecebimentos([]);
 
     alert("Fechamento realizado com sucesso!");
   }
@@ -242,93 +253,141 @@ if (totalRecebidoAgora > clienteSelecionado.total) {
             <div className="mt-6 space-y-4">
               <h3 className="font-bold text-lg">Distribuição do pagamento</h3>
 
-              {distribuicoes.map((item, index) => {
-                const valorRecebido = converterValor(item.valorRecebido);
-                const falta = item.total - valorRecebido;
+              <div className="mt-6 space-y-6">
+  <div>
+    <h3 className="font-bold text-lg mb-3">Produção</h3>
 
-                return (
-                  <div
-                    key={item.motoboyNome}
-                    className="bg-slate-50 rounded-2xl p-4 border border-slate-100"
-                  >
-                    <div className="flex justify-between gap-4 mb-3">
-                      <div>
-                        <strong>{item.motoboyNome}</strong>
-                        <p className="text-sm text-slate-500">{item.quantidade} teles</p>
-                      </div>
+    <div className="space-y-3">
+      {distribuicoes.map((item) => (
+        <div
+          key={item.motoboyNome}
+          className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex justify-between"
+        >
+          <div>
+            <strong>{item.motoboyNome}</strong>
+            <p className="text-sm text-slate-500">{item.quantidade} teles</p>
+          </div>
 
-                      <strong className="text-orange-600">
-                        R$ {formatarValor(item.total)}
-                      </strong>
-                    </div>
+          <strong className="text-orange-600">
+            R$ {formatarValor(item.total)}
+          </strong>
+        </div>
+      ))}
+    </div>
+  </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-sm font-medium text-slate-600">
-                          Quem recebeu?
-                        </label>
+  <div>
+    <div className="flex items-center justify-between mb-3">
+      <h3 className="font-bold text-lg">Recebimentos</h3>
 
-                        <select
-                          value={item.recebedorTipo}
-                          onChange={(e) => {
-                            const tipo = e.target.value;
-                            const novas = [...distribuicoes];
+      <button
+        type="button"
+        onClick={() =>
+          setRecebimentos([
+            ...recebimentos,
+            {
+              recebedorTipo: "ESCRITORIO",
+              motoboyId: null,
+              motoboyNome: "",
+              valorRecebido: "0",
+            },
+          ])
+        }
+        className="px-4 h-10 rounded-xl bg-emerald-600 text-white text-sm"
+      >
+        + Adicionar
+      </button>
+    </div>
 
-                            const jaDigitou =
-                              Number(
-                                String(novas[index].valorRecebido || "0").replace(",", ".")
-                              ) > 0;
+    <div className="space-y-3">
+      {recebimentos.map((item, index) => (
+        <div
+          key={index}
+          className="bg-slate-50 rounded-2xl p-4 border border-slate-100"
+        >
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="text-sm font-medium text-slate-600">
+                Quem recebeu?
+              </label>
 
-                            novas[index] = {
-                              ...novas[index],
-                              recebedorTipo: tipo,
-                              valorRecebido: jaDigitou
-                                ? novas[index].valorRecebido
-                                : String(novas[index].total).replace(".", ","),
-                            };
-
-                            setDistribuicoes(novas);
-                          }}
-                          className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500 bg-white"
-                        >
-                          <option value="ESCRITORIO">Escritório</option>
-                          <option value="MOTOBOY">Próprio motoboy</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="text-sm font-medium text-slate-600">
-                          Valor recebido agora
-                        </label>
-
-                        <input
-                          value={item.valorRecebido}
-                          onChange={(e) =>
-                            atualizarDistribuicao(index, "valorRecebido", e.target.value)
-                          }
-                          placeholder="0,00"
-                          className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500 bg-white"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-4 bg-white rounded-xl p-3 text-sm">
-                      <div className="flex justify-between">
-                        <span>Recebeu agora</span>
-                        <strong>R$ {formatarValor(valorRecebido)}</strong>
-                      </div>
-
-                      <div className="flex justify-between mt-1">
-                        <span>Vai continuar pendente</span>
-                        <strong className={falta > 0 ? "text-orange-600" : "text-emerald-700"}>
-                          R$ {formatarValor(Math.max(falta, 0))}
-                        </strong>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+              <select
+                value={item.recebedorTipo}
+                onChange={(e) => {
+                  const novas = [...recebimentos];
+                  novas[index] = {
+                    ...novas[index],
+                    recebedorTipo: e.target.value,
+                    motoboyId: null,
+                    motoboyNome: "",
+                  };
+                  setRecebimentos(novas);
+                }}
+                className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 bg-white"
+              >
+                <option value="ESCRITORIO">Escritório</option>
+                <option value="MOTOBOY">Motoboy</option>
+              </select>
             </div>
+
+            {item.recebedorTipo === "MOTOBOY" && (
+              <div>
+                <label className="text-sm font-medium text-slate-600">
+                  Motoboy
+                </label>
+
+                <select
+                  value={item.motoboyId || ""}
+                  onChange={(e) => {
+                    const motoboy = motoboys.find(
+                      (m: any) => m.id === e.target.value
+                    );
+
+                    const novas = [...recebimentos];
+                    novas[index] = {
+                      ...novas[index],
+                      motoboyId: motoboy?.id || null,
+                      motoboyNome: motoboy?.nome || "",
+                    };
+                    setRecebimentos(novas);
+                  }}
+                  className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 bg-white"
+                >
+                  <option value="">Selecione</option>
+                  {motoboys.map((motoboy: any) => (
+                    <option key={motoboy.id} value={motoboy.id}>
+                      {motoboy.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div>
+              <label className="text-sm font-medium text-slate-600">
+                Valor recebido
+              </label>
+
+              <input
+                value={item.valorRecebido}
+                onChange={(e) => {
+                  const novas = [...recebimentos];
+                  novas[index] = {
+                    ...novas[index],
+                    valorRecebido: e.target.value,
+                  };
+                  setRecebimentos(novas);
+                }}
+                className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 bg-white"
+              />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</div>
+</div>
 
             <div className="flex flex-col md:flex-row gap-3 mt-8">
               <button

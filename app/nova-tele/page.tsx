@@ -33,7 +33,7 @@ function gerarId() {
 }
 export default function NovaTelePage() {
   const router = useRouter();
-  const { clientes, recarregarDados } = useExpressManager();
+  const { clientes, teles, recarregarDados } = useExpressManager();
 
   const [solicitante, setSolicitante] = useState("");
   const [dataTele, setDataTele] = useState(new Date().toISOString().split("T")[0]);
@@ -53,6 +53,37 @@ const [rotaCalculada, setRotaCalculada] = useState<any>(null);
     },
   ]);
 
+const locaisFrequentes = Array.from(
+  new Map(
+    teles
+      .filter((tele: any) => tele.solicitante === solicitante)
+      .flatMap((tele: any) => tele.paradas || [])
+      .filter((parada: any) => parada.cliente && parada.endereco)
+      .map((parada: any) => [
+        String(parada.cliente).toLowerCase(),
+        {
+          cliente: parada.cliente,
+          endereco: parada.endereco,
+          contato: parada.contato || "",
+        },
+      ])
+  ).values()
+);
+
+  const enderecosSugestoes = Array.from(
+  new Set([
+    ...clientes.flatMap((cliente: any) =>
+      [cliente.endereco1, cliente.endereco2].filter(Boolean)
+    ),
+
+    ...teles.flatMap((tele: any) =>
+      (tele.paradas || [])
+        .map((parada: any) => parada.endereco)
+        .filter(Boolean)
+    ),
+  ])
+).sort();
+
   function atualizarParada(index: number, campo: keyof Parada, valor: string) {
     const novasParadas = [...paradas];
 
@@ -70,6 +101,15 @@ const [rotaCalculada, setRotaCalculada] = useState<any>(null);
         novasParadas[index].endereco = clienteEncontrado.endereco1 || "";
         novasParadas[index].contato = clienteEncontrado.telefone || "";
       }
+
+      const localFrequente = locaisFrequentes.find(
+  (local: any) => local.cliente.toLowerCase() === valor.toLowerCase()
+);
+
+if (localFrequente) {
+  novasParadas[index].endereco = localFrequente.endereco || "";
+  novasParadas[index].contato = localFrequente.contato || "";
+}
     }
 
     setParadas(novasParadas);
@@ -323,17 +363,18 @@ async function calcularRota() {
                   onChange={(value: string) =>
                     atualizarParada(index, "cliente", value)
                   }
-                  list="clientes-lista"
+                  list="locais-frequentes-lista"
                 />
 
                 <Input
-                  label="Contato"
-                  icon={<Phone size={18} />}
-                  value={parada.contato}
-                  onChange={(value: string) =>
-                    atualizarParada(index, "contato", value)
-                  }
-                />
+  label="Endereço"
+  icon={<MapPin size={18} />}
+  value={parada.endereco}
+  onChange={(value: string) =>
+    atualizarParada(index, "endereco", value)
+  }
+  list="enderecos-lista"
+/>
 
                 <Input
                   label="Endereço"
@@ -371,6 +412,16 @@ async function calcularRota() {
             <option key={cliente.id || cliente.nome} value={cliente.nome} />
           ))}
         </datalist>
+<datalist id="locais-frequentes-lista">
+  {locaisFrequentes.map((local: any) => (
+    <option key={local.cliente} value={local.cliente} />
+  ))}
+</datalist>
+        <datalist id="enderecos-lista">
+  {enderecosSugestoes.map((endereco) => (
+    <option key={endereco} value={endereco} />
+  ))}
+</datalist>
 
         <button
           onClick={adicionarParada}

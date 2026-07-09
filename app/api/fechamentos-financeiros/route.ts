@@ -19,9 +19,7 @@ export async function GET() {
       teles: true,
       itens: true,
     },
-    orderBy: {
-      createdAt: "desc",
-    },
+    orderBy: { createdAt: "desc" },
   });
 
   return NextResponse.json(fechamentos);
@@ -31,9 +29,10 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    const { clienteNome, dataInicio, dataFim, distribuicoes } = body;
+    const { clienteNome, dataInicio, dataFim, distribuicoes, recebimentos } =
+      body;
 
-    if (!clienteNome || !dataInicio || !dataFim || !distribuicoes) {
+    if (!clienteNome || !dataInicio || !dataFim || !distribuicoes || !recebimentos) {
       return NextResponse.json(
         { erro: "Dados obrigatórios faltando." },
         { status: 400 }
@@ -49,14 +48,9 @@ export async function POST(request: Request) {
     const todasTeles = await prisma.tele.findMany({
       where: {
         solicitante: clienteNome,
-        dataTele: {
-          gte: inicio,
-          lte: fim,
-        },
+        dataTele: { gte: inicio, lte: fim },
       },
-      orderBy: {
-        dataTele: "asc",
-      },
+      orderBy: { dataTele: "asc" },
     });
 
     const teles = todasTeles.filter((tele) => {
@@ -68,7 +62,7 @@ export async function POST(request: Request) {
       return total + (Number(tele.total || 0) - Number(tele.valorRecebido || 0));
     }, 0);
 
-    const totalRecebidoAgora = distribuicoes.reduce((total: number, item: any) => {
+    const totalRecebidoAgora = recebimentos.reduce((total: number, item: any) => {
       return total + converterValor(item.valorRecebido);
     }, 0);
 
@@ -93,6 +87,10 @@ export async function POST(request: Request) {
 
     let valorRestanteGlobal = totalRecebidoAgora;
 
+    const primeiroRecebedor = recebimentos.find(
+      (item: any) => converterValor(item.valorRecebido) > 0
+    );
+
     for (const tele of teles) {
       const totalTele = Number(tele.total || 0);
       const recebidoAnterior = Number(tele.valorRecebido || 0);
@@ -104,59 +102,58 @@ export async function POST(request: Request) {
       const novoRecebido = recebidoAnterior + recebidoAgora;
       const quitouTele = novoRecebido >= totalTele - 0.009;
 
-      const distribuicaoRecebedora = distribuicoes.find(
-        (item: any) => converterValor(item.valorRecebido) > 0
-      );
-
       await prisma.tele.update({
         where: { id: tele.id },
         data: {
           fechamentoId: quitouTele ? fechamento.id : null,
           recebimento:
             novoRecebido > 0
-              ? distribuicaoRecebedora?.recebedorTipo === "MOTOBOY"
+              ? primeiroRecebedor?.recebedorTipo === "MOTOBOY"
                 ? "MOTOBOY"
                 : "ESCRITORIO"
               : "PENDENTE",
           valorRecebido: novoRecebido,
           dataRecebimento: novoRecebido > 0 ? new Date() : null,
           motoboyRecebedor:
-            novoRecebido > 0 &&
-            distribuicaoRecebedora?.recebedorTipo === "MOTOBOY"
-              ? distribuicaoRecebedora.motoboyNome
+            novoRecebido > 0 && primeiroRecebedor?.recebedorTipo === "MOTOBOY"
+              ? primeiroRecebedor.motoboyNome
               : null,
         },
       });
     }
 
     for (const distribuicao of distribuicoes) {
-      const valorRecebidoInformado = converterValor(distribuicao.valorRecebido);
-
       await prisma.fechamentoFinanceiroItem.create({
         data: {
           fechamentoId: fechamento.id,
           motoboyId: distribuicao.motoboyId || null,
           motoboyNome: distribuicao.motoboyNome,
           totalBruto: Number(distribuicao.total || 0),
-          valorRecebido: valorRecebidoInformado,
+          valorRecebido: 0,
           saldo: 0,
-          recebedorTipo: distribuicao.recebedorTipo,
+          recebedorTipo: "ESCRITORIO",
         },
       });
+    }
+
+    for (const recebimento of recebimentos) {
+      const valorRecebidoInformado = converterValor(recebimento.valorRecebido);
 
       if (
         valorRecebidoInformado > 0 &&
-        distribuicao.recebedorTipo === "MOTOBOY" &&
-        distribuicao.motoboyId
+        recebimento.recebedorTipo === "MOTOBOY" &&
+        recebimento.motoboyId
       ) {
         await prisma.movimentoFinanceiroMotoboy.create({
           data: {
-            motoboyId: distribuicao.motoboyId,
+            motoboyId: recebimento.motoboyId,
             tipo: "CLIENTE",
             valor: valorRecebidoInformado,
             clienteNome,
             descricao: "Pagamento direto do cliente",
             fechamentoId: fechamento.id,
+            dataReferenciaInicio: inicio,
+            dataReferenciaFim: fim,
           },
         });
       }

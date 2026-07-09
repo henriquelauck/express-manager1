@@ -4,14 +4,31 @@ function arredondarPara5(valor: number) {
   return Math.ceil(valor / 5) * 5;
 }
 
-function calcularValor(distanciaKm: number, temRetorno: boolean) {
+function calcularValor(
+  distanciaKm: number,
+  temRetorno: boolean,
+  cidadeOrigem: string,
+  cidadeDestino: string
+) {
   let valor = 14;
+
+  const foraNH =
+    cidadeOrigem !== "Novo Hamburgo" ||
+    cidadeDestino !== "Novo Hamburgo";
+
+  const minimo = foraNH ? 15 : 14;
 
   if (distanciaKm > 7) {
     valor = arredondarPara5(distanciaKm * 2);
   }
 
-  if (temRetorno) valor += 5;
+  if (valor < minimo) {
+    valor = minimo;
+  }
+
+  if (temRetorno) {
+    valor += 5;
+  }
 
   return valor;
 }
@@ -31,11 +48,16 @@ async function geocodificar(endereco: string) {
 
   if (!resultado) return null;
 
-  return {
-    lat: resultado.geometry.location.lat,
-    lng: resultado.geometry.location.lng,
-    enderecoEncontrado: resultado.formatted_address,
-  };
+  const componenteCidade = resultado.address_components?.find((c: any) =>
+  c.types.includes("administrative_area_level_2")
+);
+
+return {
+  lat: resultado.geometry.location.lat,
+  lng: resultado.geometry.location.lng,
+  cidade: componenteCidade?.long_name || "",
+  enderecoEncontrado: resultado.formatted_address,
+};
 }
 
 export async function POST(request: Request) {
@@ -143,7 +165,12 @@ export async function POST(request: Request) {
     return NextResponse.json({
       distanciaKm,
       duracaoMin,
-      valorSugerido: calcularValor(distanciaKm, Boolean(temRetorno)),
+      valorSugerido: calcularValor(
+  distanciaKm,
+  Boolean(temRetorno),
+  coordenadas[0]?.cidade || "",
+  coordenadas[coordenadas.length - 1]?.cidade || ""
+),
       enderecosEncontrados: coordenadas.map((c) => c.enderecoEncontrado),
     });
   } catch (error: any) {

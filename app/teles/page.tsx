@@ -311,13 +311,26 @@ function ehDoMotoboySelecionado(tele: Tele) {
     const cliente = clientes.find((c: Cliente) => c.nome === tele.solicitante);
     const telefone = cliente?.telefone || "";
 
-    const texto = `Olá!
+    const temRetorno = getParadas(tele).some(
+  (parada: any) =>
+    parada.tipo === "Trocar" || parada.tipo === "Entrega e coleta"
+);
+
+const avisoRetorno = !temRetorno
+  ? `
+
+⚠️ Este orçamento é referente à entrega sem retorno. Caso seja necessário retorno ao local de origem, será acrescido o valor de R$ 5,00.`
+  : "";
+
+const texto = `Olá!
 
 Segue orçamento da tele:
 
 ${gerarTextoParadas(tele, false)}
 
-Valor: R$ ${tele.valor}
+Valor: R$ ${tele.valor}${avisoRetorno}
+
+⚠️ Em caso de cancelamento após a confirmação da tele, será cobrado o valor mínimo referente ao deslocamento do motoboy, no valor de R$ 15,00.
 
 Aguardamos sua confirmação.`;
 
