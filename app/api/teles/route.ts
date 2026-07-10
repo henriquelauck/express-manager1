@@ -184,7 +184,7 @@ export async function POST(request: Request) {
       total: body.total || Number(String(body.valor || "0").replace(",", ".")),
 
       distanciaKm: body.distanciaKm || null,
-tempoMinutos: body.tempoMinutos || null,
+      tempoMinutos: body.tempoMinutos || null,
 
       recebimento: recebimentoParaBanco(body.recebimento || "pendente"),
       formaCobranca: formaCobrancaParaBanco(body.formaCobranca || "semanal"),

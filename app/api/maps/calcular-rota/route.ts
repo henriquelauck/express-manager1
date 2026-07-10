@@ -13,13 +13,11 @@ function calcularValor(
   let valor = 14;
 
   const normalizarCidade = (cidade: string) =>
-  String(cidade || "")
-    .trim()
-    .toLowerCase();
+    String(cidade || "").trim().toLowerCase();
 
-const foraNH =
-  normalizarCidade(cidadeOrigem) !== "novo hamburgo" ||
-  normalizarCidade(cidadeDestino) !== "novo hamburgo";
+  const foraNH =
+    normalizarCidade(cidadeOrigem) !== "novo hamburgo" ||
+    normalizarCidade(cidadeDestino) !== "novo hamburgo";
 
   const minimo = foraNH ? 15 : 14;
 
@@ -38,7 +36,14 @@ const foraNH =
   return valor;
 }
 
-async function geocodificar(endereco: string) {
+type Coordenada = {
+  lat: number;
+  lng: number;
+  cidade: string;
+  enderecoEncontrado: string;
+};
+
+async function geocodificar(endereco: string): Promise<Coordenada | null> {
   const chave = process.env.GOOGLE_MAPS_API_KEY;
 
   const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
@@ -54,15 +59,15 @@ async function geocodificar(endereco: string) {
   if (!resultado) return null;
 
   const componenteCidade = resultado.address_components?.find((c: any) =>
-  c.types.includes("administrative_area_level_2")
-);
+    c.types.includes("administrative_area_level_2")
+  );
 
-return {
-  lat: resultado.geometry.location.lat,
-  lng: resultado.geometry.location.lng,
-  cidade: componenteCidade?.long_name || "",
-  enderecoEncontrado: resultado.formatted_address,
-};
+  return {
+    lat: resultado.geometry.location.lat,
+    lng: resultado.geometry.location.lng,
+    cidade: componenteCidade?.long_name || "",
+    enderecoEncontrado: resultado.formatted_address,
+  };
 }
 
 export async function POST(request: Request) {
@@ -83,7 +88,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const coordenadas = [];
+    const coordenadas: Coordenada[] = [];
 
     for (const parada of paradas) {
       const coord = await geocodificar(parada.endereco);
@@ -109,7 +114,8 @@ export async function POST(request: Request) {
         headers: {
           "Content-Type": "application/json",
           "X-Goog-Api-Key": process.env.GOOGLE_MAPS_API_KEY,
-          "X-Goog-FieldMask": "routes.distanceMeters,routes.duration",
+          "X-Goog-FieldMask":
+            "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline",
         },
         body: JSON.stringify({
           origin: {
@@ -138,6 +144,7 @@ export async function POST(request: Request) {
           })),
           travelMode: "DRIVE",
           routingPreference: "TRAFFIC_AWARE",
+          computeAlternativeRoutes: true,
           languageCode: "pt-BR",
           units: "METRIC",
         }),
@@ -163,20 +170,51 @@ export async function POST(request: Request) {
     }
 
     const distanciaKm = rota.distanceMeters / 1000;
+
     const duracaoMin = Math.round(
       Number(String(rota.duration || "0s").replace("s", "")) / 60
+    );
+
+    const rotasAlternativas = (dadosRota.routes || []).map(
+      (rotaItem: any, index: number) => {
+        const distanciaKmItem = rotaItem.distanceMeters / 1000;
+
+        const duracaoMinItem = Math.round(
+          Number(String(rotaItem.duration || "0s").replace("s", "")) / 60
+        );
+
+        return {
+          id: index,
+          distanciaKm: distanciaKmItem,
+          duracaoMin: duracaoMinItem,
+          valorSugerido: calcularValor(
+            distanciaKmItem,
+            Boolean(temRetorno),
+            coordenadas[0]?.cidade || "",
+            coordenadas[coordenadas.length - 1]?.cidade || ""
+          ),
+          polyline: rotaItem.polyline?.encodedPolyline || null,
+        };
+      }
     );
 
     return NextResponse.json({
       distanciaKm,
       duracaoMin,
       valorSugerido: calcularValor(
-  distanciaKm,
-  Boolean(temRetorno),
-  coordenadas[0]?.cidade || "",
-  coordenadas[coordenadas.length - 1]?.cidade || ""
-),
+        distanciaKm,
+        Boolean(temRetorno),
+        coordenadas[0]?.cidade || "",
+        coordenadas[coordenadas.length - 1]?.cidade || ""
+      ),
       enderecosEncontrados: coordenadas.map((c) => c.enderecoEncontrado),
+      polyline: rota.polyline?.encodedPolyline || null,
+      pontos: coordenadas.map((c) => ({
+        lat: c.lat,
+        lng: c.lng,
+        endereco: c.enderecoEncontrado,
+      })),
+      rotasAlternativas,
     });
   } catch (error: any) {
     return NextResponse.json(
