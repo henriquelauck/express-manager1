@@ -1,3 +1,3 @@
-export { default as MapaRota } from "./MapaRota";
-export { default as AutocompleteEndereco } from "./AutocompleteEndereco";
+export { default as AutocompleteEndereco } from "./AutoCompleteEndereco";
 export { carregarGoogleMaps } from "./googleMapsLoader";
+export { default as MapaRota } from "./MapaRota";
