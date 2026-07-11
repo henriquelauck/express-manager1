@@ -1,5 +1,5 @@
 "use client";
-import { useRouter } from "next/navigation";
+
 import PageContainer from "@/components/ui/PageContainer";
 import PageHeader from "@/components/ui/PageHeader";
 import {
@@ -9,7 +9,8 @@ import {
   Play,
   RotateCcw,
 } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { useRouter } from "next/navigation";
+import { type FormEvent, useState } from "react";
 
 type ResultadoIA = {
   intencao: string;
@@ -23,6 +24,7 @@ type ResultadoIA = {
     cliente: string | null;
     confianca: number;
     endereco?: string | null;
+    enderecoAlternativo?: string | null;
     telefone?: string | null;
   }[];
 
@@ -32,14 +34,21 @@ type ResultadoIA = {
 
 export default function LaboratorioIAPage() {
   const router = useRouter();
-  const [mensagem, setMensagem] = useState("Buscar um celular na SaveCell e entregar na Hardware");
 
-  const [resultado, setResultado] = useState<ResultadoIA | null>(null);
+  const [mensagem, setMensagem] = useState(
+    "Buscar um celular na SaveCell e entregar na Hardware"
+  );
+
+  const [resultado, setResultado] =
+    useState<ResultadoIA | null>(null);
+
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(false);
   const [tempoMs, setTempoMs] = useState<number | null>(null);
 
-  async function interpretar(evento: FormEvent<HTMLFormElement>) {
+  async function interpretar(
+    evento: FormEvent<HTMLFormElement>
+  ) {
     evento.preventDefault();
 
     const mensagemLimpa = mensagem.trim();
@@ -57,26 +66,37 @@ export default function LaboratorioIAPage() {
     const inicio = performance.now();
 
     try {
-      const resposta = await fetch("/api/ia/interpretar-pedido", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          mensagem: mensagemLimpa,
-        }),
-      });
+      const resposta = await fetch(
+        "/api/ia/interpretar-pedido",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            mensagem: mensagemLimpa,
+          }),
+        }
+      );
 
       const dados = await resposta.json();
 
       if (!resposta.ok) {
-        throw new Error(dados.erro || "Erro ao interpretar o pedido.");
+        throw new Error(
+          dados.erro || "Erro ao interpretar o pedido."
+        );
       }
 
       setResultado(dados);
-      setTempoMs(Math.round(performance.now() - inicio));
+      setTempoMs(
+        Math.round(performance.now() - inicio)
+      );
     } catch (error) {
-      setErro(error instanceof Error ? error.message : "Não foi possível interpretar o pedido.");
+      setErro(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível interpretar o pedido."
+      );
     } finally {
       setCarregando(false);
     }
@@ -93,30 +113,63 @@ export default function LaboratorioIAPage() {
     if (!resultado) return;
 
     if (resultado.intencao !== "CRIAR_TELE") {
-      setErro("A mensagem interpretada não representa uma criação de tele.");
+      setErro(
+        "A mensagem interpretada não representa uma criação de tele."
+      );
       return;
     }
 
-    const paradasValidas = resultado.paradas.filter((parada) => parada.cliente && parada.endereco);
+    if (!resultado.solicitante) {
+      setErro(
+        "O solicitante ainda não foi identificado. Informe quem está solicitando a tele."
+      );
+      return;
+    }
 
-    if (paradasValidas.length === 0) {
-      setErro("Nenhuma parada possui cliente e endereço suficientes para preencher a Nova Tele.");
+    if (resultado.paradas.length === 0) {
+      setErro(
+        "Nenhuma parada foi identificada na mensagem."
+      );
+      return;
+    }
+
+    const possuiParadaIncompleta =
+      resultado.paradas.some(
+        (parada) =>
+          !parada.cliente || !parada.endereco
+      );
+
+    if (possuiParadaIncompleta) {
+      setErro(
+        "Existem paradas sem cliente ou endereço identificado. Revise o pedido antes de usar na Nova Tele."
+      );
       return;
     }
 
     const dadosNovaTele = {
-      solicitante: resultado.solicitante || "",
-      observacaoGeral: `Pedido interpretado pela IA: ${mensagem.trim()}`,
+      solicitante: resultado.solicitante,
+
+      observacaoGeral:
+        `Pedido interpretado pela IA: ${mensagem.trim()}`,
+
       paradas: resultado.paradas.map((parada) => ({
         tipo: parada.tipo,
-        cliente: parada.cliente || parada.texto || "",
+
+        cliente:
+          parada.cliente || parada.texto || "",
+
         endereco: parada.endereco || "",
+
         contato: parada.telefone || "",
+
         observacao: "",
       })),
     };
 
-    sessionStorage.setItem("express-manager:nova-tele-ia", JSON.stringify(dadosNovaTele));
+    sessionStorage.setItem(
+      "express-manager:nova-tele-ia",
+      JSON.stringify(dadosNovaTele)
+    );
 
     router.push("/nova-tele");
   }
@@ -141,19 +194,27 @@ export default function LaboratorioIAPage() {
             </div>
 
             <div>
-              <h2 className="text-xl font-bold">Mensagem do cliente</h2>
+              <h2 className="text-xl font-bold">
+                Mensagem do cliente
+              </h2>
 
-              <p className="text-sm text-slate-500">A IA apenas interpretará o pedido.</p>
+              <p className="text-sm text-slate-500">
+                A IA apenas interpretará o pedido.
+              </p>
             </div>
           </div>
 
-          <label className="text-sm font-medium text-slate-600">Mensagem</label>
+          <label className="text-sm font-medium text-slate-600">
+            Mensagem
+          </label>
 
           <textarea
             value={mensagem}
-            onChange={(event) => setMensagem(event.target.value)}
+            onChange={(event) =>
+              setMensagem(event.target.value)
+            }
             rows={8}
-            placeholder="Exemplo: Buscar na SaveCell e entregar na Hardware."
+            placeholder="Exemplo: A SaveCell precisa coletar no Shopping Campina e entregar na loja."
             className="mt-2 w-full resize-none rounded-2xl border border-slate-200 p-4 outline-none focus:border-emerald-500"
           />
 
@@ -171,7 +232,11 @@ export default function LaboratorioIAPage() {
             >
               {carregando ? (
                 <>
-                  <Loader2 className="animate-spin" size={19} />
+                  <Loader2
+                    className="animate-spin"
+                    size={19}
+                  />
+
                   Interpretando...
                 </>
               ) : (
@@ -196,67 +261,132 @@ export default function LaboratorioIAPage() {
 
         <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm md:p-7">
           <div className="mb-5">
-            <h2 className="text-xl font-bold">Resultado estruturado</h2>
+            <h2 className="text-xl font-bold">
+              Resultado estruturado
+            </h2>
 
-            <p className="text-sm text-slate-500">Nenhuma tele será criada por esta tela.</p>
+            <p className="text-sm text-slate-500">
+              Nenhuma tele será criada por esta tela.
+            </p>
           </div>
 
           {!resultado ? (
             <div className="flex min-h-[330px] items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-slate-500">
-              O resultado da interpretação aparecerá aqui.
+              O resultado da interpretação aparecerá
+              aqui.
             </div>
           ) : (
             <>
               <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Informacao titulo="Intenção" valor={resultado.intencao} />
+                <Informacao
+                  titulo="Intenção"
+                  valor={resultado.intencao}
+                />
 
                 <Informacao
                   titulo="Solicitante"
-                  valor={resultado.solicitante || "Não identificado"}
+                  valor={
+                    resultado.solicitante ||
+                    "Não identificado"
+                  }
                 />
 
                 <Informacao
                   titulo="Precisa de humano"
-                  valor={resultado.precisaHumano ? "Sim" : "Não"}
+                  valor={
+                    resultado.precisaHumano
+                      ? "Sim"
+                      : "Não"
+                  }
                 />
 
                 <Informacao
                   titulo="Tempo da requisição"
-                  valor={tempoMs !== null ? `${tempoMs} ms` : "-"}
+                  valor={
+                    tempoMs !== null
+                      ? `${tempoMs} ms`
+                      : "-"
+                  }
                 />
               </div>
 
               <div className="mb-6 space-y-4">
                 <div className="rounded-2xl border border-slate-200 p-4">
-                  <h3 className="font-bold mb-2">Clientes reconhecidos</h3>
+                  <h3 className="mb-2 font-bold">
+                    Paradas reconhecidas
+                  </h3>
 
-                  {resultado.paradas.map((parada, index) => (
-                    <div key={index} className="border-b last:border-b-0 py-3">
-                      <p>
-                        <strong>{parada.tipo}</strong>
-                      </p>
+                  {resultado.paradas.map(
+                    (parada, index) => (
+                      <div
+                        key={`${parada.tipo}-${parada.texto}-${index}`}
+                        className="border-b py-3 last:border-b-0"
+                      >
+                        <p>
+                          <strong>
+                            {index + 1}. {parada.tipo}
+                          </strong>
+                        </p>
 
-                      <p>Texto: {parada.texto}</p>
+                        <p className="mt-2">
+                          Texto informado:{" "}
+                          {parada.texto}
+                        </p>
 
-                      <p>Cliente: {parada.cliente ?? "Não encontrado"}</p>
+                        <p>
+                          Cliente:{" "}
+                          {parada.cliente ??
+                            "Não encontrado"}
+                        </p>
 
-                      <p>Confiança: {Math.round(parada.confianca * 100)}%</p>
+                        <p>
+                          Confiança:{" "}
+                          {Math.round(
+                            parada.confianca * 100
+                          )}
+                          %
+                        </p>
 
-                      <p>Endereço: {parada.endereco ?? "-"}</p>
+                        <p>
+                          Endereço:{" "}
+                          {parada.endereco ?? "-"}
+                        </p>
 
-                      <p>Telefone: {parada.telefone ?? "-"}</p>
-                    </div>
-                  ))}
+                        {parada.enderecoAlternativo && (
+                          <p>
+                            Endereço alternativo:{" "}
+                            {
+                              parada.enderecoAlternativo
+                            }
+                          </p>
+                        )}
+
+                        <p>
+                          Telefone:{" "}
+                          {parada.telefone ?? "-"}
+                        </p>
+                      </div>
+                    )
+                  )}
                 </div>
 
-                {resultado.informacoesFaltantes.length > 0 && (
+                {resultado.informacoesFaltantes
+                  .length > 0 && (
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                    <h3 className="font-bold mb-2">Atenção</h3>
+                    <h3 className="mb-2 font-bold">
+                      Atenção
+                    </h3>
 
-                    <ul className="list-disc ml-5">
-                      {resultado.informacoesFaltantes.map((item, index) => (
-                        <li key={index}>{item}</li>
-                      ))}
+                    <ul className="ml-5 list-disc space-y-1">
+                      {resultado.informacoesFaltantes.map(
+                        (item, index) => (
+                          <li
+                            key={`${item}-${index}`}
+                          >
+                            {item}
+                          </li>
+                        )
+                      )}
                     </ul>
                   </div>
                 )}
@@ -273,7 +403,11 @@ export default function LaboratorioIAPage() {
 
               <div className="overflow-x-auto rounded-2xl bg-slate-950 p-5">
                 <pre className="whitespace-pre-wrap break-words text-sm text-emerald-300">
-                  {JSON.stringify(resultado, null, 2)}
+                  {JSON.stringify(
+                    resultado,
+                    null,
+                    2
+                  )}
                 </pre>
               </div>
             </>
@@ -284,12 +418,22 @@ export default function LaboratorioIAPage() {
   );
 }
 
-function Informacao({ titulo, valor }: { titulo: string; valor: string }) {
+function Informacao({
+  titulo,
+  valor,
+}: {
+  titulo: string;
+  valor: string;
+}) {
   return (
     <div className="rounded-2xl bg-slate-50 p-4">
-      <p className="text-xs font-medium uppercase text-slate-500">{titulo}</p>
+      <p className="text-xs font-medium uppercase text-slate-500">
+        {titulo}
+      </p>
 
-      <strong className="mt-1 block text-slate-900">{valor}</strong>
+      <strong className="mt-1 block text-slate-900">
+        {valor}
+      </strong>
     </div>
   );
 }

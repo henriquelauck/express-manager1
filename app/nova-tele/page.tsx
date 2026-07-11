@@ -49,12 +49,12 @@ export default function NovaTelePage() {
   const { paradas, setParadas, adicionarParada, removerParada } = useParadas();
 
   useEffect(() => {
-    const dadosSalvos = sessionStorage.getItem("express-manager:nova-tele-ia");
+    const salvo = sessionStorage.getItem("express-manager:nova-tele-ia");
 
-    if (!dadosSalvos) return;
+    if (!salvo) return;
 
     try {
-      const dados = JSON.parse(dadosSalvos) as DadosNovaTeleIA;
+      const dados = JSON.parse(salvo) as DadosNovaTeleIA;
 
       /* eslint-disable react-hooks/set-state-in-effect */
 
@@ -221,7 +221,7 @@ export default function NovaTelePage() {
           onAdicionar={adicionarParada}
         />
 
-        <div className="grid-cols-1 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <Input label="Valor base" value={valorBase} onChange={setValorBase} />
 
           <Input label="Observação geral" value={observacaoGeral} onChange={setObservacaoGeral} />
