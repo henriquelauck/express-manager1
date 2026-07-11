@@ -17,11 +17,24 @@ import {
   formatarValor,
   temRetorno,
 } from "@/lib/services/tele.service";
+import { gerarId } from "@/lib/utils/id";
 import { criarTelePeloOrquestrador } from "@/orchestrator";
 import type { Parada } from "@/types/Parada";
 import { ArrowRight } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+type DadosNovaTeleIA = {
+  solicitante: string;
+  observacaoGeral: string;
+  paradas: {
+    tipo: Parada["tipo"];
+    cliente: string;
+    endereco: string;
+    contato: string;
+    observacao: string;
+  }[];
+};
 
 export default function NovaTelePage() {
   const router = useRouter();
@@ -34,6 +47,45 @@ export default function NovaTelePage() {
   const [calculandoRota, setCalculandoRota] = useState(false);
   const [rotaCalculada, setRotaCalculada] = useState<any>(null);
   const { paradas, setParadas, adicionarParada, removerParada } = useParadas();
+
+  useEffect(() => {
+    const dadosSalvos = sessionStorage.getItem("express-manager:nova-tele-ia");
+
+    if (!dadosSalvos) return;
+
+    try {
+      const dados = JSON.parse(dadosSalvos) as DadosNovaTeleIA;
+
+      /* eslint-disable react-hooks/set-state-in-effect */
+
+      if (dados.solicitante) {
+        setSolicitante(dados.solicitante);
+      }
+
+      if (dados.observacaoGeral) {
+        setObservacaoGeral(dados.observacaoGeral);
+      }
+
+      if (Array.isArray(dados.paradas) && dados.paradas.length > 0) {
+        setParadas(
+          dados.paradas.map((parada) => ({
+            id: gerarId(),
+            tipo: parada.tipo,
+            cliente: parada.cliente || "",
+            endereco: parada.endereco || "",
+            contato: parada.contato || "",
+            observacao: parada.observacao || "",
+          }))
+        );
+      }
+
+      /* eslint-enable react-hooks/set-state-in-effect */
+    } catch (error) {
+      console.error("Erro ao carregar dados da IA:", error);
+    } finally {
+      sessionStorage.removeItem("express-manager:nova-tele-ia");
+    }
+  }, [setParadas]);
 
   const locaisFrequentes = obterLocaisFrequentes(teles, solicitante);
 
@@ -85,36 +137,33 @@ export default function NovaTelePage() {
   }
 
   async function criarTele() {
-  setSalvando(true);
+    setSalvando(true);
 
-  const resultado = await criarTelePeloOrquestrador({
-    solicitante,
-    dataTele,
-    valorBase,
-    observacaoGeral,
-    paradas,
-    distanciaKm: rotaCalculada?.distanciaKm ?? null,
-    tempoMinutos: rotaCalculada?.duracaoMin ?? null,
-  });
+    const resultado = await criarTelePeloOrquestrador({
+      solicitante,
+      dataTele,
+      valorBase,
+      observacaoGeral,
+      paradas,
+      distanciaKm: rotaCalculada?.distanciaKm ?? null,
+      tempoMinutos: rotaCalculada?.duracaoMin ?? null,
+    });
 
-  if (!resultado.sucesso) {
-    alert(resultado.erros.join("\n"));
+    if (!resultado.sucesso) {
+      alert(resultado.erros.join("\n"));
+      setSalvando(false);
+      return;
+    }
+
+    if (resultado.avisos.length > 0) {
+      console.warn("Avisos ao criar tele:", resultado.avisos);
+    }
+
+    await recarregarDados();
+
     setSalvando(false);
-    return;
+    router.push("/teles");
   }
-
-  if (resultado.avisos.length > 0) {
-    console.warn(
-      "Avisos ao criar tele:",
-      resultado.avisos
-    );
-  }
-
-  await recarregarDados();
-
-  setSalvando(false);
-  router.push("/teles");
-}
   const retornoAtual = calcularRetorno(solicitante, paradas);
 
   const totalAtual = calcularTotal(valorBase, retornoAtual, 0);

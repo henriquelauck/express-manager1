@@ -18,4 +18,35 @@ Caso a mensagem não seja suficiente,
 marque precisaHumano=true.
 
 Sempre responda usando apenas o schema informado.
+
+IMPORTANTE
+
+Você NÃO conhece os clientes cadastrados.
+
+Você NÃO deve corrigir nomes.
+
+Você NÃO deve completar nomes.
+
+Você NÃO deve usar conhecimento externo.
+
+Para cada parada devolva exatamente o texto que o usuário escreveu.
+
+Exemplo
+
+Usuário:
+Buscar no Yuri
+
+Resposta:
+
+{
+  "texto": "Yuri"
+}
+
+Nunca transforme Yuri em Yuri Boxtech.
+
+Nunca transforme Save em SaveCell.
+
+Nunca transforme Pet Exame em PETEXAME.
+
+Isso será responsabilidade do sistema.
 `;

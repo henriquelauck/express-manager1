@@ -1,28 +1,25 @@
 "use client";
 import PageContainer from "@/components/ui/PageContainer";
 import PageHeader from "@/components/ui/PageHeader";
-import PageGrid from "@/components/ui/PageGrid";
-import Card from "@/components/ui/Card";
-import FormGrid from "@/components/ui/FormGrid";
+import { useExpressManager } from "@/context/ExpressManagerContext";
 import { TipoParada } from "@/types/Parada";
 import { Tele } from "@/types/Tele";
-import { useExpressManager } from "@/context/ExpressManagerContext";
-import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
 import {
-  Pencil,
-  Trash2,
-  MapPin,
-  Phone,
-  User,
   Bike,
-  Timer,
-  MessageCircle,
-  Send,
-  X,
-  Plus,
   Copy,
+  MapPin,
+  MessageCircle,
+  Pencil,
+  Phone,
+  Plus,
+  Send,
+  Timer,
+  Trash2,
+  User,
+  X,
 } from "lucide-react";
+import Link from "next/link";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type Cliente = {
   id?: string;
@@ -50,7 +47,6 @@ type Parada = {
   observacao: string;
 };
 
-
 const statusOptions = [
   "Aguardando cliente",
   "Aguardando motoboy disponível",
@@ -59,8 +55,7 @@ const statusOptions = [
 ];
 
 export default function TelesPage() {
-  const { clientes, motoboys, teles, setTeles, recarregarDados } =
-    useExpressManager();
+  const { clientes, motoboys, teles, setTeles, recarregarDados } = useExpressManager();
 
   const esperaTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
@@ -70,18 +65,26 @@ export default function TelesPage() {
   const [motoboyFiltro, setMotoboyFiltro] = useState("todos");
   const [modalEdicaoAberto, setModalEdicaoAberto] = useState(false);
   const [teleEditando, setTeleEditando] = useState<any>(null);
-const [dataFiltro, setDataFiltro] = useState(
+  const [dataFiltro, setDataFiltro] = useState(
   new Date().toISOString().split("T")[0]
 );
-  useEffect(() => {
-    carregarTeles();
-  }, []);
 
-  async function carregarTeles() {
-    const resposta = await fetch("/api/teles");
-    const dados = await resposta.json();
-    setTeles(dados);
+const carregarTeles = useCallback(async () => {
+  const resposta = await fetch("/api/teles");
+
+  if (!resposta.ok) {
+    console.error("Erro ao carregar teles.");
+    return;
   }
+
+  const dados = await resposta.json();
+
+  setTeles(Array.isArray(dados) ? dados : []);
+}, [setTeles]);
+
+useEffect(() => {
+  void carregarTeles();
+}, [carregarTeles]);
 
   function converterValor(valor: string) {
     return Number(String(valor || "0").replace(",", "."));
@@ -100,16 +103,16 @@ const [dataFiltro, setDataFiltro] = useState(
   }
 
   function ehDaDataSelecionada(tele: Tele) {
-  if (!tele.dataTele) return false;
+    if (!tele.dataTele) return false;
 
-  return tele.dataTele.slice(0, 10) === dataFiltro;
-}
-function ehDoMotoboySelecionado(tele: Tele) {
-  if (motoboyFiltro === "todos") return true;
-  if (motoboyFiltro === "sem-motoboy") return !tele.motoboy;
+    return tele.dataTele.slice(0, 10) === dataFiltro;
+  }
+  function ehDoMotoboySelecionado(tele: Tele) {
+    if (motoboyFiltro === "todos") return true;
+    if (motoboyFiltro === "sem-motoboy") return !tele.motoboy;
 
-  return tele.motoboy === motoboyFiltro;
-}
+    return tele.motoboy === motoboyFiltro;
+  }
 
   function normalizarTelefone(telefone: string) {
     const numeros = telefone?.replace(/\D/g, "") || "";
@@ -122,15 +125,15 @@ function ehDoMotoboySelecionado(tele: Tele) {
     if (tele.paradas && tele.paradas.length > 0) return tele.paradas;
 
     return [
-  {
-    id: `${tele.id}-parada-1`,
-    tipo: tele.tipoRota as TipoParada,
-    cliente: tele.nomeCliente,
-    endereco: tele.endereco,
-    contato: tele.contato,
-    observacao: tele.observacao,
-  },
-];
+      {
+        id: `${tele.id}-parada-1`,
+        tipo: tele.tipoRota as TipoParada,
+        cliente: tele.nomeCliente,
+        endereco: tele.endereco,
+        contato: tele.contato,
+        observacao: tele.observacao,
+      },
+    ];
   }
 
   async function salvarTeleNoBanco(teleAtualizada: any, recarregar = true) {
@@ -146,10 +149,10 @@ function ehDoMotoboySelecionado(tele: Tele) {
     });
 
     if (!resposta.ok) {
-  const erro = await resposta.text();
-  alert(`Erro ao atualizar tele: ${erro}`);
-  return;
-}
+      const erro = await resposta.text();
+      alert(`Erro ao atualizar tele: ${erro}`);
+      return;
+    }
 
     if (recarregar) {
       await recarregarDados();
@@ -182,8 +185,7 @@ function ehDoMotoboySelecionado(tele: Tele) {
     if (!tele) return;
 
     const esperaAtual = tele.esperaMinutos || 0;
-    const valorSemEspera =
-      converterValor(tele.valor) - valorEspera(esperaAtual);
+    const valorSemEspera = converterValor(tele.valor) - valorEspera(esperaAtual);
 
     const novoValor = valorSemEspera + valorEspera(minutos);
 
@@ -196,11 +198,7 @@ function ehDoMotoboySelecionado(tele: Tele) {
       paradas: getParadas(tele),
     };
 
-    setTeles(
-      teles.map((item: Tele) =>
-        item.id === id ? teleAtualizada : item
-      )
-    );
+    setTeles(teles.map((item: Tele) => (item.id === id ? teleAtualizada : item)));
 
     if (esperaTimers.current[id]) {
       clearTimeout(esperaTimers.current[id]);
@@ -224,10 +222,10 @@ function ehDoMotoboySelecionado(tele: Tele) {
     });
 
     if (!resposta.ok) {
-  const erro = await resposta.text();
-  alert(`Erro ao atualizar tele: ${erro}`);
-  return;
-}
+      const erro = await resposta.text();
+      alert(`Erro ao atualizar tele: ${erro}`);
+      return;
+    }
     await recarregarDados();
   }
 
@@ -265,28 +263,28 @@ function ehDoMotoboySelecionado(tele: Tele) {
   }
 
   async function salvarEdicaoTele() {
-  if (!teleEditando) return;
+    if (!teleEditando) return;
 
-  const primeiraParada = teleEditando.paradas[0];
-  const valorNumerico = converterValor(teleEditando.valor);
+    const primeiraParada = teleEditando.paradas[0];
+    const valorNumerico = converterValor(teleEditando.valor);
 
-  await salvarTeleNoBanco({
-    ...teleEditando,
-    valorBase: valorNumerico,
-    total: valorNumerico,
-    valor: formatarValor(valorNumerico),
+    await salvarTeleNoBanco({
+      ...teleEditando,
+      valorBase: valorNumerico,
+      total: valorNumerico,
+      valor: formatarValor(valorNumerico),
 
-    nomeCliente: primeiraParada.cliente || primeiraParada.nomeCliente,
-    endereco: primeiraParada.endereco,
-    contato: primeiraParada.contato,
-    observacao: primeiraParada.observacao,
+      nomeCliente: primeiraParada.cliente || primeiraParada.nomeCliente,
+      endereco: primeiraParada.endereco,
+      contato: primeiraParada.contato,
+      observacao: primeiraParada.observacao,
 
-    paradas: teleEditando.paradas,
-  });
+      paradas: teleEditando.paradas,
+    });
 
-  setModalEdicaoAberto(false);
-  setTeleEditando(null);
-}
+    setModalEdicaoAberto(false);
+    setTeleEditando(null);
+  }
 
   function concluirTele(id: string) {
     alterarStatus(id, "Entregue");
@@ -312,17 +310,16 @@ function ehDoMotoboySelecionado(tele: Tele) {
     const telefone = cliente?.telefone || "";
 
     const temRetorno = getParadas(tele).some(
-  (parada: any) =>
-    parada.tipo === "Trocar" || parada.tipo === "Entrega e coleta"
-);
+      (parada: any) => parada.tipo === "Trocar" || parada.tipo === "Entrega e coleta"
+    );
 
-const avisoRetorno = !temRetorno
-  ? `
+    const avisoRetorno = !temRetorno
+      ? `
 
 ⚠️ Este orçamento é referente à entrega sem retorno. Caso seja necessário retorno ao local de origem, será acrescido o valor de R$ 5,00.`
-  : "";
+      : "";
 
-const texto = `Olá!
+    const texto = `Olá!
 
 Segue orçamento da tele:
 
@@ -365,85 +362,70 @@ Valor da tele: R$ ${tele.valor}`;
   }
 
   async function copiarMensagem() {
-  try {
-    await navigator.clipboard.writeText(mensagem);
-    alert("Mensagem copiada!");
-  } catch {
-    alert("Não foi possível copiar a mensagem.");
+    try {
+      await navigator.clipboard.writeText(mensagem);
+      alert("Mensagem copiada!");
+    } catch {
+      alert("Não foi possível copiar a mensagem.");
+    }
   }
-}
 
   function totalPorStatus(status: string) {
     return teles
-      .filter((tele: Tele) => tele.status === status &&
-ehDaDataSelecionada(tele) &&
-ehDoMotoboySelecionado(tele))
-      .reduce(
-        (total: number, tele: Tele) => total + converterValor(tele.valor),
-        0
-      );
+      .filter(
+        (tele: Tele) =>
+          tele.status === status && ehDaDataSelecionada(tele) && ehDoMotoboySelecionado(tele)
+      )
+      .reduce((total: number, tele: Tele) => total + converterValor(tele.valor), 0);
   }
-    return (
-  <PageContainer>
-     <PageHeader
-  titulo="Central de Operações"
-  descricao="Gerencie todas as teles."
-/>
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 max-w-3xl">
- <div
-  className={`rounded-3xl p-4 border ${corColuna(status)}`}
->
-    <label className="text-sm font-medium text-slate-600">
-      Data das operações
-    </label>
+  return (
+    <PageContainer>
+      <PageHeader titulo="Central de Operações" descricao="Gerencie todas as teles." />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 max-w-3xl">
+        <div className={`rounded-3xl p-4 border ${corColuna(status)}`}>
+          <label className="text-sm font-medium text-slate-600">Data das operações</label>
 
-    <input
-      type="date"
-      value={dataFiltro}
-      onChange={(e) => setDataFiltro(e.target.value)}
-      className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
-    />
-  </div>
+          <input
+            type="date"
+            value={dataFiltro}
+            onChange={(e) => setDataFiltro(e.target.value)}
+            className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
+          />
+        </div>
 
-  <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
-    <label className="text-sm font-medium text-slate-600">
-      Motoboy
-    </label>
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+          <label className="text-sm font-medium text-slate-600">Motoboy</label>
 
-    <select
-      value={motoboyFiltro}
-      onChange={(e) => setMotoboyFiltro(e.target.value)}
-      className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
-    >
-      <option value="todos">Todos</option>
-      <option value="sem-motoboy">Sem motoboy</option>
+          <select
+            value={motoboyFiltro}
+            onChange={(e) => setMotoboyFiltro(e.target.value)}
+            className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
+          >
+            <option value="todos">Todos</option>
+            <option value="sem-motoboy">Sem motoboy</option>
 
-      {motoboys.map((motoboy: Motoboy) => (
-        <option key={motoboy.id || motoboy.nome} value={motoboy.nome}>
-          {motoboy.nome}
-        </option>
-      ))}
-    </select>
-  </div>
-</div>
+            {motoboys.map((motoboy: Motoboy) => (
+              <option key={motoboy.id || motoboy.nome} value={motoboy.nome}>
+                {motoboy.nome}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
 
-            {teles.length === 0 && (
+      {teles.length === 0 && (
         <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100 max-w-xl">
           <h2 className="text-xl font-bold">Nenhuma tele cadastrada</h2>
-          <p className="text-slate-500 mt-2">
-            Cadastre uma nova tele para ela aparecer aqui.
-          </p>
+          <p className="text-slate-500 mt-2">Cadastre uma nova tele para ela aparecer aqui.</p>
         </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 items-start">
         {statusOptions.map((status) => {
           const telesDoStatus = teles.filter(
-  (tele: Tele) =>
-    tele.status === status &&
-    ehDaDataSelecionada(tele) &&
-    ehDoMotoboySelecionado(tele)
-);
+            (tele: Tele) =>
+              tele.status === status && ehDaDataSelecionada(tele) && ehDoMotoboySelecionado(tele)
+          );
 
           return (
             <div
@@ -508,22 +490,22 @@ ehDoMotoboySelecionado(tele))
             />
 
             <div className="grid grid-cols-2 gap-3 mt-5">
-  <button
-    onClick={copiarMensagem}
-    className="h-14 rounded-2xl border border-slate-200 bg-white text-slate-700 flex items-center justify-center gap-2 hover:bg-slate-50"
-  >
-    <Copy size={20} />
-    Copiar
-  </button>
+              <button
+                onClick={copiarMensagem}
+                className="h-14 rounded-2xl border border-slate-200 bg-white text-slate-700 flex items-center justify-center gap-2 hover:bg-slate-50"
+              >
+                <Copy size={20} />
+                Copiar
+              </button>
 
-  <button
-    onClick={enviarWhatsApp}
-    className="h-14 rounded-2xl bg-emerald-600 text-white flex items-center justify-center gap-2"
-  >
-    <MessageCircle size={22} />
-    WhatsApp
-  </button>
-</div>
+              <button
+                onClick={enviarWhatsApp}
+                className="h-14 rounded-2xl bg-emerald-600 text-white flex items-center justify-center gap-2"
+              >
+                <MessageCircle size={22} />
+                WhatsApp
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -544,15 +526,11 @@ ehDoMotoboySelecionado(tele))
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
               <div>
-                <label className="text-sm font-medium text-slate-600">
-                  Solicitante
-                </label>
+                <label className="text-sm font-medium text-slate-600">Solicitante</label>
 
                 <select
                   value={teleEditando.solicitante}
-                  onChange={(e) =>
-                    atualizarTeleEditando("solicitante", e.target.value)
-                  }
+                  onChange={(e) => atualizarTeleEditando("solicitante", e.target.value)}
                   className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4"
                 >
                   {clientes.map((cliente: Cliente) => (
@@ -566,21 +544,15 @@ ehDoMotoboySelecionado(tele))
               <InputModal
                 label="Valor"
                 value={teleEditando.valor}
-                onChange={(value: string) =>
-                  atualizarTeleEditando("valor", value)
-                }
+                onChange={(value: string) => atualizarTeleEditando("valor", value)}
               />
 
               <div>
-                <label className="text-sm font-medium text-slate-600">
-                  Motoboy
-                </label>
+                <label className="text-sm font-medium text-slate-600">Motoboy</label>
 
                 <select
                   value={teleEditando.motoboy || ""}
-                  onChange={(e) =>
-                    atualizarTeleEditando("motoboy", e.target.value)
-                  }
+                  onChange={(e) => atualizarTeleEditando("motoboy", e.target.value)}
                   className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4"
                 >
                   <option value="">Selecionar</option>
@@ -593,15 +565,11 @@ ehDoMotoboySelecionado(tele))
               </div>
 
               <div>
-                <label className="text-sm font-medium text-slate-600">
-                  Status
-                </label>
+                <label className="text-sm font-medium text-slate-600">Status</label>
 
                 <select
                   value={teleEditando.status}
-                  onChange={(e) =>
-                    atualizarTeleEditando("status", e.target.value)
-                  }
+                  onChange={(e) => atualizarTeleEditando("status", e.target.value)}
                   className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4"
                 >
                   {statusOptions.map((status) => (
@@ -621,24 +589,18 @@ ehDoMotoboySelecionado(tele))
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <InputModal
                       value={parada.tipo}
-                      onChange={(value: string) =>
-                        atualizarParadaEditando(index, "tipo", value)
-                      }
+                      onChange={(value: string) => atualizarParadaEditando(index, "tipo", value)}
                     />
 
                     <InputModal
                       value={parada.cliente || parada.nomeCliente || ""}
-                      onChange={(value: string) =>
-                        atualizarParadaEditando(index, "cliente", value)
-                      }
+                      onChange={(value: string) => atualizarParadaEditando(index, "cliente", value)}
                       placeholder="Nome do cliente"
                     />
 
                     <InputModal
                       value={parada.contato || ""}
-                      onChange={(value: string) =>
-                        atualizarParadaEditando(index, "contato", value)
-                      }
+                      onChange={(value: string) => atualizarParadaEditando(index, "contato", value)}
                       placeholder="Contato"
                     />
 
@@ -656,7 +618,7 @@ ehDoMotoboySelecionado(tele))
                         atualizarParadaEditando(index, "observacao", value)
                       }
                       placeholder="Observação"
-                     className="md:col-span-2"
+                      className="md:col-span-2"
                     />
                   </div>
                 </div>
@@ -687,7 +649,7 @@ ehDoMotoboySelecionado(tele))
         className="fixed bottom-5 right-5 md:bottom-8 md:right-8 w-14 h-14 md:w-16 md:h-16 rounded-full bg-emerald-600 text-white shadow-xl flex items-center justify-center hover:bg-emerald-700 transition z-40"
       >
         <Plus size={34} />
-            </Link>
+      </Link>
     </PageContainer>
   );
 }
@@ -732,18 +694,12 @@ function StatusBadge({ status }: { status: string }) {
     classes = "bg-slate-900 text-white";
   }
 
-  return (
-    <span className={`inline-flex px-3 py-1 rounded-xl text-xs ${classes}`}>
-      {status}
-    </span>
-  );
+  return <span className={`inline-flex px-3 py-1 rounded-xl text-xs ${classes}`}>{status}</span>;
 }
 function InputModal({ label, value, onChange, placeholder, className }: any) {
   return (
     <div className={className}>
-      {label && (
-        <label className="text-sm font-medium text-slate-600">{label}</label>
-      )}
+      {label && <label className="text-sm font-medium text-slate-600">{label}</label>}
 
       <input
         value={value}
@@ -821,9 +777,7 @@ function TeleCard({
             )}
 
             {parada.observacao && (
-              <p className="bg-slate-50 rounded-xl p-2 mt-2">
-                Obs: {parada.observacao}
-              </p>
+              <p className="bg-slate-50 rounded-xl p-2 mt-2">Obs: {parada.observacao}</p>
             )}
           </div>
         ))}
@@ -882,9 +836,7 @@ function TeleCard({
         <div className="bg-emerald-50 rounded-2xl p-4 space-y-2">
           <LinhaValor
             label="Base"
-            valor={`R$ ${formatarValor(
-              tele.valorBase || converterValor(tele.valor)
-            )}`}
+            valor={`R$ ${formatarValor(tele.valorBase || converterValor(tele.valor))}`}
           />
 
           <LinhaValor label="Retorno" valor={`R$ ${formatarValor(tele.retorno || 0)}`} />

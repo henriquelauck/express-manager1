@@ -1,25 +1,38 @@
 "use client";
-
+import { useRouter } from "next/navigation";
 import PageContainer from "@/components/ui/PageContainer";
 import PageHeader from "@/components/ui/PageHeader";
-import { Brain, Loader2, Play, RotateCcw } from "lucide-react";
+import {
+  ArrowRight,
+  Brain,
+  Loader2,
+  Play,
+  RotateCcw,
+} from "lucide-react";
 import { FormEvent, useState } from "react";
 
 type ResultadoIA = {
   intencao: string;
+
   solicitante: string | null;
+  confiancaSolicitante?: number;
+
   paradas: {
     tipo: string;
-    cliente: string;
+    texto: string;
+    cliente: string | null;
+    confianca: number;
+    endereco?: string | null;
+    telefone?: string | null;
   }[];
+
   precisaHumano: boolean;
   informacoesFaltantes: string[];
 };
 
 export default function LaboratorioIAPage() {
-  const [mensagem, setMensagem] = useState(
-    "Buscar um celular na SaveCell e entregar na Hardware"
-  );
+  const router = useRouter();
+  const [mensagem, setMensagem] = useState("Buscar um celular na SaveCell e entregar na Hardware");
 
   const [resultado, setResultado] = useState<ResultadoIA | null>(null);
   const [erro, setErro] = useState("");
@@ -63,11 +76,7 @@ export default function LaboratorioIAPage() {
       setResultado(dados);
       setTempoMs(Math.round(performance.now() - inicio));
     } catch (error) {
-      setErro(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível interpretar o pedido."
-      );
+      setErro(error instanceof Error ? error.message : "Não foi possível interpretar o pedido.");
     } finally {
       setCarregando(false);
     }
@@ -78,6 +87,38 @@ export default function LaboratorioIAPage() {
     setResultado(null);
     setErro("");
     setTempoMs(null);
+  }
+
+  function usarNaNovaTele() {
+    if (!resultado) return;
+
+    if (resultado.intencao !== "CRIAR_TELE") {
+      setErro("A mensagem interpretada não representa uma criação de tele.");
+      return;
+    }
+
+    const paradasValidas = resultado.paradas.filter((parada) => parada.cliente && parada.endereco);
+
+    if (paradasValidas.length === 0) {
+      setErro("Nenhuma parada possui cliente e endereço suficientes para preencher a Nova Tele.");
+      return;
+    }
+
+    const dadosNovaTele = {
+      solicitante: resultado.solicitante || "",
+      observacaoGeral: `Pedido interpretado pela IA: ${mensagem.trim()}`,
+      paradas: resultado.paradas.map((parada) => ({
+        tipo: parada.tipo,
+        cliente: parada.cliente || parada.texto || "",
+        endereco: parada.endereco || "",
+        contato: parada.telefone || "",
+        observacao: "",
+      })),
+    };
+
+    sessionStorage.setItem("express-manager:nova-tele-ia", JSON.stringify(dadosNovaTele));
+
+    router.push("/nova-tele");
   }
 
   return (
@@ -102,15 +143,11 @@ export default function LaboratorioIAPage() {
             <div>
               <h2 className="text-xl font-bold">Mensagem do cliente</h2>
 
-              <p className="text-sm text-slate-500">
-                A IA apenas interpretará o pedido.
-              </p>
+              <p className="text-sm text-slate-500">A IA apenas interpretará o pedido.</p>
             </div>
           </div>
 
-          <label className="text-sm font-medium text-slate-600">
-            Mensagem
-          </label>
+          <label className="text-sm font-medium text-slate-600">Mensagem</label>
 
           <textarea
             value={mensagem}
@@ -161,9 +198,7 @@ export default function LaboratorioIAPage() {
           <div className="mb-5">
             <h2 className="text-xl font-bold">Resultado estruturado</h2>
 
-            <p className="text-sm text-slate-500">
-              Nenhuma tele será criada por esta tela.
-            </p>
+            <p className="text-sm text-slate-500">Nenhuma tele será criada por esta tela.</p>
           </div>
 
           {!resultado ? (
@@ -173,10 +208,7 @@ export default function LaboratorioIAPage() {
           ) : (
             <>
               <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Informacao
-                  titulo="Intenção"
-                  valor={resultado.intencao}
-                />
+                <Informacao titulo="Intenção" valor={resultado.intencao} />
 
                 <Informacao
                   titulo="Solicitante"
@@ -194,6 +226,51 @@ export default function LaboratorioIAPage() {
                 />
               </div>
 
+              <div className="mb-6 space-y-4">
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <h3 className="font-bold mb-2">Clientes reconhecidos</h3>
+
+                  {resultado.paradas.map((parada, index) => (
+                    <div key={index} className="border-b last:border-b-0 py-3">
+                      <p>
+                        <strong>{parada.tipo}</strong>
+                      </p>
+
+                      <p>Texto: {parada.texto}</p>
+
+                      <p>Cliente: {parada.cliente ?? "Não encontrado"}</p>
+
+                      <p>Confiança: {Math.round(parada.confianca * 100)}%</p>
+
+                      <p>Endereço: {parada.endereco ?? "-"}</p>
+
+                      <p>Telefone: {parada.telefone ?? "-"}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {resultado.informacoesFaltantes.length > 0 && (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                    <h3 className="font-bold mb-2">Atenção</h3>
+
+                    <ul className="list-disc ml-5">
+                      {resultado.informacoesFaltantes.map((item, index) => (
+                        <li key={index}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={usarNaNovaTele}
+                className="mb-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 font-semibold text-white hover:bg-emerald-700"
+              >
+                Usar na Nova Tele
+                <ArrowRight size={19} />
+              </button>
+
               <div className="overflow-x-auto rounded-2xl bg-slate-950 p-5">
                 <pre className="whitespace-pre-wrap break-words text-sm text-emerald-300">
                   {JSON.stringify(resultado, null, 2)}
@@ -207,18 +284,10 @@ export default function LaboratorioIAPage() {
   );
 }
 
-function Informacao({
-  titulo,
-  valor,
-}: {
-  titulo: string;
-  valor: string;
-}) {
+function Informacao({ titulo, valor }: { titulo: string; valor: string }) {
   return (
     <div className="rounded-2xl bg-slate-50 p-4">
-      <p className="text-xs font-medium uppercase text-slate-500">
-        {titulo}
-      </p>
+      <p className="text-xs font-medium uppercase text-slate-500">{titulo}</p>
 
       <strong className="mt-1 block text-slate-900">{valor}</strong>
     </div>

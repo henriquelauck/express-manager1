@@ -12,11 +12,14 @@ export const PedidoInterpretadoSchema = z.object({
   solicitante: z.string().nullable(),
 
   paradas: z.array(
-    z.object({
-      tipo: z.enum(["Coleta", "Entrega", "Trocar", "Entrega e coleta"]),
-      cliente: z.string(),
-    })
-  ),
+  z.object({
+    tipo: z.enum(["Coleta", "Entrega", "Trocar", "Entrega e coleta"]),
+
+    texto: z.string().describe(
+      "Nome exatamente como o usuário escreveu."
+    ),
+  })
+),
 
   precisaHumano: z.boolean(),
 

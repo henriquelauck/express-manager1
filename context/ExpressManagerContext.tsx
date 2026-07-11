@@ -1,9 +1,9 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
 import { Cliente } from "@/types/Cliente";
 import { Motoboy } from "@/types/Motoboy";
 import { Tele } from "@/types/Tele";
+import { createContext, useContext, useEffect, useState } from "react";
 
 export type MovimentoFinanceiroMotoboy = {
   id: string;
@@ -26,40 +26,29 @@ type ExpressManagerContextType = {
   setClientes: (clientes: Cliente[]) => void;
   setMotoboys: (motoboys: Motoboy[]) => void;
   setTeles: (teles: Tele[]) => void;
-  setMovimentosFinanceirosMotoboy: (
-    movimentos: MovimentoFinanceiroMotoboy[]
-  ) => void;
+  setMovimentosFinanceirosMotoboy: (movimentos: MovimentoFinanceiroMotoboy[]) => void;
 
   recarregarDados: () => Promise<void>;
 };
 
-const ExpressManagerContext = createContext<ExpressManagerContextType | null>(
-  null
-);
+const ExpressManagerContext = createContext<ExpressManagerContextType | null>(null);
 
-export function ExpressManagerProvider({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export function ExpressManagerProvider({ children }: { children: React.ReactNode }) {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [motoboys, setMotoboys] = useState<Motoboy[]>([]);
   const [teles, setTeles] = useState<Tele[]>([]);
-  const [movimentosFinanceirosMotoboy, setMovimentosFinanceirosMotoboy] =
-    useState<MovimentoFinanceiroMotoboy[]>([]);
+  const [movimentosFinanceirosMotoboy, setMovimentosFinanceirosMotoboy] = useState<
+    MovimentoFinanceiroMotoboy[]
+  >([]);
 
   async function recarregarDados() {
-    const [
-      respostaClientes,
-      respostaMotoboys,
-      respostaTeles,
-      respostaMovimentos,
-    ] = await Promise.all([
-      fetch("/api/clientes"),
-      fetch("/api/motoboys"),
-      fetch("/api/teles"),
-      fetch("/api/movimentos-financeiros-motoboy"),
-    ]);
+    const [respostaClientes, respostaMotoboys, respostaTeles, respostaMovimentos] =
+      await Promise.all([
+        fetch("/api/clientes"),
+        fetch("/api/motoboys"),
+        fetch("/api/teles"),
+        fetch("/api/movimentos-financeiros-motoboy"),
+      ]);
 
     const clientesBanco = await respostaClientes.json();
     const motoboysBanco = await respostaMotoboys.json();
@@ -69,13 +58,12 @@ export function ExpressManagerProvider({
     setClientes(clientesBanco);
     setMotoboys(motoboysBanco);
     setTeles(telesBanco);
-    setMovimentosFinanceirosMotoboy(
-      Array.isArray(movimentosBanco) ? movimentosBanco : []
-    );
+    setMovimentosFinanceirosMotoboy(Array.isArray(movimentosBanco) ? movimentosBanco : []);
   }
 
   useEffect(() => {
-    recarregarDados();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void recarregarDados();
   }, []);
 
   return (
@@ -101,9 +89,7 @@ export function useExpressManager() {
   const context = useContext(ExpressManagerContext);
 
   if (!context) {
-    throw new Error(
-      "useExpressManager deve ser usado dentro de ExpressManagerProvider"
-    );
+    throw new Error("useExpressManager deve ser usado dentro de ExpressManagerProvider");
   }
 
   return context;
