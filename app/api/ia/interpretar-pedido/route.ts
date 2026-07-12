@@ -1,3 +1,4 @@
+import { escolherMotoboyIdeal } from "@/core/logistica/escolherMotoboy";
 import { resolverClientes, resolverSolicitante } from "@/core/reconhecimento";
 import { interpretarPedido } from "@/lib/ai/interpretarPedido";
 import { prisma } from "@/lib/prisma";
@@ -29,6 +30,14 @@ export async function POST(request: Request) {
       },
       orderBy: {
         nome: "asc",
+      },
+    });
+
+    const motoboys = await prisma.motoboy.findMany();
+
+    const teles = await prisma.tele.findMany({
+      include: {
+        motoboy: true,
       },
     });
 
@@ -104,10 +113,79 @@ export async function POST(request: Request) {
       );
     }
 
+    const motoboysParaCore = motoboys.map((motoboy) => ({
+      id: motoboy.id,
+      nome: motoboy.nome,
+      telefone: motoboy.telefone || "",
+      moto: motoboy.moto || "",
+      placa: motoboy.placa || "",
+    }));
+
+    const statusParaCore = {
+      AGUARDANDO_CLIENTE: "Aguardando cliente",
+      AGUARDANDO_MOTOBOY: "Aguardando motoboy disponível",
+      EM_ROTA: "Em rota",
+      ENTREGUE: "Entregue",
+    } as const;
+
+    const telesParaCore = teles.map((tele) => ({
+      id: tele.id,
+
+      solicitante: tele.solicitante,
+
+      motoboyId: tele.motoboyId,
+      motoboy: tele.motoboyNome || tele.motoboy?.nome || "",
+
+      status: statusParaCore[tele.status],
+
+      criadoEm: tele.createdAt.toISOString(),
+      dataTele: tele.dataTele.toISOString(),
+
+      valorBase: tele.valorBase,
+      retorno: tele.retorno,
+      espera: tele.espera,
+      total: tele.total,
+
+      recebido: tele.recebimento !== "PENDENTE",
+
+      recebimento: tele.recebimento.toLowerCase() as "pendente" | "escritorio" | "motoboy",
+
+      formaCobranca: tele.formaCobranca.toLowerCase() as
+        "na_hora" | "semanal" | "quinzenal" | "mensal",
+
+      valorRecebido: tele.valorRecebido,
+      dataRecebimento: tele.dataRecebimento?.toISOString() || null,
+
+      motoboyRecebedor: tele.motoboyRecebedor,
+      fechamentoId: tele.fechamentoId,
+
+      observacaoGeral: tele.observacaoGeral || "",
+
+      paradas: [],
+
+      tipoRota: tele.tipoRota,
+      nomeCliente: "",
+      endereco: "",
+      contato: "",
+      observacao: "",
+      valor: tele.total.toFixed(2).replace(".", ","),
+      esperaMinutos: 0,
+    }));
+
+    const sugestaoMotoboy = escolherMotoboyIdeal(motoboysParaCore, telesParaCore);
+
     const pedidoFinal = {
       ...pedido,
 
       solicitante: solicitanteResolvido?.confiavel ? solicitanteResolvido.nome : null,
+
+      motoboySugerido: sugestaoMotoboy.motoboy
+        ? {
+            nome: sugestaoMotoboy.motoboy.nome,
+            score: sugestaoMotoboy.score,
+            motivo: sugestaoMotoboy.motivo,
+          }
+        : null,
 
       confiancaSolicitante: solicitanteResolvido?.score ?? 0,
 

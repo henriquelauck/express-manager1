@@ -28,6 +28,12 @@ type ResultadoIA = {
     telefone?: string | null;
   }[];
 
+  motoboySugerido?: {
+    nome: string;
+    score: number;
+    motivo: string;
+  } | null;
+
   precisaHumano: boolean;
   informacoesFaltantes: string[];
 };
@@ -278,37 +284,47 @@ export default function LaboratorioIAPage() {
           ) : (
             <>
               <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Informacao
-                  titulo="Intenção"
-                  valor={resultado.intencao}
-                />
+  <Informacao
+    titulo="Intenção"
+    valor={resultado.intencao}
+  />
 
-                <Informacao
-                  titulo="Solicitante"
-                  valor={
-                    resultado.solicitante ||
-                    "Não identificado"
-                  }
-                />
+  <Informacao
+    titulo="Solicitante"
+    valor={resultado.solicitante || "Não identificado"}
+  />
 
-                <Informacao
-                  titulo="Precisa de humano"
-                  valor={
-                    resultado.precisaHumano
-                      ? "Sim"
-                      : "Não"
-                  }
-                />
+  <Informacao
+    titulo="Precisa de humano"
+    valor={resultado.precisaHumano ? "Sim" : "Não"}
+  />
 
-                <Informacao
-                  titulo="Tempo da requisição"
-                  valor={
-                    tempoMs !== null
-                      ? `${tempoMs} ms`
-                      : "-"
-                  }
-                />
-              </div>
+  <Informacao
+    titulo="Tempo da requisição"
+    valor={tempoMs !== null ? `${tempoMs} ms` : "-"}
+  />
+</div>
+
+{resultado.motoboySugerido && (
+  <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+    <p className="text-sm font-medium text-emerald-700">
+      🤖 Motoboy sugerido pela IA
+    </p>
+
+    <h2 className="mt-2 text-2xl font-bold text-emerald-900">
+      {resultado.motoboySugerido.nome}
+    </h2>
+
+    <p className="mt-2">
+      Score:{" "}
+      <strong>{resultado.motoboySugerido.score}</strong>
+    </p>
+
+    <p className="mt-1 text-sm text-slate-700">
+      {resultado.motoboySugerido.motivo}
+    </p>
+  </div>
+)}
 
               <div className="mb-6 space-y-4">
                 <div className="rounded-2xl border border-slate-200 p-4">
