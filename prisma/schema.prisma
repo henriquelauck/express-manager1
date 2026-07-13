@@ -57,11 +57,11 @@ enum StatusFechamento {
 }
 
 model User {
-  id        String   @id @default(cuid())
+  id        String  @id @default(cuid())
   nome      String
-  email     String   @unique
+  email     String  @unique
   senhaHash String?
-  role      Role     @default(ADMIN)
+  role      Role    @default(ADMIN)
 
   motoboy   Motoboy?
   createdAt DateTime @default(now())
@@ -76,8 +76,9 @@ model Cliente {
   endereco2     String?
   formaCobranca FormaCobranca @default(SEMANAL)
 
-  teles        Tele[]
-  fechamentos FechamentoFinanceiro[]
+  teles                  Tele[]
+  fechamentos            FechamentoFinanceiro[]
+  faturamentosHistoricos FaturamentoHistoricoCliente[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -155,9 +156,9 @@ model FechamentoFinanceiro {
 
   totalBruto Float @default(0)
 
-  recebedorTipo          RecebedorFechamento @default(ESCRITORIO)
-  motoboyRecebedorId     String?
-  motoboyRecebedorNome   String?
+  recebedorTipo        RecebedorFechamento @default(ESCRITORIO)
+  motoboyRecebedorId   String?
+  motoboyRecebedorNome String?
 
   status StatusFechamento @default(ABERTO)
 
@@ -214,7 +215,7 @@ model TeleParada {
   id String @id @default(cuid())
 
   teleId String
-  tele   Tele @relation(fields: [teleId], references: [id], onDelete: Cascade)
+  tele   Tele   @relation(fields: [teleId], references: [id], onDelete: Cascade)
 
   tipo       TipoParada
   cliente    String
@@ -228,4 +229,37 @@ model TeleParada {
   updatedAt DateTime @updatedAt
 
   @@map("Parada")
+}
+
+model ImportacaoPlanilha {
+  id          String @id @default(cuid())
+  nomeArquivo String
+  ano         Int
+  quantidade  Int    @default(0)
+
+  itens FaturamentoHistoricoCliente[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model FaturamentoHistoricoCliente {
+  id String @id @default(cuid())
+
+  importacaoId String
+  importacao   ImportacaoPlanilha @relation(fields: [importacaoId], references: [id], onDelete: Cascade)
+
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id])
+
+  clienteNomeOriginal String
+  dataReferencia      DateTime
+  valor               Float
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([importacaoId, clienteNomeOriginal, dataReferencia])
+  @@index([clienteId, dataReferencia])
+  @@index([clienteNomeOriginal, dataReferencia])
 }

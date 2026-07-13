@@ -1,40 +1,27 @@
 "use client";
 
-import { useState } from "react";
 import PageContainer from "@/components/ui/PageContainer";
 import PageHeader from "@/components/ui/PageHeader";
-import {
-  BarChart3,
-  DollarSign,
-  ReceiptText,
-  FileText,
-  Bike,
-} from "lucide-react";
+import { BarChart3, Bike, DollarSign, FileText, ReceiptText, Upload } from "lucide-react";
+import Link from "next/link";
+import { useState } from "react";
 
-import ResumoFinanceiro from "@/components/financeiro/ResumoFinanceiro";
-import RecebimentosFinanceiro from "@/components/financeiro/RecebimentosFinanceiro";
-import FechamentosFinanceiro from "@/components/financeiro/FechamentosFinanceiro";
 import ExtratoFinanceiro from "@/components/financeiro/ExtratoFinanceiro";
+import FechamentosFinanceiro from "@/components/financeiro/FechamentosFinanceiro";
 import FinanceiroMotoboys from "@/components/financeiro/FinanceiroMotoboys";
+import RecebimentosFinanceiro from "@/components/financeiro/RecebimentosFinanceiro";
+import ResumoFinanceiro from "@/components/financeiro/ResumoFinanceiro";
 
 type AbaFinanceiro =
-  | "resumo"
-  | "recebimentos"
-  | "fechamentos"
-  | "extrato"
-  | "motoboys";
+  "resumo" | "recebimentos" | "fechamentos" | "extrato" | "motoboys" | "importar";
 
 export default function FinanceiroPage() {
   const [aba, setAba] = useState<AbaFinanceiro>("resumo");
 
   return (
     <PageContainer>
-      <PageHeader
-        titulo="Financeiro"
-        descricao="Central financeira completa do Express Manager."
-      />
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 mb-8">
+      <PageHeader titulo="Financeiro" descricao="Central financeira completa do Express Manager." />
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4 mb-8">
         <ModuloButton
           ativo={aba === "resumo"}
           onClick={() => setAba("resumo")}
@@ -76,6 +63,16 @@ export default function FinanceiroPage() {
         />
       </div>
 
+      <Link href="/financeiro/importar-historico">
+        <ModuloButton
+          ativo={false}
+          onClick={() => {}}
+          icon={<Upload size={22} />}
+          titulo="Importar histórico"
+          descricao="Planilhas antigas"
+        />
+      </Link>
+
       {aba === "resumo" && <ResumoFinanceiro />}
       {aba === "recebimentos" && <RecebimentosFinanceiro />}
       {aba === "fechamentos" && <FechamentosFinanceiro />}
@@ -104,9 +101,7 @@ function ModuloButton({ ativo, onClick, icon, titulo, descricao }: any) {
       </div>
 
       <h2 className="font-bold text-lg">{titulo}</h2>
-      <p className={`text-sm mt-1 ${ativo ? "text-white/80" : "text-slate-500"}`}>
-        {descricao}
-      </p>
+      <p className={`text-sm mt-1 ${ativo ? "text-white/80" : "text-slate-500"}`}>{descricao}</p>
     </button>
   );
 }
