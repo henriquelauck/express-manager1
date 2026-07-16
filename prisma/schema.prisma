@@ -56,6 +56,66 @@ enum StatusFechamento {
   CANCELADO
 }
 
+enum StatusAtendimentoIA {
+  ATIVO
+  AGUARDANDO_CLIENTE
+  AGUARDANDO_SISTEMA
+  AGUARDANDO_MOTOBOY
+  FINALIZADO
+  CANCELADO
+  TRANSFERIDO
+}
+
+enum CanalAtendimentoIA {
+  SIMULADOR
+  WHATSAPP
+}
+
+enum ModoAprendizadoIA {
+  DESATIVADO
+  OBSERVACAO
+  SUGESTAO
+  AUTOMATICO
+}
+
+enum StatusExemploAprendizadoIA {
+  PENDENTE_REVISAO
+  APROVADO
+  CORRIGIDO
+  DESCARTADO
+}
+
+enum StatusDuvidaAprendizadoIA {
+  PENDENTE
+  RESPONDIDA
+  DESCARTADA
+}
+
+enum CategoriaConhecimentoIA {
+  INTERPRETACAO
+  REGRA_OPERACIONAL
+  RESPOSTA_CLIENTE
+  ORCAMENTO
+  DESPACHO
+  MOTOBOY
+  COBRANCA
+  OUTRO
+}
+
+enum StatusConhecimentoIA {
+  SUGERIDO
+  APROVADO
+  REJEITADO
+  ARQUIVADO
+}
+
+enum OrigemConhecimentoIA {
+  CORRECAO_HUMANA
+  EXEMPLOS_APROVADOS
+  ANALISE_IA
+  REGRA_MANUAL
+}
+
 model User {
   id        String  @id @default(cuid())
   nome      String
@@ -262,4 +322,141 @@ model FaturamentoHistoricoCliente {
   @@unique([importacaoId, clienteNomeOriginal, dataReferencia])
   @@index([clienteId, dataReferencia])
   @@index([clienteNomeOriginal, dataReferencia])
+}
+
+model AtendimentoIA {
+  id String @id @default(cuid())
+
+  canal CanalAtendimentoIA @default(SIMULADOR)
+
+  telefoneRemetente   String
+  telefoneNormalizado String
+
+  status StatusAtendimentoIA @default(ATIVO)
+
+  etapa      String
+  aguardando String?
+
+  historico Json
+  operacao  Json
+  estado    Json
+
+  ativo Boolean @default(true)
+
+  ultimaMensagemEm DateTime  @default(now())
+  encerradoEm      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([telefoneNormalizado, ativo])
+  @@index([status, updatedAt])
+  @@index([canal, telefoneNormalizado])
+}
+
+model ConfiguracaoAprendizadoIA {
+  id String @id @default(cuid())
+
+  modo ModoAprendizadoIA @default(DESATIVADO)
+
+  confiancaMinimaSugestao   Float @default(0.75)
+  confiancaMinimaAutomatico Float @default(0.95)
+
+  quantidadeMinimaExemplos Int @default(5)
+
+  permitirPerguntasIA  Boolean @default(true)
+  respostasPorAudio    Boolean @default(false)
+  atualizacoesPorAudio Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ExemploAtendimentoIA {
+  id String @id @default(cuid())
+
+  atendimentoId String?
+  teleId        String?
+
+  telefoneRemetente String
+  solicitante       String?
+
+  mensagemCliente String
+  respostaHumana  String?
+
+  interpretacaoIA Json?
+  sugestaoIA      Json?
+  operacaoFinal   Json?
+
+  status StatusExemploAprendizadoIA @default(PENDENTE_REVISAO)
+
+  aprovado  Boolean @default(false)
+  corrigido Boolean @default(false)
+
+  observacaoHumana String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([solicitante, createdAt])
+  @@index([atendimentoId])
+  @@index([teleId])
+}
+
+model DuvidaAprendizadoIA {
+  id String @id @default(cuid())
+
+  exemploId String?
+
+  solicitante String?
+  contexto    Json?
+
+  perguntaIA     String
+  respostaHumana String?
+
+  status StatusDuvidaAprendizadoIA @default(PENDENTE)
+
+  respondidaEm DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([exemploId])
+}
+
+model ConhecimentoIA {
+  id String @id @default(cuid())
+
+  titulo    String
+  descricao String
+
+  categoria CategoriaConhecimentoIA
+  status    StatusConhecimentoIA    @default(SUGERIDO)
+  origem    OrigemConhecimentoIA
+
+  solicitante String?
+
+  regra Json?
+
+  confianca Float @default(0)
+
+  quantidadeExemplos Int      @default(0)
+  exemploIds         String[] @default([])
+
+  observacaoHumana String?
+
+  aprovadoPor String?
+  aprovadoEm  DateTime?
+
+  ativo Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([categoria, status])
+  @@index([solicitante, status])
+  @@index([ativo, categoria])
 }

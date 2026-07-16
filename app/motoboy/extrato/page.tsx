@@ -49,73 +49,45 @@ export default function ExtratoMotoboyPage() {
     });
   }
 
-    function formatarValor(valor: number) {
+  function formatarValor(valor: number) {
     return valor.toFixed(2).replace(".", ",");
   }
-const telesFiltradas = useMemo(() => {
-  return teles.filter((tele: any) => {
-    const dataTele = dataDaTele(tele);
+  const telesFiltradas = useMemo(() => {
+    return teles.filter((tele: any) => {
+      const dataTele = dataDaTele(tele);
 
-    if (dataInicio && dataTele < dataInicio) return false;
+      if (dataInicio && dataTele < dataInicio) return false;
 
-    const dataFinalFiltro =
-      dataFim || dataInicio || new Date().toISOString().slice(0, 10);
+      const dataFinalFiltro = dataFim || dataInicio || new Date().toISOString().slice(0, 10);
 
-    if (dataTele > dataFinalFiltro) return false;
+      if (dataTele > dataFinalFiltro) return false;
 
-    return true;
-  });
-}, [teles, dataInicio, dataFim]);
+      return true;
+    });
+  }, [teles, dataInicio, dataFim]);
 
- const movimentosFiltrados = useMemo(() => {
-  return movimentos.filter((movimento: any) => {
-    const inicio = movimento.dataReferenciaInicio
-      ? movimento.dataReferenciaInicio.slice(0, 10)
-      : new Date(movimento.criadoEm).toISOString().slice(0, 10);
+  const movimentosFiltrados = useMemo(() => {
+    return movimentos.filter((movimento: any) => {
+      const inicio = movimento.dataReferenciaInicio
+        ? movimento.dataReferenciaInicio.slice(0, 10)
+        : new Date(movimento.criadoEm).toISOString().slice(0, 10);
 
-    const fim = movimento.dataReferenciaFim
-      ? movimento.dataReferenciaFim.slice(0, 10)
-      : new Date(movimento.criadoEm).toISOString().slice(0, 10);
+      const fim = movimento.dataReferenciaFim
+        ? movimento.dataReferenciaFim.slice(0, 10)
+        : new Date(movimento.criadoEm).toISOString().slice(0, 10);
 
-    if (dataInicio && fim < dataInicio) return false;
-    if (dataFim && inicio > dataFim) return false;
+      if (dataInicio && fim < dataInicio) return false;
+      if (dataFim && inicio > dataFim) return false;
 
-    return true;
-  });
-}, [movimentos, dataInicio, dataFim]);
+      return true;
+    });
+  }, [movimentos, dataInicio, dataFim]);
 
-
-  const bruto = telesFiltradas.reduce(
-    (total, tele) => total + Number(tele.total || 0),
-    0
-  );
+  const bruto = telesFiltradas.reduce((total, tele) => total + Number(tele.total || 0), 0);
 
   const liquido = bruto * 0.8;
 
-  const recebidoClienteAntigo = telesFiltradas
-    .filter((tele) => {
-      const recebimento = String(tele.recebimento || "").toLowerCase();
-
-      const jaTemMovimento = movimentosFiltrados.some(
-        (movimento) =>
-          movimento.tipo === "CLIENTE" &&
-          movimento.fechamentoId &&
-          movimento.fechamentoId === tele.fechamentoId
-      );
-
-      return recebimento === "motoboy" && !jaTemMovimento;
-    })
-    .reduce(
-      (total, tele) => total + Number(tele.valorRecebido || tele.total || 0),
-      0
-    );
-
-  const recebidoMovimentos = movimentosFiltrados.reduce(
-    (total, movimento) => total + Number(movimento.valor || 0),
-    0
-  );
-
-  const recebido = recebidoClienteAntigo + recebidoMovimentos;
+  const recebido = recebidoMovimentos;
   const aReceber = liquido - recebido;
 
   if (carregando) {
@@ -135,9 +107,7 @@ const telesFiltradas = useMemo(() => {
 
         <h1 className="text-3xl font-bold mt-5">Extrato Detalhado</h1>
 
-        <p className="text-slate-500 mt-2">
-          Consulte suas entregas por período.
-        </p>
+        <p className="text-slate-500 mt-2">Consulte suas entregas por período.</p>
 
         <div className="bg-white rounded-3xl border p-6 mt-6 shadow-sm">
           <h2 className="font-bold text-lg mb-4">Filtrar período</h2>
@@ -181,41 +151,37 @@ const telesFiltradas = useMemo(() => {
             </p>
           </div>
 
-          {movimentosFiltrados.length === 0 && recebidoClienteAntigo === 0 ? (
+          {movimentosFiltrados.length === 0 ? (
             <div className="p-8 text-center text-slate-500">
               Nenhum recebimento encontrado nesse período.
             </div>
           ) : (
             <div className="divide-y">
               {movimentosFiltrados.map((movimento) => (
-                <div
-                  key={movimento.id}
-                  className="p-5 flex justify-between gap-4"
-                >
+                <div key={movimento.id} className="p-5 flex justify-between gap-4">
                   <div>
                     <strong>
                       {movimento.tipo === "CLIENTE"
                         ? movimento.clienteNome || "Cliente"
                         : movimento.tipo === "ESCRITORIO"
-                        ? "Escritório"
-                        : "Ajuste"}
+                          ? "Escritório"
+                          : "Ajuste"}
                     </strong>
 
                     <p className="text-sm text-slate-500 mt-1">
-                     {movimento.dataReferenciaInicio ? (
-  <>
-    {formatarData(movimento.criadoEm)}
-    <br />
-    <span className="text-xs text-slate-400">
-      Referente a{" "}
-      {formatarData(movimento.dataReferenciaInicio)}
-      {movimento.dataReferenciaFim &&
-        ` até ${formatarData(movimento.dataReferenciaFim)}`}
-    </span>
-  </>
-) : (
-  formatarData(movimento.criadoEm)
-)}
+                      {movimento.dataReferenciaInicio ? (
+                        <>
+                          {formatarData(movimento.criadoEm)}
+                          <br />
+                          <span className="text-xs text-slate-400">
+                            Referente a {formatarData(movimento.dataReferenciaInicio)}
+                            {movimento.dataReferenciaFim &&
+                              ` até ${formatarData(movimento.dataReferenciaFim)}`}
+                          </span>
+                        </>
+                      ) : (
+                        formatarData(movimento.criadoEm)
+                      )}
                     </p>
 
                     <p className="text-sm text-slate-500 mt-1">
@@ -228,21 +194,6 @@ const telesFiltradas = useMemo(() => {
                   </strong>
                 </div>
               ))}
-
-              {recebidoClienteAntigo > 0 && (
-                <div className="p-5 flex justify-between gap-4">
-                  <div>
-                    <strong>Recebimentos antigos</strong>
-                    <p className="text-sm text-slate-500 mt-1">
-                      Pagamentos registrados antes do novo financeiro.
-                    </p>
-                  </div>
-
-                  <strong className="text-emerald-700 whitespace-nowrap">
-                    R$ {formatarValor(recebidoClienteAntigo)}
-                  </strong>
-                </div>
-              )}
             </div>
           )}
         </section>
@@ -253,9 +204,7 @@ const telesFiltradas = useMemo(() => {
           </div>
 
           {telesFiltradas.length === 0 ? (
-            <div className="p-8 text-center text-slate-500">
-              Nenhuma entrega encontrada.
-            </div>
+            <div className="p-8 text-center text-slate-500">Nenhuma entrega encontrada.</div>
           ) : (
             telesFiltradas.map((tele) => {
               const parada = tele.paradas?.[0];
@@ -272,9 +221,7 @@ const telesFiltradas = useMemo(() => {
 
                       <p className="mt-3">{parada?.cliente}</p>
 
-                      <p className="text-sm text-slate-500">
-                        {parada?.endereco}
-                      </p>
+                      <p className="text-sm text-slate-500">{parada?.endereco}</p>
                     </div>
 
                     <div className="text-right">
@@ -301,13 +248,7 @@ const telesFiltradas = useMemo(() => {
   );
 }
 
-function Resumo({
-  titulo,
-  valor,
-}: {
-  titulo: string;
-  valor: string | number;
-}) {
+function Resumo({ titulo, valor }: { titulo: string; valor: string | number }) {
   return (
     <div className="bg-white rounded-3xl border p-5 shadow-sm">
       <p className="text-slate-500">{titulo}</p>

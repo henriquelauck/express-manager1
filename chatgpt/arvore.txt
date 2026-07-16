@@ -1,0 +1,264 @@
+﻿EXPRESS MANAGER
++---.vscode
+|   \---settings.json
++---app
+|   +---api
+|   |   +---auth
+|   |   |   +---login
+|   |   |   |   \---route.ts
+|   |   |   +---logout
+|   |   |   |   \---route.ts
+|   |   |   \---me
+|   |   |       \---route.ts
+|   |   +---clientes
+|   |   |   \---route.ts
+|   |   +---configuracoes
+|   |   |   \---logins-motoboys
+|   |   |       \---route.ts
+|   |   +---dev
+|   |   |   +---criar-logins-motoboys
+|   |   |   |   \---route.ts
+|   |   |   \---criar-motoboy
+|   |   |       \---route.ts
+|   |   +---fechamentos-financeiros
+|   |   |   \---route.ts
+|   |   +---ia
+|   |   |   +---encerrar-atendimento
+|   |   |   |   \---route.ts
+|   |   |   +---interpretar-pedido
+|   |   |   |   \---route.ts
+|   |   |   \---motor-operacional
+|   |   |       +---regras
+|   |   |       |   +---default.ts
+|   |   |       |   \---petexame.ts
+|   |   |       +---aplicarRegrasOperacionais.ts
+|   |   |       +---selecionarRegra.ts
+|   |   |       \---tipos.ts
+|   |   +---importacoes
+|   |   |   \---planilha
+|   |   |       +---confirmar
+|   |   |       |   \---route.ts
+|   |   |       \---preview
+|   |   |           \---route.ts
+|   |   +---maps
+|   |   |   +---calcular-rota
+|   |   |   |   \---route.ts
+|   |   |   \---imagem-rota
+|   |   |       \---route.ts
+|   |   +---motoboys
+|   |   |   +---atualizar-tele
+|   |   |   |   \---route.ts
+|   |   |   +---meu-financeiro
+|   |   |   |   \---route.ts
+|   |   |   +---minhas-teles
+|   |   |   |   \---route.ts
+|   |   |   \---route.ts
+|   |   +---movimentos-financeiros-motoboy
+|   |   |   +---[id]
+|   |   |   |   \---route.ts
+|   |   |   \---route.ts
+|   |   \---teles
+|   |       +---recebimento
+|   |       |   \---route.ts
+|   |       \---route.ts
+|   +---clientes
+|   |   \---page.tsx
+|   +---configuracoes
+|   |   \---logins
+|   |       \---page.tsx
+|   +---diagnostico-core
+|   |   \---page.tsx
+|   +---extrato-geral
+|   |   \---page.tsx
+|   +---fechamentos
+|   |   \---page.tsx.old
+|   +---financeiro
+|   |   +---importar-historico
+|   |   |   \---page.tsx
+|   |   \---page.tsx
+|   +---laboratorio-ia
+|   |   \---page.tsx
+|   +---login
+|   |   \---page.tsx
+|   +---motoboy
+|   |   +---extrato
+|   |   |   \---page.tsx
+|   |   \---page.tsx
+|   +---motoboys
+|   |   +---extrato
+|   |   |   \---page.tsx
+|   |   \---page.tsx
+|   +---nova-tele
+|   |   \---page.tsx
+|   +---teles
+|   |   \---page.tsx
+|   +---favicon.ico
+|   +---globals.css
+|   +---layout.tsx
+|   \---page.tsx
++---components
+|   +---financeiro
+|   |   +---ExtratoFinanceiro.tsx
+|   |   +---FechamentosFinanceiro.tsx
+|   |   +---FinanceiroMotoboys.tsx
+|   |   +---RecebimentosFinanceiro.tsx
+|   |   \---ResumoFinanceiro.tsx
+|   +---maps
+|   |   +---AutoCompleteEndereco.tsx
+|   |   +---googleMapsLoader.ts
+|   |   +---index.ts
+|   |   \---MapaRota.tsx
+|   +---nova-tele
+|   |   +---CalculadoraRota.tsx
+|   |   +---CardParada.tsx
+|   |   +---ClienteSolicitante.tsx
+|   |   +---index.ts
+|   |   +---ListaParadas.tsx
+|   |   +---ObservacaoGeral.tsx
+|   |   \---ResumoFinanceiro.tsx
+|   +---ui
+|   |   +---Card.tsx
+|   |   +---FormGrid.tsx
+|   |   +---Input.tsx
+|   |   +---PageContainer.tsx
+|   |   +---PageGrid.tsx
+|   |   \---PageHeader.tsx
+|   +---AppProtegido.tsx
+|   +---FloatingButton.tsx
+|   +---LoginGestor.tsx
+|   +---Sidebar.tsx
+|   \---TeleForm.tsx
++---context
+|   \---ExpressManagerContext.tsx
++---core
+|   +---distribuicao
+|   |   +---calcularScoreMotoboy.ts
+|   |   +---escolherMelhorMotoboy.ts
+|   |   \---index.ts
+|   +---financeiro
+|   |   +---calcularFechamentoCliente.ts
+|   |   \---index.ts
+|   +---ia
+|   |   +---agente
+|   |   |   +---criarTeleDoAtendimento.ts
+|   |   |   \---executarEtapa.ts
+|   |   +---atendimento
+|   |   |   +---repositorio
+|   |   |   |   \---atendimentoRepository.ts
+|   |   |   +---sessao
+|   |   |   |   +---Atendimento.ts
+|   |   |   |   +---atualizarAtendimento.ts
+|   |   |   |   \---mesclarParadas.ts
+|   |   |   +---decidirFluxoMensagem.ts
+|   |   |   +---definirEstadoAtendimento.ts
+|   |   |   +---gerarPlanoOperacional.ts
+|   |   |   +---gerarRespostaAtendimento.ts
+|   |   |   +---interpretarRespostaContextual.ts
+|   |   |   +---processarAtendimento.ts
+|   |   |   +---resolverClienteContextual.ts
+|   |   |   \---validarRespostaContextual.ts
+|   |   +---compartilhado
+|   |   +---despacho
+|   |   +---financeiro
+|   |   +---gestor
+|   |   +---historico
+|   |   |   \---resolverLocalRecorrente.ts
+|   |   +---pipeline
+|   |   |   \---normalizarEntrada.ts
+|   |   +---gerarDecisoes.ts
+|   |   +---gerarPendenciasOperacionais.ts
+|   |   \---resolverContextoParadas.ts
+|   +---logistica
+|   |   +---calcularCustoRota.ts
+|   |   +---escolherMotoboy.ts
+|   |   +---index.ts
+|   |   \---types.ts
+|   \---reconhecimento
+|       +---index.ts
+|       +---reconhecerCliente.ts
+|       +---resolverClientes.ts
+|       +---resolverEnderecoCliente.ts
+|       \---resolverSolicitante.ts
++---docs
+|   +---APP_MOTOBOY.md
+|   +---ARQUITETURA.md
+|   +---CHANGELOG.md
+|   +---IA.md
+|   +---REGRAS_NEGOCIO.md
+|   +---ROADMAP.md
+|   \---TODO.md
++---hooks
+|   \---useParadas.ts
++---lib
+|   +---ai
+|   |   +---client.ts
+|   |   +---interpretarPedido.ts
+|   |   +---promptSistema.ts
+|   |   +---schema.ts
+|   |   \---types.ts
+|   +---generated
+|   +---google-maps
+|   |   \---calcularRota.ts
+|   +---services
+|   |   +---enderecos.service.ts
+|   |   +---locais.service.ts
+|   |   +---paradas.service.ts
+|   |   \---tele.service.ts
+|   +---utils
+|   |   \---id.ts
+|   +---calculos.ts
+|   +---prisma.ts
+|   +---storage.ts
+|   \---whatsapp.ts
++---orchestrator
+|   +---tele
+|   |   \---validarFinanceiro.ts
+|   +---criarTele.ts
+|   +---index.ts
+|   \---types.ts
++---prisma
+|   +---migrations
+|   |   +---20260701020219_init
+|   |   |   \---migration.sql
+|   |   +---20260713093000_reconcile_schema_existente
+|   |   |   \---migration.sql
+|   |   +---20260713100000_adicionar_importacao_planilhas
+|   |   |   \---migration.sql
+|   |   \---migration_lock.toml
+|   \---schema.prisma
++---public
+|   +---file.svg
+|   +---globe.svg
+|   +---next.svg
+|   +---vercel.svg
+|   \---window.svg
++---scripts
+|   +---exportador-chatgpt
+|   |   +---config.ps1
+|   |   +---copiar-arquivos.ps1
+|   |   +---gerar-arvore.ps1
+|   |   \---gerar-resumo.ps1
+|   +---criar-motoboy-login.ts
+|   \---exportar-chatgpt.ps1
++---types
+|   +---Cliente.ts
+|   +---Motoboy.ts
+|   +---Parada.ts
+|   \---Tele.ts
++---({
++---.gitignore
++---.prettierignore
++---.prettierrc
++---AGENTS.md
++---arvore.txt
++---CLAUDE.md
++---eslint.config.mjs
++---excluirMovimento(movimento.id)}
++---next.config.ts
++---next-env.d.ts
++---package.json
++---package-lock.json
++---postcss.config.mjs
++---prisma.config.ts
++---README.md
+\---tsconfig.json

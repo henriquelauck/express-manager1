@@ -1,0 +1,57 @@
+﻿EXPRESS MANAGER
+==========================================
+
+Data da exportacao:
+15/07/2026 23:12:56
+
+Versao do projeto:
+0.1.0
+
+Next.js:
+16.2.9
+
+Prisma:
+^7.8.0
+
+Banco:
+PostgreSQL / Neon
+
+CONTEUDO EXPORTADO
+==========================================
+
+- Core da IA
+- Atendimento
+- Motor Operacional
+- Reconhecimento
+- Logistica
+- Distribuicao
+- APIs principais
+- Biblioteca de IA
+- Servicos
+- Google Maps
+- Documentacao
+- Tipos
+- Configuracoes principais
+- Schema Prisma
+- Arvore limpa do projeto
+
+ESTATISTICAS
+==========================================
+
+Total de arquivos:
+78
+
+Total aproximado de linhas:
+8722
+
+SEGURANCA
+==========================================
+
+Arquivos .env nao foram exportados.
+
+Pastas ignoradas:
+.git
+.next
+node_modules
+.vercel
+chatgpt

@@ -1,0 +1,310 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  MOTOBOY
+  CLIENTE
+}
+
+enum StatusTele {
+  AGUARDANDO_CLIENTE
+  AGUARDANDO_MOTOBOY
+  EM_ROTA
+  ENTREGUE
+}
+
+enum TipoParada {
+  ENTREGA
+  COLETA
+  TROCAR
+  ENTREGA_E_COLETA
+}
+
+enum Recebimento {
+  PENDENTE
+  ESCRITORIO
+  MOTOBOY
+}
+
+enum FormaCobranca {
+  NA_HORA
+  SEMANAL
+  QUINZENAL
+  MENSAL
+}
+
+enum TipoMovimentoFinanceiro {
+  CLIENTE
+  ESCRITORIO
+  AJUSTE
+}
+
+enum RecebedorFechamento {
+  ESCRITORIO
+  MOTOBOY
+}
+
+enum StatusFechamento {
+  ABERTO
+  FECHADO
+  CANCELADO
+}
+
+enum StatusAtendimentoIA {
+  ATIVO
+  AGUARDANDO_CLIENTE
+  AGUARDANDO_SISTEMA
+  AGUARDANDO_MOTOBOY
+  FINALIZADO
+  CANCELADO
+  TRANSFERIDO
+}
+
+enum CanalAtendimentoIA {
+  SIMULADOR
+  WHATSAPP
+}
+
+model User {
+  id        String  @id @default(cuid())
+  nome      String
+  email     String  @unique
+  senhaHash String?
+  role      Role    @default(ADMIN)
+
+  motoboy   Motoboy?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Cliente {
+  id            String        @id @default(cuid())
+  nome          String
+  telefone      String?
+  endereco1     String?
+  endereco2     String?
+  formaCobranca FormaCobranca @default(SEMANAL)
+
+  teles                  Tele[]
+  fechamentos            FechamentoFinanceiro[]
+  faturamentosHistoricos FaturamentoHistoricoCliente[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Motoboy {
+  id       String  @id @default(cuid())
+  nome     String
+  telefone String?
+  moto     String?
+  placa    String?
+
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id])
+
+  teles      Tele[]
+  movimentos MovimentoFinanceiroMotoboy[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Tele {
+  id String @id @default(cuid())
+
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id])
+
+  solicitante String
+
+  motoboyId String?
+  motoboy   Motoboy? @relation(fields: [motoboyId], references: [id])
+
+  motoboyNome String?
+
+  status   StatusTele @default(AGUARDANDO_CLIENTE)
+  tipoRota String
+
+  valorBase Float @default(0)
+  retorno   Float @default(0)
+  espera    Float @default(0)
+  total     Float @default(0)
+
+  distanciaKm  Float?
+  tempoMinutos Int?
+
+  recebimento      Recebimento   @default(PENDENTE)
+  formaCobranca    FormaCobranca @default(SEMANAL)
+  valorRecebido    Float         @default(0)
+  dataRecebimento  DateTime?
+  motoboyRecebedor String?
+
+  fechamentoId String?
+  fechamento   FechamentoFinanceiro? @relation(fields: [fechamentoId], references: [id])
+
+  observacaoGeral String?
+
+  paradas TeleParada[]
+
+  dataTele  DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model FechamentoFinanceiro {
+  id String @id @default(cuid())
+
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id])
+
+  clienteNome String
+
+  dataInicio DateTime
+  dataFim    DateTime
+
+  totalBruto Float @default(0)
+
+  recebedorTipo        RecebedorFechamento @default(ESCRITORIO)
+  motoboyRecebedorId   String?
+  motoboyRecebedorNome String?
+
+  status StatusFechamento @default(ABERTO)
+
+  teles Tele[]
+  itens FechamentoFinanceiroItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model FechamentoFinanceiroItem {
+  id String @id @default(cuid())
+
+  fechamentoId String
+  fechamento   FechamentoFinanceiro @relation(fields: [fechamentoId], references: [id], onDelete: Cascade)
+
+  motoboyId   String?
+  motoboyNome String
+
+  totalBruto    Float @default(0)
+  valorRecebido Float @default(0)
+  saldo         Float @default(0)
+
+  recebedorTipo RecebedorFechamento @default(ESCRITORIO)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MovimentoFinanceiroMotoboy {
+  id String @id @default(cuid())
+
+  motoboyId String
+  motoboy   Motoboy @relation(fields: [motoboyId], references: [id])
+
+  tipo TipoMovimentoFinanceiro
+
+  valor Float
+
+  clienteNome String?
+  descricao   String?
+
+  teleId       String?
+  fechamentoId String?
+
+  dataReferenciaInicio DateTime?
+  dataReferenciaFim    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TeleParada {
+  id String @id @default(cuid())
+
+  teleId String
+  tele   Tele   @relation(fields: [teleId], references: [id], onDelete: Cascade)
+
+  tipo       TipoParada
+  cliente    String
+  endereco   String
+  contato    String?
+  observacao String?
+
+  ordem Int @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("Parada")
+}
+
+model ImportacaoPlanilha {
+  id          String @id @default(cuid())
+  nomeArquivo String
+  ano         Int
+  quantidade  Int    @default(0)
+
+  itens FaturamentoHistoricoCliente[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model FaturamentoHistoricoCliente {
+  id String @id @default(cuid())
+
+  importacaoId String
+  importacao   ImportacaoPlanilha @relation(fields: [importacaoId], references: [id], onDelete: Cascade)
+
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id])
+
+  clienteNomeOriginal String
+  dataReferencia      DateTime
+  valor               Float
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([importacaoId, clienteNomeOriginal, dataReferencia])
+  @@index([clienteId, dataReferencia])
+  @@index([clienteNomeOriginal, dataReferencia])
+}
+
+model AtendimentoIA {
+  id String @id @default(cuid())
+
+  canal CanalAtendimentoIA @default(SIMULADOR)
+
+  telefoneRemetente   String
+  telefoneNormalizado String
+
+  status StatusAtendimentoIA @default(ATIVO)
+
+  etapa      String
+  aguardando String?
+
+  historico Json
+  operacao  Json
+  estado    Json
+
+  ativo Boolean @default(true)
+
+  ultimaMensagemEm DateTime  @default(now())
+  encerradoEm      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([telefoneNormalizado, ativo])
+  @@index([status, updatedAt])
+  @@index([canal, telefoneNormalizado])
+}
