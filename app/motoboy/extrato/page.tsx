@@ -87,6 +87,12 @@ export default function ExtratoMotoboyPage() {
 
   const liquido = bruto * 0.8;
 
+const recebidoMovimentos = movimentosFiltrados.reduce(
+  (total, movimento) =>
+    total + Number(movimento.valor || 0),
+  0
+);
+
   const recebido = recebidoMovimentos;
   const aReceber = liquido - recebido;
 
