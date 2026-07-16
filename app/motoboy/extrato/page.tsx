@@ -68,14 +68,15 @@ export default function ExtratoMotoboyPage() {
 
   const movimentosFiltrados = useMemo(() => {
     return movimentos.filter((movimento: any) => {
+      const dataCriacao = new Date(movimento.criadoEm).toISOString().slice(0, 10);
+
       const inicio = movimento.dataReferenciaInicio
         ? movimento.dataReferenciaInicio.slice(0, 10)
-        : new Date(movimento.criadoEm).toISOString().slice(0, 10);
+        : dataCriacao;
 
-      const fim = movimento.dataReferenciaFim
-        ? movimento.dataReferenciaFim.slice(0, 10)
-        : new Date(movimento.criadoEm).toISOString().slice(0, 10);
+      const fim = movimento.dataReferenciaFim ? movimento.dataReferenciaFim.slice(0, 10) : inicio;
 
+      // O movimento precisa ter algum contato com o período filtrado.
       if (dataInicio && fim < dataInicio) return false;
       if (dataFim && inicio > dataFim) return false;
 
@@ -87,11 +88,10 @@ export default function ExtratoMotoboyPage() {
 
   const liquido = bruto * 0.8;
 
-const recebidoMovimentos = movimentosFiltrados.reduce(
-  (total, movimento) =>
-    total + Number(movimento.valor || 0),
-  0
-);
+  const recebidoMovimentos = movimentosFiltrados.reduce(
+    (total, movimento) => total + Number(movimento.valor || 0),
+    0
+  );
 
   const recebido = recebidoMovimentos;
   const aReceber = liquido - recebido;
