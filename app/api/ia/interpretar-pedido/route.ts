@@ -398,6 +398,12 @@ export async function POST(request: Request) {
 
       status: statusParaCore[tele.status],
 
+      dataOperacao: tele.dataTele
+        ? new Date(tele.dataTele).toLocaleString("pt-BR", {
+            timeZone: "America/Sao_Paulo",
+          })
+        : "",
+
       criadoEm: tele.createdAt.toISOString(),
       dataTele: tele.dataTele.toISOString(),
 
