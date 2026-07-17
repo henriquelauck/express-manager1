@@ -382,6 +382,7 @@ export async function POST(request: Request) {
     const statusParaCore = {
       AGUARDANDO_CLIENTE: "Aguardando cliente",
       AGUARDANDO_MOTOBOY: "Aguardando motoboy disponível",
+      AGUARDANDO_COLETA: "Aguardando coleta",
       EM_ROTA: "Em rota",
       ENTREGUE: "Entregue",
     } as const;

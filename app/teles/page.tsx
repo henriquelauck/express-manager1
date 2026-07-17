@@ -50,6 +50,7 @@ type Parada = {
 const statusOptions = [
   "Aguardando cliente",
   "Aguardando motoboy disponível",
+  "Aguardando coleta",
   "Em rota",
   "Entregue",
 ];
@@ -63,28 +64,27 @@ export default function TelesPage() {
   const [mensagem, setMensagem] = useState("");
   const [telefoneDestino, setTelefoneDestino] = useState("");
   const [motoboyFiltro, setMotoboyFiltro] = useState("todos");
+  const [clienteFiltro, setClienteFiltro] = useState("todos");
   const [modalEdicaoAberto, setModalEdicaoAberto] = useState(false);
   const [teleEditando, setTeleEditando] = useState<any>(null);
-  const [dataFiltro, setDataFiltro] = useState(
-  new Date().toISOString().split("T")[0]
-);
+  const [dataFiltro, setDataFiltro] = useState(new Date().toISOString().split("T")[0]);
 
-const carregarTeles = useCallback(async () => {
-  const resposta = await fetch("/api/teles");
+  const carregarTeles = useCallback(async () => {
+    const resposta = await fetch("/api/teles");
 
-  if (!resposta.ok) {
-    console.error("Erro ao carregar teles.");
-    return;
-  }
+    if (!resposta.ok) {
+      console.error("Erro ao carregar teles.");
+      return;
+    }
 
-  const dados = await resposta.json();
+    const dados = await resposta.json();
 
-  setTeles(Array.isArray(dados) ? dados : []);
-}, [setTeles]);
+    setTeles(Array.isArray(dados) ? dados : []);
+  }, [setTeles]);
 
-useEffect(() => {
-  void carregarTeles();
-}, [carregarTeles]);
+  useEffect(() => {
+    void carregarTeles();
+  }, [carregarTeles]);
 
   function converterValor(valor: string) {
     return Number(String(valor || "0").replace(",", "."));
@@ -112,6 +112,12 @@ useEffect(() => {
     if (motoboyFiltro === "sem-motoboy") return !tele.motoboy;
 
     return tele.motoboy === motoboyFiltro;
+  }
+
+  function ehDoClienteSelecionado(tele: Tele) {
+    if (clienteFiltro === "todos") return true;
+
+    return tele.solicitante === clienteFiltro;
   }
 
   function normalizarTelefone(telefone: string) {
@@ -176,7 +182,7 @@ useEffect(() => {
     await salvarTeleNoBanco({
       ...tele,
       motoboy,
-      status: motoboy ? "Em rota" : tele.status,
+      status: motoboy ? "Aguardando coleta" : "Aguardando motoboy disponível",
     });
   }
 
@@ -340,11 +346,43 @@ Aguardamos sua confirmação.`;
     const motoboy = motoboys.find((m: Motoboy) => m.nome === tele.motoboy);
     const telefone = motoboy?.telefone || "";
 
-    const texto = `NOVA TELE
+    const enderecos = getParadas(tele)
+      .map((parada: Parada) => parada.endereco?.trim())
+      .filter(Boolean);
+
+    let linkMaps = "";
+
+    if (enderecos.length >= 2) {
+      const origem = enderecos[0];
+      const destino = enderecos[enderecos.length - 1];
+      const waypoints = enderecos.slice(1, -1);
+
+      const params = new URLSearchParams({
+        api: "1",
+        origin: origem,
+        destination: destino,
+        travelmode: "driving",
+      });
+
+      if (waypoints.length) {
+        params.set("waypoints", waypoints.join("|"));
+      }
+
+      linkMaps = `https://www.google.com/maps/dir/?${params.toString()}`;
+    }
+
+    const texto = `🚨 NOVA TELE
 
 ${gerarTextoParadas(tele, true)}
 
-Valor da tele: R$ ${tele.valor}`;
+Valor da tele: R$ ${tele.valor}${
+      linkMaps
+        ? `
+
+🗺️ Abrir rota:
+${linkMaps}`
+        : ""
+    }`;
 
     setMensagem(texto);
     setTelefoneDestino(normalizarTelefone(telefone));
@@ -374,14 +412,17 @@ Valor da tele: R$ ${tele.valor}`;
     return teles
       .filter(
         (tele: Tele) =>
-          tele.status === status && ehDaDataSelecionada(tele) && ehDoMotoboySelecionado(tele)
+          tele.status === status &&
+          ehDaDataSelecionada(tele) &&
+          ehDoMotoboySelecionado(tele) &&
+          ehDoClienteSelecionado(tele)
       )
       .reduce((total: number, tele: Tele) => total + converterValor(tele.valor), 0);
   }
   return (
     <PageContainer>
       <PageHeader titulo="Central de Operações" descricao="Gerencie todas as teles." />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 max-w-3xl">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 max-w-3xl">
         <div className={`rounded-3xl p-4 border ${corColuna(status)}`}>
           <label className="text-sm font-medium text-slate-600">Data das operações</label>
 
@@ -411,6 +452,23 @@ Valor da tele: R$ ${tele.valor}`;
             ))}
           </select>
         </div>
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+          <label className="text-sm font-medium text-slate-600">Cliente</label>
+
+          <select
+            value={clienteFiltro}
+            onChange={(e) => setClienteFiltro(e.target.value)}
+            className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
+          >
+            <option value="todos">Todos</option>
+
+            {[...new Set(clientes.map((cliente: Cliente) => cliente.nome))].sort().map((nome) => (
+              <option key={nome} value={nome}>
+                {nome}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {teles.length === 0 && (
@@ -420,11 +478,14 @@ Valor da tele: R$ ${tele.valor}`;
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-5 items-start">
         {statusOptions.map((status) => {
           const telesDoStatus = teles.filter(
             (tele: Tele) =>
-              tele.status === status && ehDaDataSelecionada(tele) && ehDoMotoboySelecionado(tele)
+              tele.status === status &&
+              ehDaDataSelecionada(tele) &&
+              ehDoMotoboySelecionado(tele) &&
+              ehDoClienteSelecionado(tele)
           );
 
           return (
@@ -664,6 +725,10 @@ function corColuna(status: string) {
     return "bg-orange-200 border-orange-400";
   }
 
+  if (texto.includes("aguardando coleta")) {
+    return "bg-violet-200 border-violet-400";
+  }
+
   if (texto.includes("rota")) {
     return "bg-sky-200 border-sky-400";
   }
@@ -684,6 +749,10 @@ function StatusBadge({ status }: { status: string }) {
 
   if (status === "Aguardando motoboy disponível") {
     classes = "bg-blue-100 text-blue-700";
+  }
+
+  if (status === "Aguardando coleta") {
+    classes = "bg-violet-100 text-violet-700";
   }
 
   if (status === "Em rota") {
@@ -729,149 +798,292 @@ function TeleCard({
 }: any) {
   const espera = tele.esperaMinutos || 0;
   const acrescimoEspera = valorEspera(espera);
+  const paradas = getParadas(tele);
 
   return (
-    <div className="bg-[#f7f8fb] rounded-3xl p-4 md:p-5 border border-slate-100 shadow-sm hover:shadow-md transition">
-      <div className="flex items-start justify-between gap-3 mb-4">
-        <div>
-          <h3 className="font-bold text-lg">{tele.tipoRota}</h3>
-          <p className="text-sm text-slate-500">{tele.solicitante}</p>
-          <p className="text-xs text-slate-400">{tele.criadoEm}</p>
-        </div>
+    <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md">
+      {/* Cabeçalho */}
+      <div className="border-b border-slate-100 bg-slate-50 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="font-bold text-slate-900">
+                {tele.tipoRota}
+              </h3>
 
-        <div className="flex gap-2 shrink-0">
-          <button
-            onClick={() => editarTele(tele.id)}
-            className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center"
-          >
-            <Pencil size={16} />
-          </button>
+              <StatusBadge status={tele.status} />
+            </div>
 
-          <button
-            onClick={() => excluirTele(tele.id)}
-            className="w-10 h-10 rounded-xl bg-white border border-red-100 text-red-600 flex items-center justify-center"
-          >
-            <Trash2 size={16} />
-          </button>
-        </div>
-      </div>
-
-      <div className="space-y-3 text-sm text-slate-600">
-        {getParadas(tele).map((parada: Parada, index: number) => (
-          <div key={index} className="bg-white rounded-2xl p-4">
-            <p className="font-bold text-slate-900">{parada.tipo}</p>
-
-            <p className="flex items-center gap-2 mt-2">
-              <User size={15} /> {parada.cliente || parada.nomeCliente}
+            <p className="mt-1 truncate text-sm font-medium text-slate-600">
+              {tele.solicitante}
             </p>
 
-            <p className="flex items-start gap-2 mt-2">
-              <MapPin size={15} className="mt-1 shrink-0" />
-              <span>{parada.endereco}</span>
-            </p>
-
-            {parada.contato && (
-              <p className="flex items-center gap-2 mt-2">
-                <Phone size={15} /> {parada.contato}
+            {tele.criadoEm && (
+              <p className="mt-1 text-xs text-slate-400">
+                {tele.criadoEm}
               </p>
             )}
-
-            {parada.observacao && (
-              <p className="bg-slate-50 rounded-xl p-2 mt-2">Obs: {parada.observacao}</p>
-            )}
           </div>
-        ))}
-      </div>
 
-      <div className="mt-4 space-y-3">
-        <div>
-          <label className="text-xs font-medium text-slate-600 flex items-center gap-2">
-            <Bike size={14} /> Motoboy
-          </label>
+          <div className="flex shrink-0 gap-2">
+            <button
+              type="button"
+              onClick={() => editarTele(tele.id)}
+              title="Editar tele"
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-100"
+            >
+              <Pencil size={15} />
+            </button>
 
-          <select
-            value={tele.motoboy || ""}
-            onChange={(e) => alterarMotoboy(tele.id, e.target.value)}
-            className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-3 outline-none focus:border-emerald-500 text-sm bg-white"
-          >
-            <option value="">Selecionar</option>
-            {motoboys.map((motoboy: Motoboy) => (
-              <option key={motoboy.id || motoboy.nome} value={motoboy.nome}>
-                {motoboy.nome}
-              </option>
-            ))}
-          </select>
+            <button
+              type="button"
+              onClick={() => excluirTele(tele.id)}
+              title="Excluir tele"
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-red-100 bg-white text-red-600 transition hover:bg-red-50"
+            >
+              <Trash2 size={15} />
+            </button>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="mt-4 flex items-center justify-between rounded-2xl bg-white px-4 py-3">
+          <span className="text-sm text-slate-500">
+            Valor da tele
+          </span>
+
+          <strong className="text-lg text-emerald-700">
+            R$ {tele.valor}
+          </strong>
+        </div>
+      </div>
+
+      {/* Rota */}
+      <div className="p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+            Rota
+          </p>
+
+          <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-500">
+            {paradas.length} {paradas.length === 1 ? "parada" : "paradas"}
+          </span>
+        </div>
+
+        <div className="space-y-3">
+          {paradas.map((parada: Parada, index: number) => (
+            <div
+              key={parada.id || index}
+              className="relative rounded-2xl border border-slate-100 bg-slate-50 p-4"
+            >
+              <div className="mb-3 flex items-center gap-3">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">
+                  {index + 1}
+                </span>
+
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {parada.tipo}
+                  </p>
+
+                  <p className="truncate font-bold text-slate-900">
+                    {parada.cliente ||
+                      parada.nomeCliente ||
+                      "Local não informado"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2 text-sm text-slate-600">
+                <div className="flex items-start gap-2">
+                  <MapPin
+                    size={15}
+                    className="mt-0.5 shrink-0 text-slate-400"
+                  />
+
+                  <span className="leading-5">
+                    {parada.endereco || "Endereço não informado"}
+                  </span>
+                </div>
+
+                {parada.contato && (
+                  <div className="flex items-center gap-2">
+                    <Phone
+                      size={15}
+                      className="shrink-0 text-slate-400"
+                    />
+
+                    <span>{parada.contato}</span>
+                  </div>
+                )}
+
+                {parada.observacao && (
+                  <div className="mt-3 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    <strong>Observação:</strong>{" "}
+                    {parada.observacao}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {tele.observacaoGeral && (
+          <div className="mt-3 rounded-2xl border border-orange-100 bg-orange-50 p-3 text-sm text-orange-800">
+            <strong>Observação geral:</strong>{" "}
+            {tele.observacaoGeral}
+          </div>
+        )}
+      </div>
+
+      {/* Operação */}
+      <div className="border-t border-slate-100 p-4">
+        <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">
+          Operação
+        </p>
+
+        <div className="space-y-3">
           <div>
-            <label className="text-xs font-medium text-slate-600 flex items-center gap-2">
-              <Timer size={14} /> Espera
+            <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
+              <Bike size={14} />
+              Motoboy
             </label>
 
-            <input
-              type="number"
-              min="0"
-              value={espera}
-              onChange={(e) => alterarEspera(tele.id, Number(e.target.value))}
-              className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-3 outline-none focus:border-emerald-500 text-sm bg-white"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-slate-600">Status</label>
-
             <select
-              value={tele.status}
-              onChange={(e) => alterarStatus(tele.id, e.target.value)}
-              className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-3 outline-none focus:border-emerald-500 text-sm bg-white"
+              value={tele.motoboy || ""}
+              onChange={(e) =>
+                alterarMotoboy(tele.id, e.target.value)
+              }
+              className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-emerald-500"
             >
-              {statusOptions.map((status) => (
-                <option key={status}>{status}</option>
+              <option value="">Selecionar motoboy</option>
+
+              {motoboys.map((motoboy: Motoboy) => (
+                <option
+                  key={motoboy.id || motoboy.nome}
+                  value={motoboy.nome}
+                >
+                  {motoboy.nome}
+                </option>
               ))}
             </select>
           </div>
-        </div>
 
-        <div className="bg-emerald-50 rounded-2xl p-4 space-y-2">
-          <LinhaValor
-            label="Base"
-            valor={`R$ ${formatarValor(tele.valorBase || converterValor(tele.valor))}`}
-          />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
+                <Timer size={14} />
+                Espera
+              </label>
 
-          <LinhaValor label="Retorno" valor={`R$ ${formatarValor(tele.retorno || 0)}`} />
+              <div className="relative mt-2">
+                <input
+                  type="number"
+                  min="0"
+                  value={espera}
+                  onChange={(e) =>
+                    alterarEspera(
+                      tele.id,
+                      Number(e.target.value)
+                    )
+                  }
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 pr-10 text-sm outline-none focus:border-emerald-500"
+                />
 
-          <LinhaValor label="Espera" valor={`R$ ${formatarValor(acrescimoEspera)}`} />
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
+                  min
+                </span>
+              </div>
+            </div>
 
-          <div className="flex justify-between border-t border-emerald-100 pt-2 text-emerald-700 font-bold">
-            <span>Total</span>
-            <span>R$ {tele.valor}</span>
+            <div>
+              <label className="text-xs font-medium text-slate-600">
+                Status
+              </label>
+
+              <select
+                value={tele.status}
+                onChange={(e) =>
+                  alterarStatus(tele.id, e.target.value)
+                }
+                className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs outline-none focus:border-emerald-500"
+              >
+                {statusOptions.map((status) => (
+                  <option key={status}>{status}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
+      </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {/* Financeiro */}
+      <div className="border-t border-slate-100 bg-emerald-50/70 p-4">
+        <div className="space-y-2">
+          <LinhaValor
+            label="Valor base"
+            valor={`R$ ${formatarValor(
+              tele.valorBase || converterValor(tele.valor)
+            )}`}
+          />
+
+          <LinhaValor
+            label="Retorno"
+            valor={`R$ ${formatarValor(tele.retorno || 0)}`}
+          />
+
+          <LinhaValor
+            label={`Espera (${espera} min)`}
+            valor={`R$ ${formatarValor(acrescimoEspera)}`}
+          />
+
+          <div className="flex items-center justify-between border-t border-emerald-200 pt-3">
+            <span className="font-bold text-emerald-800">
+              Total
+            </span>
+
+            <strong className="text-xl text-emerald-700">
+              R$ {tele.valor}
+            </strong>
+          </div>
+        </div>
+      </div>
+
+      {/* Ações */}
+      <div className="border-t border-slate-100 p-4">
+        <div className="grid grid-cols-2 gap-3">
           <button
+            type="button"
             onClick={() => gerarOrcamento(tele)}
-            className="w-full h-12 rounded-xl bg-emerald-600 text-white flex items-center justify-center gap-2 text-sm font-semibold"
+            className="flex h-11 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
           >
-            <MessageCircle size={16} /> Orçamento
+            <MessageCircle size={16} />
+            Orçamento
           </button>
 
           <button
+            type="button"
             onClick={() => gerarTeleMotoboy(tele)}
-            className="w-full h-12 rounded-xl bg-slate-900 text-white flex items-center justify-center gap-2 text-sm font-semibold"
+            className="flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-900 text-sm font-semibold text-white transition hover:bg-slate-800"
           >
-            <Send size={16} /> Gerar tele
+            <Send size={16} />
+            Gerar tele
           </button>
         </div>
 
         {tele.status !== "Entregue" && (
           <button
+            type="button"
             onClick={() => concluirTele(tele.id)}
-            className="w-full h-12 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-semibold"
+            className="mt-3 h-11 w-full rounded-xl bg-emerald-600 text-sm font-semibold text-white transition hover:bg-emerald-700"
           >
             Concluir entrega
           </button>
+        )}
+
+        {tele.status === "Entregue" && (
+          <div className="mt-3 rounded-xl bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-700">
+            Entrega concluída
+          </div>
         )}
       </div>
     </div>

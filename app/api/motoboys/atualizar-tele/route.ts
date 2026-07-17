@@ -1,14 +1,18 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import type { StatusTele as StatusTeleBanco } from "@prisma/client";
 import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
 
-function statusParaBanco(status: string) {
-  const mapa: any = {
+function statusParaBanco(status: string): StatusTeleBanco {
+  const mapa: Record<string, StatusTeleBanco> = {
+    "Aguardando cliente": "AGUARDANDO_CLIENTE",
+    "Aguardando motoboy disponível": "AGUARDANDO_MOTOBOY",
+    "Aguardando coleta": "AGUARDANDO_COLETA",
     "Em rota": "EM_ROTA",
     Entregue: "ENTREGUE",
   };
 
-  return mapa[status] || "AGUARDANDO_CLIENTE";
+  return mapa[status] ?? "AGUARDANDO_COLETA";
 }
 
 export async function PUT(request: Request) {

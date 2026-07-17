@@ -15,6 +15,7 @@ enum Role {
 enum StatusTele {
   AGUARDANDO_CLIENTE
   AGUARDANDO_MOTOBOY
+  AGUARDANDO_COLETA
   EM_ROTA
   ENTREGUE
 }
@@ -116,6 +117,40 @@ enum OrigemConhecimentoIA {
   REGRA_MANUAL
 }
 
+enum CanalConversaAtendimento {
+  INTERNO
+  SIMULADOR
+  WHATSAPP
+}
+
+enum StatusConversaAtendimento {
+  ABERTA
+  AGUARDANDO_CLIENTE
+  AGUARDANDO_EQUIPE
+  ENCERRADA
+}
+
+enum AutorMensagemAtendimento {
+  CLIENTE
+  HUMANO
+  IA
+  SISTEMA
+}
+
+enum DirecaoMensagemAtendimento {
+  ENTRADA
+  SAIDA
+  INTERNA
+}
+
+enum TipoMensagemAtendimento {
+  TEXTO
+  AUDIO
+  IMAGEM
+  DOCUMENTO
+  SISTEMA
+}
+
 model User {
   id        String  @id @default(cuid())
   nome      String
@@ -123,7 +158,10 @@ model User {
   senhaHash String?
   role      Role    @default(ADMIN)
 
-  motoboy   Motoboy?
+  motoboy Motoboy?
+
+  mensagensAtendimento MensagemAtendimento[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -139,6 +177,7 @@ model Cliente {
   teles                  Tele[]
   fechamentos            FechamentoFinanceiro[]
   faturamentosHistoricos FaturamentoHistoricoCliente[]
+  conversasAtendimento   ConversaAtendimento[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -197,6 +236,8 @@ model Tele {
   observacaoGeral String?
 
   paradas TeleParada[]
+
+  mensagensAtendimento MensagemAtendimento[]
 
   dataTele  DateTime @default(now())
   createdAt DateTime @default(now())
@@ -343,6 +384,8 @@ model AtendimentoIA {
 
   ativo Boolean @default(true)
 
+  mensagensAtendimento MensagemAtendimento[]
+
   ultimaMensagemEm DateTime  @default(now())
   encerradoEm      DateTime?
 
@@ -459,4 +502,79 @@ model ConhecimentoIA {
   @@index([categoria, status])
   @@index([solicitante, status])
   @@index([ativo, categoria])
+}
+
+model ConversaAtendimento {
+  id String @id @default(cuid())
+
+  canal CanalConversaAtendimento @default(INTERNO)
+
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+
+  telefoneRemetente   String
+  telefoneNormalizado String
+
+  nomeExibicao String?
+
+  status StatusConversaAtendimento @default(ABERTA)
+
+  naoLidas Int @default(0)
+
+  ativo Boolean @default(true)
+
+  ultimaMensagemEm DateTime @default(now())
+
+  mensagens MensagemAtendimento[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([telefoneNormalizado, ativo])
+  @@index([status, ultimaMensagemEm])
+  @@index([canal, telefoneNormalizado])
+  @@index([clienteId, updatedAt])
+}
+
+model MensagemAtendimento {
+  id String @id @default(cuid())
+
+  conversaId String
+  conversa   ConversaAtendimento @relation(fields: [conversaId], references: [id], onDelete: Cascade)
+
+  autor   AutorMensagemAtendimento
+  direcao DirecaoMensagemAtendimento
+  tipo    TipoMensagemAtendimento    @default(TEXTO)
+
+  conteudo String?
+
+  usuarioId String?
+  usuario   User?   @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+
+  atendimentoId String?
+  atendimento   AtendimentoIA? @relation(fields: [atendimentoId], references: [id], onDelete: SetNull)
+
+  teleId String?
+  tele   Tele?   @relation(fields: [teleId], references: [id], onDelete: SetNull)
+
+  idExterno String? @unique
+
+  mediaUrl         String?
+  mediaMimeType    String?
+  mediaNomeArquivo String?
+
+  sugestaoIA Json?
+  metadata   Json?
+
+  enviadaEm DateTime  @default(now())
+  lidaEm    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([conversaId, enviadaEm])
+  @@index([atendimentoId])
+  @@index([teleId])
+  @@index([autor, enviadaEm])
+  @@index([direcao, enviadaEm])
 }

@@ -3,19 +3,13 @@ import { Parada } from "./Parada";
 export type StatusTele =
   | "Aguardando cliente"
   | "Aguardando motoboy disponível"
+  | "Aguardando coleta"
   | "Em rota"
   | "Entregue";
 
-export type FormaCobranca =
-  | "na_hora"
-  | "semanal"
-  | "quinzenal"
-  | "mensal";
+export type FormaCobranca = "na_hora" | "semanal" | "quinzenal" | "mensal";
 
-export type StatusRecebimento =
-  | "pendente"
-  | "escritorio"
-  | "motoboy";
+export type StatusRecebimento = "pendente" | "escritorio" | "motoboy";
 
 export type Tele = {
   id: string;
@@ -28,7 +22,7 @@ export type Tele = {
   status: StatusTele;
 
   criadoEm: string;
-dataTele: string;
+  dataTele: string;
 
   valorBase: number;
   retorno: number;

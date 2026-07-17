@@ -1,10 +1,26 @@
+import { aplicarConhecimentosOperacionais } from "./conhecimentos/aplicarConhecimentosOperacionais";
+import { buscarConhecimentosAtivos } from "./conhecimentos/buscarConhecimentosAtivos";
 import { selecionarRegra } from "./selecionarRegra";
 import type { EntradaMotorOperacional, ResultadoMotorOperacional } from "./tipos";
 
-export function aplicarRegrasOperacionais(
+export async function aplicarRegrasOperacionais(
   entrada: EntradaMotorOperacional
-): ResultadoMotorOperacional {
+): Promise<ResultadoMotorOperacional> {
   const regra = selecionarRegra(entrada.solicitante);
 
-  return regra(entrada);
+  const resultadoRegraFixa = regra(entrada);
+
+  const conhecimentosAtivos = await buscarConhecimentosAtivos({
+    solicitante: entrada.solicitante,
+
+    categoria: "REGRA_OPERACIONAL",
+  });
+
+  return aplicarConhecimentosOperacionais({
+    entrada,
+
+    resultado: resultadoRegraFixa,
+
+    conhecimentos: conhecimentosAtivos,
+  });
 }

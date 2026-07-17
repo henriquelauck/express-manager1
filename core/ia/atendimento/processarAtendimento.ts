@@ -262,7 +262,7 @@ function definirEstadoAtendimento(atendimento: Atendimento): {
     };
   }
 
-    if (paradaCompleta(coleta) && paradaCompleta(entrega) && !operacao.rota.calculada) {
+  if (paradaCompleta(coleta) && paradaCompleta(entrega) && !operacao.rota.calculada) {
     return {
       status: "AGUARDANDO_SISTEMA",
 
@@ -307,45 +307,42 @@ function definirEstadoAtendimento(atendimento: Atendimento): {
   }
 
   /*
- * Os dados complementares são solicitados somente depois
- * que o cliente confirmar o orçamento.
- *
- * Assim, primeiro apresentamos o preço e só depois pedimos
- * as informações necessárias para confirmar a entrega.
- */
-if (operacao.orcamentoConfirmado && !operacao.teleCriada) {
-  const pendenciasComplementares =
-    detectarDadosComplementaresPendentes(operacao.paradas);
+   * Os dados complementares são solicitados somente depois
+   * que o cliente confirmar o orçamento.
+   *
+   * Assim, primeiro apresentamos o preço e só depois pedimos
+   * as informações necessárias para confirmar a entrega.
+   */
+  if (operacao.orcamentoConfirmado && !operacao.teleCriada) {
+    const pendenciasComplementares = detectarDadosComplementaresPendentes(operacao.paradas);
 
-  if (pendenciasComplementares.length > 0) {
-    const primeiraPendencia = pendenciasComplementares[0];
+    if (pendenciasComplementares.length > 0) {
+      const primeiraPendencia = pendenciasComplementares[0];
 
-    const nomeLocal =
-      primeiraPendencia.parada.cliente ??
-      primeiraPendencia.parada.endereco ??
-      `parada ${primeiraPendencia.indiceParada + 1}`;
+      const nomeLocal =
+        primeiraPendencia.parada.cliente ??
+        primeiraPendencia.parada.endereco ??
+        `parada ${primeiraPendencia.indiceParada + 1}`;
 
-    return {
-      status: "AGUARDANDO_CLIENTE",
+      return {
+        status: "AGUARDANDO_CLIENTE",
 
-      estado: {
-        etapa: "AGUARDANDO_DADOS_COMPLEMENTARES",
+        estado: {
+          etapa: "AGUARDANDO_DADOS_COMPLEMENTARES",
 
-        aguardando: "DADOS_COMPLEMENTARES",
+          aguardando: "DADOS_COMPLEMENTARES",
 
-        ultimaAcao: "O orçamento foi confirmado pelo cliente.",
+          ultimaAcao: "O orçamento foi confirmado pelo cliente.",
 
-        proximaAcao:
-          "Solicitar somente os dados complementares que ainda estão faltando.",
+          proximaAcao: "Solicitar somente os dados complementares que ainda estão faltando.",
 
-        motivo:
-          `A parada "${nomeLocal}" ainda possui dados necessários para confirmar a entrega.`,
+          motivo: `A parada "${nomeLocal}" ainda possui dados necessários para confirmar a entrega.`,
 
-        precisaHumano: false,
-      },
-    };
+          precisaHumano: false,
+        },
+      };
+    }
   }
-}
 
   if (operacao.orcamentoConfirmado && !operacao.teleCriada) {
     return {
@@ -515,7 +512,7 @@ async function enriquecerParadasComCadastro(atendimento: Atendimento): Promise<A
   const enderecoSolicitante =
     clienteSolicitanteBanco?.endereco1 ?? clienteSolicitanteBanco?.endereco2 ?? null;
 
-  const resultadoMotor = aplicarRegrasOperacionais({
+  const resultadoMotor = await aplicarRegrasOperacionais({
     mensagemOriginal: novasParadas
       .map((parada) => parada.textoOriginal ?? parada.cliente ?? "")
       .filter(Boolean)
