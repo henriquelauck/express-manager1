@@ -6,6 +6,8 @@ import { TipoParada } from "@/types/Parada";
 import { Tele } from "@/types/Tele";
 import {
   Bike,
+  ChevronDown,
+  ChevronUp,
   Copy,
   MapPin,
   MessageCircle,
@@ -15,7 +17,6 @@ import {
   Send,
   Timer,
   Trash2,
-  User,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -422,7 +423,7 @@ ${linkMaps}`
   return (
     <PageContainer>
       <PageHeader titulo="Central de Operações" descricao="Gerencie todas as teles." />
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 max-w-3xl">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5 gap-5 items-start">
         <div className={`rounded-3xl p-4 border ${corColuna(status)}`}>
           <label className="text-sm font-medium text-slate-600">Data das operações</label>
 
@@ -796,296 +797,312 @@ function TeleCard({
   formatarValor,
   converterValor,
 }: any) {
+  const [expandido, setExpandido] = useState(false);
+
   const espera = tele.esperaMinutos || 0;
   const acrescimoEspera = valorEspera(espera);
   const paradas = getParadas(tele);
 
+  const primeiraParada = paradas[0];
+  const ultimaParada = paradas[paradas.length - 1];
+
+  const origem = primeiraParada?.cliente || primeiraParada?.nomeCliente || "Origem não informada";
+
+  const destino = ultimaParada?.cliente || ultimaParada?.nomeCliente || "Destino não informado";
+
+  const resumoRota = paradas.length > 1 && origem !== destino ? `${origem} → ${destino}` : origem;
+
   return (
     <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md">
-      {/* Cabeçalho */}
-      <div className="border-b border-slate-100 bg-slate-50 p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
+      <button
+        type="button"
+        onClick={() => setExpandido((estadoAtual) => !estadoAtual)}
+        className="w-full border-b border-slate-100 bg-slate-50 p-4 text-left transition hover:bg-slate-100"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="font-bold text-slate-900">
-                {tele.tipoRota}
-              </h3>
-
               <StatusBadge status={tele.status} />
+
+              <span className="rounded-lg bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
+                {paradas.length} {paradas.length === 1 ? "parada" : "paradas"}
+              </span>
             </div>
 
-            <p className="mt-1 truncate text-sm font-medium text-slate-600">
-              {tele.solicitante}
-            </p>
+            <h3 className="mt-4 break-words text-[15px] font-bold leading-6 text-slate-900">
+              {resumoRota}
+            </h3>
 
-            {tele.criadoEm && (
-              <p className="mt-1 text-xs text-slate-400">
-                {tele.criadoEm}
-              </p>
+            <div className="mt-4 space-y-2 text-xs text-slate-500">
+              <div className="flex items-center gap-2">
+                <Bike size={14} className="shrink-0" />
+
+                <span className="leading-5">
+                  {tele.motoboy ? `Motoboy: ${tele.motoboy}` : "Motoboy não definido"}
+                </span>
+              </div>
+
+              {tele.criadoEm && (
+                <div className="pl-6 leading-5 text-slate-400">{tele.criadoEm}</div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex shrink-0 flex-col items-end gap-4">
+            <strong className="whitespace-nowrap text-base font-bold text-emerald-700">
+              R$ {tele.valor}
+            </strong>
+
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm">
+              {expandido ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+            </span>
+          </div>
+        </div>
+      </button>
+
+      {expandido && (
+        <>
+          {/* Cabeçalho detalhado */}
+          <div className="border-b border-slate-100 bg-white p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="font-bold text-slate-900">{tele.tipoRota}</h3>
+
+                  <StatusBadge status={tele.status} />
+                </div>
+
+                <p className="mt-1 truncate text-sm font-medium text-slate-600">
+                  {tele.solicitante}
+                </p>
+
+                {tele.criadoEm && <p className="mt-1 text-xs text-slate-400">{tele.criadoEm}</p>}
+              </div>
+
+              <div className="flex shrink-0 gap-2">
+                <button
+                  type="button"
+                  onClick={() => editarTele(tele.id)}
+                  title="Editar tele"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-100"
+                >
+                  <Pencil size={15} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => excluirTele(tele.id)}
+                  title="Excluir tele"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl border border-red-100 bg-white text-red-600 transition hover:bg-red-50"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between rounded-2xl bg-white px-4 py-3">
+              <span className="text-sm text-slate-500">Valor da tele</span>
+
+              <strong className="text-lg text-emerald-700">R$ {tele.valor}</strong>
+            </div>
+          </div>
+
+          {/* Rota */}
+          <div className="p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Rota</p>
+
+              <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-500">
+                {paradas.length} {paradas.length === 1 ? "parada" : "paradas"}
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              {paradas.map((parada: Parada, index: number) => (
+                <div
+                  key={parada.id || index}
+                  className="relative rounded-2xl border border-slate-100 bg-slate-50 p-4"
+                >
+                  <div className="mb-3 flex items-center gap-3">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">
+                      {index + 1}
+                    </span>
+
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        {parada.tipo}
+                      </p>
+
+                      <p className="truncate font-bold text-slate-900">
+                        {parada.cliente || parada.nomeCliente || "Local não informado"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 text-sm text-slate-600">
+                    <div className="flex items-start gap-2">
+                      <MapPin size={15} className="mt-0.5 shrink-0 text-slate-400" />
+
+                      <span className="leading-5">
+                        {parada.endereco || "Endereço não informado"}
+                      </span>
+                    </div>
+
+                    {parada.contato && (
+                      <div className="flex items-center gap-2">
+                        <Phone size={15} className="shrink-0 text-slate-400" />
+
+                        <span>{parada.contato}</span>
+                      </div>
+                    )}
+
+                    {parada.observacao && (
+                      <div className="mt-3 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                        <strong>Observação:</strong> {parada.observacao}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {tele.observacaoGeral && (
+              <div className="mt-3 rounded-2xl border border-orange-100 bg-orange-50 p-3 text-sm text-orange-800">
+                <strong>Observação geral:</strong> {tele.observacaoGeral}
+              </div>
             )}
           </div>
 
-          <div className="flex shrink-0 gap-2">
-            <button
-              type="button"
-              onClick={() => editarTele(tele.id)}
-              title="Editar tele"
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-100"
-            >
-              <Pencil size={15} />
-            </button>
+          {/* Operação */}
+          <div className="border-t border-slate-100 p-4">
+            <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">
+              Operação
+            </p>
 
-            <button
-              type="button"
-              onClick={() => excluirTele(tele.id)}
-              title="Excluir tele"
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-red-100 bg-white text-red-600 transition hover:bg-red-50"
-            >
-              <Trash2 size={15} />
-            </button>
-          </div>
-        </div>
+            <div className="space-y-3">
+              <div>
+                <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
+                  <Bike size={14} />
+                  Motoboy
+                </label>
 
-        <div className="mt-4 flex items-center justify-between rounded-2xl bg-white px-4 py-3">
-          <span className="text-sm text-slate-500">
-            Valor da tele
-          </span>
+                <select
+                  value={tele.motoboy || ""}
+                  onChange={(e) => alterarMotoboy(tele.id, e.target.value)}
+                  className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-emerald-500"
+                >
+                  <option value="">Selecionar motoboy</option>
 
-          <strong className="text-lg text-emerald-700">
-            R$ {tele.valor}
-          </strong>
-        </div>
-      </div>
-
-      {/* Rota */}
-      <div className="p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-            Rota
-          </p>
-
-          <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-500">
-            {paradas.length} {paradas.length === 1 ? "parada" : "paradas"}
-          </span>
-        </div>
-
-        <div className="space-y-3">
-          {paradas.map((parada: Parada, index: number) => (
-            <div
-              key={parada.id || index}
-              className="relative rounded-2xl border border-slate-100 bg-slate-50 p-4"
-            >
-              <div className="mb-3 flex items-center gap-3">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">
-                  {index + 1}
-                </span>
-
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    {parada.tipo}
-                  </p>
-
-                  <p className="truncate font-bold text-slate-900">
-                    {parada.cliente ||
-                      parada.nomeCliente ||
-                      "Local não informado"}
-                  </p>
-                </div>
+                  {motoboys.map((motoboy: Motoboy) => (
+                    <option key={motoboy.id || motoboy.nome} value={motoboy.nome}>
+                      {motoboy.nome}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              <div className="space-y-2 text-sm text-slate-600">
-                <div className="flex items-start gap-2">
-                  <MapPin
-                    size={15}
-                    className="mt-0.5 shrink-0 text-slate-400"
-                  />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
+                    <Timer size={14} />
+                    Espera
+                  </label>
 
-                  <span className="leading-5">
-                    {parada.endereco || "Endereço não informado"}
-                  </span>
-                </div>
-
-                {parada.contato && (
-                  <div className="flex items-center gap-2">
-                    <Phone
-                      size={15}
-                      className="shrink-0 text-slate-400"
+                  <div className="relative mt-2">
+                    <input
+                      type="number"
+                      min="0"
+                      value={espera}
+                      onChange={(e) => alterarEspera(tele.id, Number(e.target.value))}
+                      className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 pr-10 text-sm outline-none focus:border-emerald-500"
                     />
 
-                    <span>{parada.contato}</span>
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
+                      min
+                    </span>
                   </div>
-                )}
+                </div>
 
-                {parada.observacao && (
-                  <div className="mt-3 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                    <strong>Observação:</strong>{" "}
-                    {parada.observacao}
-                  </div>
-                )}
+                <div>
+                  <label className="text-xs font-medium text-slate-600">Status</label>
+
+                  <select
+                    value={tele.status}
+                    onChange={(e) => alterarStatus(tele.id, e.target.value)}
+                    className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs outline-none focus:border-emerald-500"
+                  >
+                    {statusOptions.map((status) => (
+                      <option key={status}>{status}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
-          ))}
-        </div>
-
-        {tele.observacaoGeral && (
-          <div className="mt-3 rounded-2xl border border-orange-100 bg-orange-50 p-3 text-sm text-orange-800">
-            <strong>Observação geral:</strong>{" "}
-            {tele.observacaoGeral}
-          </div>
-        )}
-      </div>
-
-      {/* Operação */}
-      <div className="border-t border-slate-100 p-4">
-        <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">
-          Operação
-        </p>
-
-        <div className="space-y-3">
-          <div>
-            <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
-              <Bike size={14} />
-              Motoboy
-            </label>
-
-            <select
-              value={tele.motoboy || ""}
-              onChange={(e) =>
-                alterarMotoboy(tele.id, e.target.value)
-              }
-              className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-emerald-500"
-            >
-              <option value="">Selecionar motoboy</option>
-
-              {motoboys.map((motoboy: Motoboy) => (
-                <option
-                  key={motoboy.id || motoboy.nome}
-                  value={motoboy.nome}
-                >
-                  {motoboy.nome}
-                </option>
-              ))}
-            </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
-                <Timer size={14} />
-                Espera
-              </label>
+          {/* Financeiro */}
+          <div className="border-t border-slate-100 bg-emerald-50/70 p-4">
+            <div className="space-y-2">
+              <LinhaValor
+                label="Valor base"
+                valor={`R$ ${formatarValor(tele.valorBase || converterValor(tele.valor))}`}
+              />
 
-              <div className="relative mt-2">
-                <input
-                  type="number"
-                  min="0"
-                  value={espera}
-                  onChange={(e) =>
-                    alterarEspera(
-                      tele.id,
-                      Number(e.target.value)
-                    )
-                  }
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 pr-10 text-sm outline-none focus:border-emerald-500"
-                />
+              <LinhaValor label="Retorno" valor={`R$ ${formatarValor(tele.retorno || 0)}`} />
 
-                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
-                  min
-                </span>
+              <LinhaValor
+                label={`Espera (${espera} min)`}
+                valor={`R$ ${formatarValor(acrescimoEspera)}`}
+              />
+
+              <div className="flex items-center justify-between border-t border-emerald-200 pt-3">
+                <span className="font-bold text-emerald-800">Total</span>
+
+                <strong className="text-xl text-emerald-700">R$ {tele.valor}</strong>
               </div>
             </div>
+          </div>
 
-            <div>
-              <label className="text-xs font-medium text-slate-600">
-                Status
-              </label>
-
-              <select
-                value={tele.status}
-                onChange={(e) =>
-                  alterarStatus(tele.id, e.target.value)
-                }
-                className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs outline-none focus:border-emerald-500"
+          {/* Ações */}
+          <div className="border-t border-slate-100 p-4">
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => gerarOrcamento(tele)}
+                className="flex h-11 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
               >
-                {statusOptions.map((status) => (
-                  <option key={status}>{status}</option>
-                ))}
-              </select>
+                <MessageCircle size={16} />
+                Orçamento
+              </button>
+
+              <button
+                type="button"
+                onClick={() => gerarTeleMotoboy(tele)}
+                className="flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-900 text-sm font-semibold text-white transition hover:bg-slate-800"
+              >
+                <Send size={16} />
+                Gerar tele
+              </button>
             </div>
+
+            {tele.status !== "Entregue" && (
+              <button
+                type="button"
+                onClick={() => concluirTele(tele.id)}
+                className="mt-3 h-11 w-full rounded-xl bg-emerald-600 text-sm font-semibold text-white transition hover:bg-emerald-700"
+              >
+                Concluir entrega
+              </button>
+            )}
+
+            {tele.status === "Entregue" && (
+              <div className="mt-3 rounded-xl bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-700">
+                Entrega concluída
+              </div>
+            )}
           </div>
-        </div>
-      </div>
-
-      {/* Financeiro */}
-      <div className="border-t border-slate-100 bg-emerald-50/70 p-4">
-        <div className="space-y-2">
-          <LinhaValor
-            label="Valor base"
-            valor={`R$ ${formatarValor(
-              tele.valorBase || converterValor(tele.valor)
-            )}`}
-          />
-
-          <LinhaValor
-            label="Retorno"
-            valor={`R$ ${formatarValor(tele.retorno || 0)}`}
-          />
-
-          <LinhaValor
-            label={`Espera (${espera} min)`}
-            valor={`R$ ${formatarValor(acrescimoEspera)}`}
-          />
-
-          <div className="flex items-center justify-between border-t border-emerald-200 pt-3">
-            <span className="font-bold text-emerald-800">
-              Total
-            </span>
-
-            <strong className="text-xl text-emerald-700">
-              R$ {tele.valor}
-            </strong>
-          </div>
-        </div>
-      </div>
-
-      {/* Ações */}
-      <div className="border-t border-slate-100 p-4">
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={() => gerarOrcamento(tele)}
-            className="flex h-11 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
-          >
-            <MessageCircle size={16} />
-            Orçamento
-          </button>
-
-          <button
-            type="button"
-            onClick={() => gerarTeleMotoboy(tele)}
-            className="flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-900 text-sm font-semibold text-white transition hover:bg-slate-800"
-          >
-            <Send size={16} />
-            Gerar tele
-          </button>
-        </div>
-
-        {tele.status !== "Entregue" && (
-          <button
-            type="button"
-            onClick={() => concluirTele(tele.id)}
-            className="mt-3 h-11 w-full rounded-xl bg-emerald-600 text-sm font-semibold text-white transition hover:bg-emerald-700"
-          >
-            Concluir entrega
-          </button>
-        )}
-
-        {tele.status === "Entregue" && (
-          <div className="mt-3 rounded-xl bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-700">
-            Entrega concluída
-          </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 }

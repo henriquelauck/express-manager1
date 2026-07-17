@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { NextResponse } from "next/server";
 import type { StatusTele as StatusTeleBanco } from "@prisma/client";
+import { NextResponse } from "next/server";
 
 function statusParaBanco(status: string): StatusTeleBanco {
   const mapa: Record<string, StatusTeleBanco> = {
@@ -93,7 +93,8 @@ function formatarTeleParaTela(tele: any) {
     motoboyId: tele.motoboyId,
     motoboy: tele.motoboyNome || tele.motoboy?.nome || "",
     status: statusParaTela(tele.status),
-    criadoEm: formatarData(tele.dataTele || tele.createdAt),
+    criadoEm: formatarData(tele.createdAt),
+    dataOperacao: formatarData(tele.dataTele),
     dataTele: tele.dataTele,
     distanciaKm: tele.distanciaKm,
     tempoMinutos: tele.tempoMinutos,
