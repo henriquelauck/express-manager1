@@ -35,13 +35,11 @@ export default function FechamentosFinanceiro() {
   const [fechando, setFechando] = useState(false);
   const [recebimentos, setRecebimentos] = useState<any[]>([]);
 
-  
   function formatarValor(valor: number) {
     return valor.toFixed(2).replace(".", ",");
   }
 
-  
-   const clientesComFechamento = useMemo(() => {
+  const clientesComFechamento = useMemo(() => {
     return clientes
       .filter((cliente: any) => String(cliente.formaCobranca).toUpperCase() !== "NA_HORA")
       .map((cliente: any) => {
@@ -117,7 +115,7 @@ export default function FechamentosFinanceiro() {
   }
 
   async function confirmarFechamento() {
-    if (!clienteSelecionado) return;
+    if (!clienteSelecionado || fechando) return;
 
     if (!dataInicio || !dataFim) {
       alert("Selecione o período do fechamento.");
@@ -136,6 +134,7 @@ export default function FechamentosFinanceiro() {
     const totalRecebidoAgora = recebimentos.reduce((soma, item) => {
       return soma + converterValor(item.valorRecebido);
     }, 0);
+
     if (invalida) {
       alert("Verifique os valores recebidos.");
       return;
@@ -148,34 +147,46 @@ export default function FechamentosFinanceiro() {
 
     setFechando(true);
 
-    const resposta = await fetch("/api/fechamentos-financeiros", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        clienteNome: clienteSelecionado.nome,
-        dataInicio,
-        dataFim,
-        distribuicoes,
-        recebimentos,
-      }),
-    });
+    try {
+      const resposta = await fetch("/api/fechamentos-financeiros", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          clienteNome: clienteSelecionado.nome,
+          dataInicio,
+          dataFim,
+          distribuicoes,
+          recebimentos,
+        }),
+      });
 
-    if (!resposta.ok) {
-      const erro = await resposta.json();
-      alert(erro.erro || "Erro ao fechar cliente.");
+      if (!resposta.ok) {
+        let mensagemErro = "Erro ao fechar cliente.";
+
+        try {
+          const erro = await resposta.json();
+          mensagemErro = erro.erro || mensagemErro;
+        } catch {}
+
+        alert(mensagemErro);
+        return;
+      }
+
+      await recarregarDados();
+
+      setClienteSelecionado(null);
+      setDistribuicoes([]);
+      setRecebimentos([]);
+
+      alert("Fechamento realizado com sucesso!");
+    } catch (error) {
+      console.error("Erro ao confirmar fechamento:", error);
+      alert("Não foi possível concluir o fechamento. Verifique sua conexão e tente novamente.");
+    } finally {
       setFechando(false);
-      return;
     }
-
-    await recarregarDados();
-
-    setClienteSelecionado(null);
-    setDistribuicoes([]);
-    setRecebimentos([]);
-
-    alert("Fechamento realizado com sucesso!");
   }
 
   return (
@@ -390,6 +401,8 @@ export default function FechamentosFinanceiro() {
                 onClick={() => {
                   setClienteSelecionado(null);
                   setDistribuicoes([]);
+                  setRecebimentos([]);
+                  setFechando(false);
                 }}
                 className="w-full h-12 rounded-xl border border-slate-200"
               >
