@@ -6,6 +6,14 @@ export function useParadas() {
   const [paradas, setParadas] = useState<Parada[]>([
     {
       id: gerarId(),
+      tipo: "Coleta",
+      cliente: "",
+      endereco: "",
+      contato: "",
+      observacao: "",
+    },
+    {
+      id: gerarId(),
       tipo: "Entrega",
       cliente: "",
       endereco: "",
