@@ -3,7 +3,7 @@ import PageContainer from "@/components/ui/PageContainer";
 import PageHeader from "@/components/ui/PageHeader";
 import { useExpressManager } from "@/context/ExpressManagerContext";
 import { TipoParada } from "@/types/Parada";
-import { Tele } from "@/types/Tele";
+import type { StatusTele, Tele } from "@/types/Tele";
 import {
   Bike,
   ChevronDown,
@@ -48,13 +48,17 @@ type Parada = {
   observacao: string;
 };
 
-const statusOptions = [
+const statusOptions: StatusTele[] = [
   "Aguardando cliente",
   "Aguardando motoboy disponível",
   "Aguardando coleta",
   "Em rota",
   "Entregue",
 ];
+
+type SituacaoCobranca = "pago" | "pago_parcial" | "fim_semana" | "precisa_cobrar";
+
+type RecebedorPagamento = "escritorio" | "motoboy";
 
 export default function TelesPage() {
   const { clientes, motoboys, teles, setTeles, recarregarDados } = useExpressManager();
@@ -69,6 +73,13 @@ export default function TelesPage() {
   const [modalEdicaoAberto, setModalEdicaoAberto] = useState(false);
   const [teleEditando, setTeleEditando] = useState<any>(null);
   const [dataFiltro, setDataFiltro] = useState(new Date().toISOString().split("T")[0]);
+  const [teleArrastandoId, setTeleArrastandoId] = useState<string | null>(null);
+  const [statusSobrevoado, setStatusSobrevoado] = useState<StatusTele | null>(null);
+  const [telePagamento, setTelePagamento] = useState<Tele | null>(null);
+  const [valorPagamento, setValorPagamento] = useState("");
+  const [recebedorPagamento, setRecebedorPagamento] = useState<RecebedorPagamento>("escritorio");
+  const [motoboyRecebedorPagamento, setMotoboyRecebedorPagamento] = useState("");
+  const [salvandoPagamento, setSalvandoPagamento] = useState(false);
 
   const carregarTeles = useCallback(async () => {
     const resposta = await fetch("/api/teles");
@@ -158,22 +169,74 @@ export default function TelesPage() {
     if (!resposta.ok) {
       const erro = await resposta.text();
       alert(`Erro ao atualizar tele: ${erro}`);
-      return;
+      return false;
     }
 
     if (recarregar) {
       await recarregarDados();
     }
+
+    return true;
   }
 
-  async function alterarStatus(id: string, novoStatus: string) {
+  async function alterarStatus(id: string, novoStatus: StatusTele) {
     const tele = teles.find((item: Tele) => item.id === id);
-    if (!tele) return;
+    if (!tele) return false;
 
-    await salvarTeleNoBanco({
+    return salvarTeleNoBanco({
       ...tele,
       status: novoStatus,
     });
+  }
+
+  function iniciarArraste(event: React.DragEvent<HTMLDivElement>, teleId: string) {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", teleId);
+    setTeleArrastandoId(teleId);
+  }
+
+  function encerrarArraste() {
+    setTeleArrastandoId(null);
+    setStatusSobrevoado(null);
+  }
+
+  async function soltarTeleNaColuna(
+    event: React.DragEvent<HTMLDivElement>,
+    novoStatus: StatusTele
+  ) {
+    event.preventDefault();
+
+    const teleId = event.dataTransfer.getData("text/plain") || teleArrastandoId;
+
+    setStatusSobrevoado(null);
+    setTeleArrastandoId(null);
+
+    if (!teleId) return;
+
+    const teleAtual = teles.find((tele: Tele) => tele.id === teleId);
+
+    if (!teleAtual || teleAtual.status === novoStatus) {
+      return;
+    }
+
+    const statusAnterior = teleAtual.status;
+    const teleAtualizada = {
+      ...teleAtual,
+      status: novoStatus,
+    };
+
+    setTeles(teles.map((tele: Tele) => (tele.id === teleId ? teleAtualizada : tele)));
+
+    const salvou = await salvarTeleNoBanco(teleAtualizada, false);
+
+    if (!salvou) {
+      setTeles(
+        teles.map((tele: Tele) => (tele.id === teleId ? { ...tele, status: statusAnterior } : tele))
+      );
+      return;
+    }
+
+    await recarregarDados();
   }
 
   async function alterarMotoboy(id: string, motoboy: string) {
@@ -185,6 +248,135 @@ export default function TelesPage() {
       motoboy,
       status: motoboy ? "Aguardando coleta" : "Aguardando motoboy disponível",
     });
+  }
+
+  function saldoPendenteDaTele(tele: Tele) {
+    return Math.max(Number(tele.total || 0) - Number(tele.valorRecebido || 0), 0);
+  }
+
+  function descobrirSituacaoCobranca(tele: Tele): SituacaoCobranca {
+    const saldoPendente = saldoPendenteDaTele(tele);
+    const valorRecebido = Number(tele.valorRecebido || 0);
+
+    if (saldoPendente <= 0.009) {
+      return "pago";
+    }
+
+    if (valorRecebido > 0.009) {
+      return "pago_parcial";
+    }
+
+    if (tele.formaCobranca === "semanal") {
+      return "fim_semana";
+    }
+
+    return "precisa_cobrar";
+  }
+
+  function abrirPagamento(tele: Tele) {
+    const saldoPendente = saldoPendenteDaTele(tele);
+
+    setTelePagamento(tele);
+    setValorPagamento(formatarValor(saldoPendente));
+    setRecebedorPagamento(tele.recebimento === "motoboy" ? "motoboy" : "escritorio");
+    setMotoboyRecebedorPagamento(tele.motoboyRecebedor || tele.motoboy || "");
+  }
+
+  function fecharPagamento() {
+    if (salvandoPagamento) return;
+
+    setTelePagamento(null);
+    setValorPagamento("");
+    setRecebedorPagamento("escritorio");
+    setMotoboyRecebedorPagamento("");
+  }
+
+  async function registrarPagamento() {
+    if (!telePagamento || salvandoPagamento) return;
+
+    const valorAgora = converterValor(valorPagamento);
+    const recebidoAnterior = Number(telePagamento.valorRecebido || 0);
+    const saldoAnterior = saldoPendenteDaTele(telePagamento);
+
+    if (!Number.isFinite(valorAgora) || valorAgora <= 0) {
+      alert("Informe um valor recebido maior que zero.");
+      return;
+    }
+
+    if (valorAgora > saldoAnterior + 0.009) {
+      alert(`O valor recebido não pode ultrapassar o saldo de R$ ${formatarValor(saldoAnterior)}.`);
+      return;
+    }
+
+    if (recebedorPagamento === "motoboy" && !motoboyRecebedorPagamento) {
+      alert("Selecione o motoboy que recebeu o pagamento.");
+      return;
+    }
+
+    const novoValorRecebido = Math.min(
+      recebidoAnterior + valorAgora,
+      Number(telePagamento.total || 0)
+    );
+    const quitou = novoValorRecebido >= Number(telePagamento.total || 0) - 0.009;
+
+    const teleAtualizada: Tele = {
+      ...telePagamento,
+      recebimento: recebedorPagamento,
+      recebido: quitou,
+      valorRecebido: novoValorRecebido,
+      dataRecebimento: new Date().toISOString(),
+      motoboyRecebedor: recebedorPagamento === "motoboy" ? motoboyRecebedorPagamento : null,
+    };
+
+    setSalvandoPagamento(true);
+    setTeles(teles.map((item: Tele) => (item.id === telePagamento.id ? teleAtualizada : item)));
+
+    const salvou = await salvarTeleNoBanco(teleAtualizada, false);
+
+    if (!salvou) {
+      setTeles(teles.map((item: Tele) => (item.id === telePagamento.id ? telePagamento : item)));
+      setSalvandoPagamento(false);
+      return;
+    }
+
+    await recarregarDados();
+    setSalvandoPagamento(false);
+    setTelePagamento(null);
+    setValorPagamento("");
+    setRecebedorPagamento("escritorio");
+    setMotoboyRecebedorPagamento("");
+  }
+
+  async function alterarSituacaoCobranca(id: string, situacao: SituacaoCobranca) {
+    const tele = teles.find((item: Tele) => item.id === id);
+    if (!tele) return;
+
+    if (situacao === "pago" || situacao === "pago_parcial") {
+      abrirPagamento(tele);
+      return;
+    }
+
+    const teleAnterior = tele;
+    const possuiPagamento = Number(tele.valorRecebido || 0) > 0.009;
+
+    const teleAtualizada: Tele = {
+      ...tele,
+      formaCobranca: situacao === "fim_semana" ? "semanal" : "na_hora",
+      recebimento: possuiPagamento ? tele.recebimento : "pendente",
+      recebido: saldoPendenteDaTele(tele) <= 0.009,
+      motoboyRecebedor: possuiPagamento ? tele.motoboyRecebedor : null,
+    };
+
+    setTeles(teles.map((item: Tele) => (item.id === id ? teleAtualizada : item)));
+
+    const salvou = await salvarTeleNoBanco(teleAtualizada, false);
+
+    if (!salvou) {
+      setTeles(teles.map((item: Tele) => (item.id === id ? teleAnterior : item)));
+      return;
+    }
+
+    await recarregarDados();
   }
 
   function alterarEspera(id: string, minutos: number) {
@@ -242,6 +434,10 @@ export default function TelesPage() {
 
     setTeleEditando({
       ...tele,
+      formaCobranca: (tele as any).formaCobranca || "na_hora",
+      recebimento: (tele as any).recebimento || "pendente",
+      valorRecebido: String((tele as any).valorRecebido || ""),
+      motoboyRecebedor: (tele as any).motoboyRecebedor || "",
       paradas: getParadas(tele),
     });
 
@@ -274,18 +470,32 @@ export default function TelesPage() {
 
     const primeiraParada = teleEditando.paradas[0];
     const valorNumerico = converterValor(teleEditando.valor);
+    const recebimento = teleEditando.recebimento || "pendente";
+
+    const valorRecebido =
+      recebimento === "pendente"
+        ? 0
+        : converterValor(String(teleEditando.valorRecebido || teleEditando.valor || "0"));
+
+    const motoboyRecebedor =
+      recebimento === "motoboy"
+        ? teleEditando.motoboyRecebedor || teleEditando.motoboy || null
+        : null;
 
     await salvarTeleNoBanco({
       ...teleEditando,
       valorBase: valorNumerico,
       total: valorNumerico,
       valor: formatarValor(valorNumerico),
-
+      formaCobranca: teleEditando.formaCobranca || "na_hora",
+      recebimento,
+      recebido: recebimento !== "pendente",
+      valorRecebido,
+      motoboyRecebedor,
       nomeCliente: primeiraParada.cliente || primeiraParada.nomeCliente,
       endereco: primeiraParada.endereco,
       contato: primeiraParada.contato,
       observacao: primeiraParada.observacao,
-
       paradas: teleEditando.paradas,
     });
 
@@ -424,7 +634,7 @@ ${linkMaps}`
     <PageContainer>
       <PageHeader titulo="Central de Operações" descricao="Gerencie todas as teles." />
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5 gap-5 items-start">
-        <div className={`rounded-3xl p-4 border ${corColuna(status)}`}>
+        <div className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm">
           <label className="text-sm font-medium text-slate-600">Data das operações</label>
 
           <input
@@ -492,7 +702,22 @@ ${linkMaps}`
           return (
             <div
               key={status}
-              className={`rounded-3xl p-4 shadow-sm border min-h-[500px] ${corColuna(status)}`}
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+                setStatusSobrevoado(status);
+              }}
+              onDragLeave={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+                  setStatusSobrevoado(null);
+                }
+              }}
+              onDrop={(event) => void soltarTeleNaColuna(event, status)}
+              className={`rounded-3xl p-4 shadow-sm border min-h-[500px] transition ${
+                statusSobrevoado === status
+                  ? "ring-4 ring-emerald-300 ring-offset-2 scale-[1.01]"
+                  : ""
+              } ${corColuna(status)}`}
             >
               <div className="mb-5">
                 <div className="flex items-center justify-between">
@@ -510,10 +735,19 @@ ${linkMaps}`
                   <TeleCard
                     key={tele.id}
                     tele={tele}
+                    arrastando={teleArrastandoId === tele.id}
+                    onDragStart={(event: React.DragEvent<HTMLDivElement>) =>
+                      iniciarArraste(event, tele.id)
+                    }
+                    onDragEnd={encerrarArraste}
                     motoboys={motoboys}
                     alterarStatus={alterarStatus}
                     alterarMotoboy={alterarMotoboy}
                     alterarEspera={alterarEspera}
+                    alterarSituacaoCobranca={alterarSituacaoCobranca}
+                    descobrirSituacaoCobranca={descobrirSituacaoCobranca}
+                    abrirPagamento={abrirPagamento}
+                    saldoPendenteDaTele={saldoPendenteDaTele}
                     excluirTele={excluirTele}
                     editarTele={editarTele}
                     concluirTele={concluirTele}
@@ -566,6 +800,125 @@ ${linkMaps}`
               >
                 <MessageCircle size={22} />
                 WhatsApp
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {telePagamento && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-3xl bg-white p-5 shadow-xl md:p-7">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900">Registrar pagamento</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Informe o valor recebido e quem ficou com o dinheiro.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={fecharPagamento}
+                disabled={salvandoPagamento}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 disabled:opacity-50"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="mt-6 grid grid-cols-3 gap-3">
+              <ResumoPagamento label="Total" valor={telePagamento.total} />
+              <ResumoPagamento
+                label="Já recebido"
+                valor={Number(telePagamento.valorRecebido || 0)}
+              />
+              <ResumoPagamento
+                label="Pendente"
+                valor={saldoPendenteDaTele(telePagamento)}
+                destaque
+              />
+            </div>
+
+            <div className="mt-6">
+              <label className="text-sm font-medium text-slate-600">Valor recebido agora</label>
+              <input
+                value={valorPagamento}
+                onChange={(event) => setValorPagamento(event.target.value)}
+                inputMode="decimal"
+                placeholder="0,00"
+                className="mt-2 h-14 w-full rounded-xl border border-slate-200 px-4 text-lg font-semibold outline-none focus:border-emerald-500"
+              />
+              <p className="mt-2 text-xs text-slate-500">
+                O restante continuará pendente para o próximo fechamento.
+              </p>
+            </div>
+
+            <div className="mt-6">
+              <p className="text-sm font-medium text-slate-600">Quem recebeu?</p>
+
+              <div className="mt-2 grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setRecebedorPagamento("escritorio")}
+                  className={`rounded-xl border px-4 py-3 text-sm font-semibold transition ${
+                    recebedorPagamento === "escritorio"
+                      ? "border-blue-400 bg-blue-50 text-blue-800"
+                      : "border-slate-200 text-slate-600"
+                  }`}
+                >
+                  Escritório
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setRecebedorPagamento("motoboy")}
+                  className={`rounded-xl border px-4 py-3 text-sm font-semibold transition ${
+                    recebedorPagamento === "motoboy"
+                      ? "border-emerald-400 bg-emerald-50 text-emerald-800"
+                      : "border-slate-200 text-slate-600"
+                  }`}
+                >
+                  Motoboy
+                </button>
+              </div>
+            </div>
+
+            {recebedorPagamento === "motoboy" && (
+              <div className="mt-5">
+                <label className="text-sm font-medium text-slate-600">Motoboy recebedor</label>
+                <select
+                  value={motoboyRecebedorPagamento}
+                  onChange={(event) => setMotoboyRecebedorPagamento(event.target.value)}
+                  className="mt-2 h-14 w-full rounded-xl border border-slate-200 bg-white px-4 outline-none focus:border-emerald-500"
+                >
+                  <option value="">Selecionar motoboy</option>
+                  {motoboys.map((motoboy: Motoboy) => (
+                    <option key={motoboy.id || motoboy.nome} value={motoboy.nome}>
+                      {motoboy.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="mt-7 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={fecharPagamento}
+                disabled={salvandoPagamento}
+                className="h-13 rounded-xl border border-slate-200 font-medium text-slate-600 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void registrarPagamento()}
+                disabled={salvandoPagamento}
+                className="h-13 rounded-xl bg-emerald-600 font-semibold text-white disabled:opacity-60"
+              >
+                {salvandoPagamento ? "Salvando..." : "Registrar pagamento"}
               </button>
             </div>
           </div>
@@ -687,6 +1040,84 @@ ${linkMaps}`
               ))}
             </div>
 
+            <div className="my-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <h3 className="mb-4 text-xl font-bold">Financeiro</h3>
+
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                <div>
+                  <label className="text-sm font-medium text-slate-600">Forma de cobrança</label>
+
+                  <select
+                    value={teleEditando.formaCobranca || "na_hora"}
+                    onChange={(e) => atualizarTeleEditando("formaCobranca", e.target.value)}
+                    className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4"
+                  >
+                    <option value="na_hora">Na hora</option>
+                    <option value="semanal">Semanal</option>
+                    <option value="quinzenal">Quinzenal</option>
+                    <option value="mensal">Mensal</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium text-slate-600">Recebimento</label>
+
+                  <select
+                    value={teleEditando.recebimento || "pendente"}
+                    onChange={(e) => {
+                      const novoRecebimento = e.target.value;
+
+                      setTeleEditando((teleAtual: any) => ({
+                        ...teleAtual,
+                        recebimento: novoRecebimento,
+                        valorRecebido:
+                          novoRecebimento === "pendente"
+                            ? ""
+                            : teleAtual.valorRecebido || teleAtual.valor,
+                        motoboyRecebedor:
+                          novoRecebimento === "motoboy"
+                            ? teleAtual.motoboyRecebedor || teleAtual.motoboy || ""
+                            : "",
+                      }));
+                    }}
+                    className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4"
+                  >
+                    <option value="pendente">Pendente</option>
+                    <option value="escritorio">Recebido no escritório</option>
+                    <option value="motoboy">Recebido pelo motoboy</option>
+                  </select>
+                </div>
+
+                <InputModal
+                  label="Valor recebido"
+                  value={teleEditando.valorRecebido || ""}
+                  onChange={(value: string) => atualizarTeleEditando("valorRecebido", value)}
+                  placeholder="0,00"
+                  disabled={teleEditando.recebimento === "pendente"}
+                />
+
+                {teleEditando.recebimento === "motoboy" && (
+                  <div>
+                    <label className="text-sm font-medium text-slate-600">Motoboy recebedor</label>
+
+                    <select
+                      value={teleEditando.motoboyRecebedor || ""}
+                      onChange={(e) => atualizarTeleEditando("motoboyRecebedor", e.target.value)}
+                      className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4"
+                    >
+                      <option value="">Selecionar</option>
+
+                      {motoboys.map((motoboy: Motoboy) => (
+                        <option key={motoboy.id || motoboy.nome} value={motoboy.nome}>
+                          {motoboy.nome}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div className="flex flex-col md:flex-row md:justify-between gap-4">
               <button
                 onClick={() => setModalEdicaoAberto(false)}
@@ -766,27 +1197,68 @@ function StatusBadge({ status }: { status: string }) {
 
   return <span className={`inline-flex px-3 py-1 rounded-xl text-xs ${classes}`}>{status}</span>;
 }
-function InputModal({ label, value, onChange, placeholder, className }: any) {
+function InputModal({ label, value, onChange, placeholder, className, disabled = false }: any) {
   return (
     <div className={className}>
       {label && <label className="text-sm font-medium text-slate-600">{label}</label>}
 
       <input
-        value={value}
+        value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4"
+        disabled={disabled}
+        className="mt-2 h-12 w-full rounded-xl border border-slate-200 px-4 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
       />
     </div>
   );
 }
 
+function rotuloFormaCobranca(formaCobranca: string) {
+  const forma = String(formaCobranca || "na_hora").toLowerCase();
+
+  if (forma === "semanal") return "Semanal";
+  if (forma === "quinzenal") return "Quinzenal";
+  if (forma === "mensal") return "Mensal";
+
+  return "Na hora";
+}
+
+function rotuloRecebimento(recebimento: string) {
+  const status = String(recebimento || "pendente").toLowerCase();
+
+  if (status === "escritorio") return "Recebido no escritório";
+  if (status === "motoboy") return "Recebido pelo motoboy";
+
+  return "Pendente";
+}
+
+function corRecebimento(recebimento: string) {
+  const status = String(recebimento || "pendente").toLowerCase();
+
+  if (status === "escritorio") {
+    return "border-blue-200 bg-blue-50 text-blue-800";
+  }
+
+  if (status === "motoboy") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  }
+
+  return "border-amber-200 bg-amber-50 text-amber-800";
+}
+
 function TeleCard({
   tele,
+  arrastando,
+  onDragStart,
+  onDragEnd,
   motoboys,
   alterarStatus,
   alterarMotoboy,
   alterarEspera,
+  alterarSituacaoCobranca,
+  descobrirSituacaoCobranca,
+  abrirPagamento,
+  saldoPendenteDaTele,
   excluirTele,
   editarTele,
   concluirTele,
@@ -811,9 +1283,17 @@ function TeleCard({
   const destino = ultimaParada?.cliente || ultimaParada?.nomeCliente || "Destino não informado";
 
   const resumoRota = paradas.length > 1 && origem !== destino ? `${origem} → ${destino}` : origem;
+  const situacaoCobranca = descobrirSituacaoCobranca(tele);
 
   return (
-    <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md">
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      className={`cursor-grab overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md active:cursor-grabbing ${
+        arrastando ? "scale-[0.98] opacity-50 ring-2 ring-emerald-400" : ""
+      }`}
+    >
       <button
         type="button"
         onClick={() => setExpandido((estadoAtual) => !estadoAtual)}
@@ -823,6 +1303,8 @@ function TeleCard({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge status={tele.status} />
+
+              <SituacaoCobrancaBadge situacao={situacaoCobranca} />
 
               <span className="rounded-lg bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
                 {paradas.length} {paradas.length === 1 ? "parada" : "paradas"}
@@ -1063,6 +1545,123 @@ function TeleCard({
             </div>
           </div>
 
+          {/* Cobrança rápida */}
+          <div className="border-t border-slate-100 p-4">
+            <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">
+              Situação de cobrança
+            </p>
+
+            <div className="grid grid-cols-1 gap-2">
+              <button
+                type="button"
+                onClick={() => abrirPagamento(tele)}
+                className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left text-sm transition ${
+                  situacaoCobranca === "pago" || situacaoCobranca === "pago_parcial"
+                    ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                <span>
+                  <strong>
+                    {situacaoCobranca === "pago"
+                      ? "Pago"
+                      : situacaoCobranca === "pago_parcial"
+                        ? "Pago parcialmente"
+                        : "Registrar pagamento"}
+                  </strong>
+                  <span className="mt-0.5 block text-xs opacity-75">
+                    {situacaoCobranca === "pago"
+                      ? "Valor total recebido"
+                      : situacaoCobranca === "pago_parcial"
+                        ? `Recebido R$ ${formatarValor(
+                            Number(tele.valorRecebido || 0)
+                          )} • falta R$ ${formatarValor(saldoPendenteDaTele(tele))}`
+                        : "Informe valor e quem recebeu"}
+                  </span>
+                </span>
+                <span className="text-lg">🟢</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => alterarSituacaoCobranca(tele.id, "fim_semana")}
+                className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left text-sm transition ${
+                  situacaoCobranca === "fim_semana"
+                    ? "border-blue-300 bg-blue-50 text-blue-800"
+                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                <span>
+                  <strong>Paga no fim da semana</strong>
+                  <span className="mt-0.5 block text-xs opacity-75">Cobrança semanal pendente</span>
+                </span>
+                <span className="text-lg">🔵</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => alterarSituacaoCobranca(tele.id, "precisa_cobrar")}
+                className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left text-sm transition ${
+                  situacaoCobranca === "precisa_cobrar"
+                    ? "border-amber-300 bg-amber-50 text-amber-800"
+                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                <span>
+                  <strong>Precisa cobrar</strong>
+                  <span className="mt-0.5 block text-xs opacity-75">
+                    Pagamento pendente para cobrar agora
+                  </span>
+                </span>
+                <span className="text-lg">🟡</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Recebimento */}
+          <div className="border-t border-slate-100 p-4">
+            <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">
+              Recebimento
+            </p>
+
+            <div className={`rounded-2xl border p-4 ${corRecebimento(tele.recebimento)}`}>
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <strong className="text-sm">
+                  {tele.recebimento === "escritorio"
+                    ? "🔵 Recebido no escritório"
+                    : tele.recebimento === "motoboy"
+                      ? "🟢 Recebido pelo motoboy"
+                      : "🟡 Pagamento pendente"}
+                </strong>
+              </div>
+
+              <div className="space-y-2 text-sm">
+                <LinhaValor
+                  label="Forma de cobrança"
+                  valor={rotuloFormaCobranca(tele.formaCobranca)}
+                />
+
+                <LinhaValor label="Status" valor={rotuloRecebimento(tele.recebimento)} />
+
+                <LinhaValor
+                  label="Recebedor"
+                  valor={
+                    tele.recebimento === "motoboy"
+                      ? tele.motoboyRecebedor || tele.motoboy || "—"
+                      : tele.recebimento === "escritorio"
+                        ? "Escritório"
+                        : "—"
+                  }
+                />
+
+                <LinhaValor
+                  label="Valor recebido"
+                  valor={`R$ ${formatarValor(Number(tele.valorRecebido || 0))}`}
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Ações */}
           <div className="border-t border-slate-100 p-4">
             <div className="grid grid-cols-2 gap-3">
@@ -1103,6 +1702,52 @@ function TeleCard({
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function SituacaoCobrancaBadge({ situacao }: { situacao: SituacaoCobranca }) {
+  const configuracao = {
+    pago: {
+      texto: "Pago",
+      classes: "bg-emerald-100 text-emerald-700",
+    },
+    pago_parcial: {
+      texto: "Pago parcialmente",
+      classes: "bg-teal-100 text-teal-700",
+    },
+    fim_semana: {
+      texto: "Fim da semana",
+      classes: "bg-blue-100 text-blue-700",
+    },
+    precisa_cobrar: {
+      texto: "Precisa cobrar",
+      classes: "bg-amber-100 text-amber-700",
+    },
+  }[situacao];
+
+  return (
+    <span className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold ${configuracao.classes}`}>
+      {configuracao.texto}
+    </span>
+  );
+}
+
+function ResumoPagamento({
+  label,
+  valor,
+  destaque = false,
+}: {
+  label: string;
+  valor: number;
+  destaque?: boolean;
+}) {
+  return (
+    <div className={`rounded-2xl p-3 text-center ${destaque ? "bg-amber-50" : "bg-slate-50"}`}>
+      <p className="text-xs text-slate-500">{label}</p>
+      <strong className={`mt-1 block text-sm ${destaque ? "text-amber-700" : "text-slate-800"}`}>
+        R$ {valor.toFixed(2).replace(".", ",")}
+      </strong>
     </div>
   );
 }

@@ -104,7 +104,7 @@ function formatarTeleParaTela(tele: any) {
     espera: tele.espera,
     total: tele.total,
 
-    recebido: tele.recebimento !== "PENDENTE",
+    recebido: Number(tele.valorRecebido || 0) >= Number(tele.total || 0) - 0.009,
     recebimento: recebimentoParaTela(tele.recebimento),
     formaCobranca: tele.formaCobranca?.toLowerCase() || "semanal",
     valorRecebido: tele.valorRecebido,
@@ -223,6 +223,15 @@ export async function PUT(request: Request) {
   try {
     const body = await request.json();
 
+    const totalInformado = Number(
+      body.total ?? Number(String(body.valor || "0").replace(",", "."))
+    );
+    const valorRecebidoInformado = Math.max(
+      0,
+      Math.min(Number(body.valorRecebido || 0), totalInformado)
+    );
+    const possuiRecebimento = valorRecebidoInformado > 0.009;
+
     const motoboy = body.motoboy
       ? await prisma.motoboy.findFirst({
           where: { nome: body.motoboy },
@@ -247,12 +256,22 @@ export async function PUT(request: Request) {
         valorBase: body.valorBase || Number(String(body.valor || "0").replace(",", ".")),
         retorno: body.retorno || 0,
         espera: body.espera || 0,
-        total: body.total || Number(String(body.valor || "0").replace(",", ".")),
+        total: totalInformado,
 
-        recebimento: recebimentoParaBanco(body.recebimento || "pendente"),
+        recebimento: possuiRecebimento
+          ? recebimentoParaBanco(body.recebimento || "escritorio")
+          : "PENDENTE",
         formaCobranca: formaCobrancaParaBanco(body.formaCobranca || "semanal"),
-        valorRecebido: body.valorRecebido || 0,
-        motoboyRecebedor: body.motoboyRecebedor || null,
+        valorRecebido: valorRecebidoInformado,
+        dataRecebimento: possuiRecebimento
+          ? body.dataRecebimento
+            ? new Date(body.dataRecebimento)
+            : new Date()
+          : null,
+        motoboyRecebedor:
+          possuiRecebimento && body.recebimento === "motoboy"
+            ? body.motoboyRecebedor || null
+            : null,
         fechamentoId: body.fechamentoId || null,
         observacaoGeral: body.observacaoGeral || "",
 
