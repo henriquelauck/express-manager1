@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import type { StatusTele as StatusTeleBanco } from "@prisma/client";
+import type { StatusTele as StatusTeleBanco, TipoMovimentoFinanceiro } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 function statusParaBanco(status: string): StatusTeleBanco {
@@ -13,6 +13,7 @@ function statusParaBanco(status: string): StatusTeleBanco {
 
   return mapa[status] ?? "AGUARDANDO_CLIENTE";
 }
+
 function statusParaTela(status: string) {
   const mapa: Record<string, string> = {
     AGUARDANDO_CLIENTE: "Aguardando cliente",
@@ -26,7 +27,7 @@ function statusParaTela(status: string) {
 }
 
 function tipoParadaParaBanco(tipo: string) {
-  const mapa: any = {
+  const mapa: Record<string, string> = {
     Entrega: "ENTREGA",
     Coleta: "COLETA",
     Trocar: "TROCAR",
@@ -37,7 +38,7 @@ function tipoParadaParaBanco(tipo: string) {
 }
 
 function tipoParadaParaTela(tipo: string) {
-  const mapa: any = {
+  const mapa: Record<string, string> = {
     ENTREGA: "Entrega",
     COLETA: "Coleta",
     TROCAR: "Trocar",
@@ -48,7 +49,7 @@ function tipoParadaParaTela(tipo: string) {
 }
 
 function recebimentoParaBanco(recebimento: string) {
-  const mapa: any = {
+  const mapa: Record<string, string> = {
     pendente: "PENDENTE",
     escritorio: "ESCRITORIO",
     motoboy: "MOTOBOY",
@@ -58,7 +59,7 @@ function recebimentoParaBanco(recebimento: string) {
 }
 
 function recebimentoParaTela(recebimento: string) {
-  const mapa: any = {
+  const mapa: Record<string, string> = {
     PENDENTE: "pendente",
     ESCRITORIO: "escritorio",
     MOTOBOY: "motoboy",
@@ -68,7 +69,7 @@ function recebimentoParaTela(recebimento: string) {
 }
 
 function formaCobrancaParaBanco(forma: string) {
-  const mapa: any = {
+  const mapa: Record<string, string> = {
     na_hora: "NA_HORA",
     semanal: "SEMANAL",
     quinzenal: "QUINZENAL",
@@ -133,6 +134,103 @@ function formatarTeleParaTela(tele: any) {
   };
 }
 
+async function sincronizarRecebimentoMotoboy({
+  tx,
+  teleId,
+  solicitante,
+  recebimento,
+  valorRecebido,
+  motoboyRecebedor,
+}: {
+  tx: any;
+  teleId: string;
+  solicitante: string;
+  recebimento: string;
+  valorRecebido: number;
+  motoboyRecebedor: string | null;
+}) {
+  const tipoMovimento: TipoMovimentoFinanceiro = "CLIENTE";
+
+  const deveTerMovimento =
+    recebimento === "motoboy" && valorRecebido > 0.009 && Boolean(motoboyRecebedor);
+
+  const movimentosExistentes = await tx.movimentoFinanceiroMotoboy.findMany({
+    where: {
+      teleId,
+      tipo: tipoMovimento,
+    },
+    orderBy: {
+      createdAt: "asc",
+    },
+  });
+
+  if (!deveTerMovimento) {
+    if (movimentosExistentes.length > 0) {
+      await tx.movimentoFinanceiroMotoboy.deleteMany({
+        where: {
+          teleId,
+          tipo: tipoMovimento,
+        },
+      });
+    }
+
+    return;
+  }
+
+  const motoboy = await tx.motoboy.findFirst({
+    where: {
+      nome: motoboyRecebedor!,
+    },
+    select: {
+      id: true,
+      nome: true,
+    },
+  });
+
+  if (!motoboy) {
+    throw new Error("O motoboy recebedor não foi encontrado para gerar o extrato.");
+  }
+
+  const dadosMovimento = {
+    motoboyId: motoboy.id,
+    tipo: tipoMovimento,
+    clienteNome: solicitante || null,
+    valor: valorRecebido,
+    descricao: `Recebimento da tele de ${solicitante}`,
+    teleId,
+    fechamentoId: null,
+  };
+
+  if (movimentosExistentes.length === 0) {
+    await tx.movimentoFinanceiroMotoboy.create({
+      data: dadosMovimento,
+    });
+
+    return;
+  }
+
+  const movimentoPrincipal = movimentosExistentes[0];
+
+  await tx.movimentoFinanceiroMotoboy.update({
+    where: {
+      id: movimentoPrincipal.id,
+    },
+    data: dadosMovimento,
+  });
+
+  if (movimentosExistentes.length > 1) {
+    await tx.movimentoFinanceiroMotoboy.deleteMany({
+      where: {
+        teleId,
+        tipo: tipoMovimento,
+        id: {
+          not: movimentoPrincipal.id,
+        },
+      },
+    });
+  }
+}
+
 export async function GET() {
   const teles = await prisma.tele.findMany({
     include: {
@@ -169,115 +267,46 @@ export async function POST(request: Request) {
       })
     : null;
 
-  const tele = await prisma.tele.create({
-    data: {
-      clienteId: cliente?.id,
-      solicitante: body.solicitante,
-      dataTele: body.dataTele ? new Date(`${body.dataTele}T12:00:00`) : new Date(),
-      motoboyId: motoboy?.id,
-      motoboyNome: body.motoboy || "",
-      status: statusParaBanco(body.status || "Aguardando cliente"),
-      tipoRota: body.tipoRota || "Entrega",
+  const total = Number(body.total ?? Number(String(body.valor || "0").replace(",", ".")));
 
-      valorBase: body.valorBase || 0,
-      retorno: body.retorno || 0,
-      espera: body.espera || 0,
-      total: body.total || Number(String(body.valor || "0").replace(",", ".")),
+  const valorRecebido = Math.max(0, Math.min(Number(body.valorRecebido || 0), total));
 
-      distanciaKm: body.distanciaKm || null,
-      tempoMinutos: body.tempoMinutos || null,
-
-      recebimento: recebimentoParaBanco(body.recebimento || "pendente"),
-      formaCobranca: formaCobrancaParaBanco(body.formaCobranca || "semanal"),
-      valorRecebido: body.valorRecebido || 0,
-      motoboyRecebedor: body.motoboyRecebedor || null,
-      fechamentoId: body.fechamentoId || null,
-
-      observacaoGeral: body.observacaoGeral || "",
-
-      paradas: {
-        create: body.paradas.map((parada: any, index: number) => ({
-          tipo: tipoParadaParaBanco(parada.tipo),
-          cliente: parada.cliente || parada.nomeCliente || "",
-          endereco: parada.endereco || "",
-          contato: parada.contato || "",
-          observacao: parada.observacao || "",
-          ordem: index + 1,
-        })),
-      },
-    },
-    include: {
-      paradas: {
-        orderBy: {
-          ordem: "asc",
-        },
-      },
-      motoboy: true,
-      cliente: true,
-    },
-  });
-
-  return NextResponse.json(formatarTeleParaTela(tele));
-}
-export async function PUT(request: Request) {
-  try {
-    const body = await request.json();
-
-    const totalInformado = Number(
-      body.total ?? Number(String(body.valor || "0").replace(",", "."))
-    );
-    const valorRecebidoInformado = Math.max(
-      0,
-      Math.min(Number(body.valorRecebido || 0), totalInformado)
-    );
-    const possuiRecebimento = valorRecebidoInformado > 0.009;
-
-    const motoboy = body.motoboy
-      ? await prisma.motoboy.findFirst({
-          where: { nome: body.motoboy },
-        })
-      : null;
-
-    await prisma.teleParada.deleteMany({
-      where: { teleId: body.id },
-    });
-
-    const tele = await prisma.tele.update({
-      where: { id: body.id },
+  const tele = await prisma.$transaction(async (tx) => {
+    const teleCriada = await tx.tele.create({
       data: {
+        clienteId: cliente?.id,
         solicitante: body.solicitante,
-        dataTele: body.dataTele ? new Date(`${body.dataTele.slice(0, 10)}T12:00:00`) : undefined,
-
-        motoboyId: motoboy?.id || null,
+        dataTele: body.dataTele ? new Date(`${body.dataTele}T12:00:00`) : new Date(),
+        motoboyId: motoboy?.id,
         motoboyNome: body.motoboy || "",
-        status: statusParaBanco(body.status),
+        status: statusParaBanco(body.status || "Aguardando cliente"),
         tipoRota: body.tipoRota || "Entrega",
 
-        valorBase: body.valorBase || Number(String(body.valor || "0").replace(",", ".")),
+        valorBase: body.valorBase || 0,
         retorno: body.retorno || 0,
         espera: body.espera || 0,
-        total: totalInformado,
+        total,
 
-        recebimento: possuiRecebimento
-          ? recebimentoParaBanco(body.recebimento || "escritorio")
-          : "PENDENTE",
-        formaCobranca: formaCobrancaParaBanco(body.formaCobranca || "semanal"),
-        valorRecebido: valorRecebidoInformado,
-        dataRecebimento: possuiRecebimento
-          ? body.dataRecebimento
-            ? new Date(body.dataRecebimento)
-            : new Date()
-          : null,
+        distanciaKm: body.distanciaKm || null,
+        tempoMinutos: body.tempoMinutos || null,
+
+        recebimento: recebimentoParaBanco(
+          valorRecebido > 0 ? body.recebimento || "escritorio" : "pendente"
+        ) as any,
+        formaCobranca: formaCobrancaParaBanco(body.formaCobranca || "semanal") as any,
+        valorRecebido,
+        dataRecebimento: valorRecebido > 0 ? new Date() : null,
         motoboyRecebedor:
-          possuiRecebimento && body.recebimento === "motoboy"
+          valorRecebido > 0 && body.recebimento === "motoboy"
             ? body.motoboyRecebedor || null
             : null,
         fechamentoId: body.fechamentoId || null,
+
         observacaoGeral: body.observacaoGeral || "",
 
         paradas: {
           create: body.paradas.map((parada: any, index: number) => ({
-            tipo: tipoParadaParaBanco(parada.tipo),
+            tipo: tipoParadaParaBanco(parada.tipo) as any,
             cliente: parada.cliente || parada.nomeCliente || "",
             endereco: parada.endereco || "",
             contato: parada.contato || "",
@@ -288,11 +317,127 @@ export async function PUT(request: Request) {
       },
       include: {
         paradas: {
-          orderBy: { ordem: "asc" },
+          orderBy: {
+            ordem: "asc",
+          },
         },
         motoboy: true,
         cliente: true,
       },
+    });
+
+    await sincronizarRecebimentoMotoboy({
+      tx,
+      teleId: teleCriada.id,
+      solicitante: teleCriada.solicitante,
+      recebimento: body.recebimento || "pendente",
+      valorRecebido,
+      motoboyRecebedor: body.motoboyRecebedor || null,
+    });
+
+    return teleCriada;
+  });
+
+  return NextResponse.json(formatarTeleParaTela(tele));
+}
+
+export async function PUT(request: Request) {
+  try {
+    const body = await request.json();
+
+    const totalInformado = Number(
+      body.total ?? Number(String(body.valor || "0").replace(",", "."))
+    );
+
+    const valorRecebidoInformado = Math.max(
+      0,
+      Math.min(Number(body.valorRecebido || 0), totalInformado)
+    );
+
+    const possuiRecebimento = valorRecebidoInformado > 0.009;
+
+    const motoboy = body.motoboy
+      ? await prisma.motoboy.findFirst({
+          where: {
+            nome: body.motoboy,
+          },
+        })
+      : null;
+
+    const recebimentoTela = possuiRecebimento ? body.recebimento || "escritorio" : "pendente";
+
+    const motoboyRecebedor =
+      possuiRecebimento && recebimentoTela === "motoboy" ? body.motoboyRecebedor || null : null;
+
+    const tele = await prisma.$transaction(async (tx) => {
+      await tx.teleParada.deleteMany({
+        where: {
+          teleId: body.id,
+        },
+      });
+
+      const teleAtualizada = await tx.tele.update({
+        where: {
+          id: body.id,
+        },
+        data: {
+          solicitante: body.solicitante,
+          dataTele: body.dataTele ? new Date(`${body.dataTele.slice(0, 10)}T12:00:00`) : undefined,
+
+          motoboyId: motoboy?.id || null,
+          motoboyNome: body.motoboy || "",
+          status: statusParaBanco(body.status),
+          tipoRota: body.tipoRota || "Entrega",
+
+          valorBase: body.valorBase || Number(String(body.valor || "0").replace(",", ".")),
+          retorno: body.retorno || 0,
+          espera: body.espera || 0,
+          total: totalInformado,
+
+          recebimento: recebimentoParaBanco(recebimentoTela) as any,
+          formaCobranca: formaCobrancaParaBanco(body.formaCobranca || "semanal") as any,
+          valorRecebido: valorRecebidoInformado,
+          dataRecebimento: possuiRecebimento
+            ? body.dataRecebimento
+              ? new Date(body.dataRecebimento)
+              : new Date()
+            : null,
+          motoboyRecebedor,
+          fechamentoId: body.fechamentoId || null,
+          observacaoGeral: body.observacaoGeral || "",
+
+          paradas: {
+            create: body.paradas.map((parada: any, index: number) => ({
+              tipo: tipoParadaParaBanco(parada.tipo) as any,
+              cliente: parada.cliente || parada.nomeCliente || "",
+              endereco: parada.endereco || "",
+              contato: parada.contato || "",
+              observacao: parada.observacao || "",
+              ordem: index + 1,
+            })),
+          },
+        },
+        include: {
+          paradas: {
+            orderBy: {
+              ordem: "asc",
+            },
+          },
+          motoboy: true,
+          cliente: true,
+        },
+      });
+
+      await sincronizarRecebimentoMotoboy({
+        tx,
+        teleId: teleAtualizada.id,
+        solicitante: teleAtualizada.solicitante,
+        recebimento: recebimentoTela,
+        valorRecebido: valorRecebidoInformado,
+        motoboyRecebedor,
+      });
+
+      return teleAtualizada;
     });
 
     return NextResponse.json(formatarTeleParaTela(tele));
@@ -309,10 +454,19 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   const body = await request.json();
 
-  await prisma.tele.delete({
-    where: {
-      id: body.id,
-    },
+  await prisma.$transaction(async (tx) => {
+    await tx.movimentoFinanceiroMotoboy.deleteMany({
+      where: {
+        teleId: body.id,
+        tipo: "CLIENTE",
+      },
+    });
+
+    await tx.tele.delete({
+      where: {
+        id: body.id,
+      },
+    });
   });
 
   return NextResponse.json({ ok: true });
