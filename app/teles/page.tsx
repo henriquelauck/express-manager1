@@ -5,18 +5,24 @@ import { useExpressManager } from "@/context/ExpressManagerContext";
 import { TipoParada } from "@/types/Parada";
 import type { StatusTele, Tele } from "@/types/Tele";
 import {
+  AlertTriangle,
   Bike,
+  CalendarDays,
   ChevronDown,
   ChevronUp,
   Copy,
+  Filter,
+  Loader2,
   MapPin,
   MessageCircle,
   Pencil,
   Phone,
   Plus,
+  RotateCcw,
   Send,
   Timer,
   Trash2,
+  WalletCards,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -80,6 +86,9 @@ export default function TelesPage() {
   const [recebedorPagamento, setRecebedorPagamento] = useState<RecebedorPagamento>("escritorio");
   const [motoboyRecebedorPagamento, setMotoboyRecebedorPagamento] = useState("");
   const [salvandoPagamento, setSalvandoPagamento] = useState(false);
+  const [teleParaExcluir, setTeleParaExcluir] = useState<Tele | null>(null);
+  const [excluindoTele, setExcluindoTele] = useState(false);
+  const [erroExclusao, setErroExclusao] = useState("");
 
   const carregarTeles = useCallback(async () => {
     const resposta = await fetch("/api/teles");
@@ -241,9 +250,9 @@ export default function TelesPage() {
 
   async function alterarMotoboy(id: string, motoboy: string) {
     const tele = teles.find((item: Tele) => item.id === id);
-    if (!tele) return;
+    if (!tele) return false;
 
-    await salvarTeleNoBanco({
+    return salvarTeleNoBanco({
       ...tele,
       motoboy,
       status: motoboy ? "Aguardando coleta" : "Aguardando motoboy disponível",
@@ -349,11 +358,11 @@ export default function TelesPage() {
 
   async function alterarSituacaoCobranca(id: string, situacao: SituacaoCobranca) {
     const tele = teles.find((item: Tele) => item.id === id);
-    if (!tele) return;
+    if (!tele) return false;
 
     if (situacao === "pago" || situacao === "pago_parcial") {
       abrirPagamento(tele);
-      return;
+      return true;
     }
 
     const teleAnterior = tele;
@@ -373,10 +382,11 @@ export default function TelesPage() {
 
     if (!salvou) {
       setTeles(teles.map((item: Tele) => (item.id === id ? teleAnterior : item)));
-      return;
+      return false;
     }
 
     await recarregarDados();
+    return true;
   }
 
   function alterarEspera(id: string, minutos: number) {
@@ -408,24 +418,45 @@ export default function TelesPage() {
     }, 700);
   }
 
-  async function excluirTele(id: string) {
-    const confirmar = confirm("Tem certeza que deseja excluir essa tele?");
-    if (!confirmar) return;
+  function solicitarExclusao(tele: Tele) {
+    setErroExclusao("");
+    setTeleParaExcluir(tele);
+  }
 
-    const resposta = await fetch("/api/teles", {
-      method: "DELETE",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ id }),
-    });
+  function cancelarExclusao() {
+    if (excluindoTele) return;
 
-    if (!resposta.ok) {
-      const erro = await resposta.text();
-      alert(`Erro ao atualizar tele: ${erro}`);
-      return;
+    setErroExclusao("");
+    setTeleParaExcluir(null);
+  }
+
+  async function confirmarExclusaoTele() {
+    if (!teleParaExcluir || excluindoTele) return;
+
+    setExcluindoTele(true);
+    setErroExclusao("");
+
+    try {
+      const resposta = await fetch("/api/teles", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id: teleParaExcluir.id }),
+      });
+
+      if (!resposta.ok) {
+        const erro = await resposta.text();
+        throw new Error(erro || "Não foi possível excluir a tele.");
+      }
+
+      await recarregarDados();
+      setTeleParaExcluir(null);
+    } catch (erro) {
+      setErroExclusao(erro instanceof Error ? erro.message : "Não foi possível excluir a tele.");
+    } finally {
+      setExcluindoTele(false);
     }
-    await recarregarDados();
   }
 
   function editarTele(id: string) {
@@ -503,8 +534,8 @@ export default function TelesPage() {
     setTeleEditando(null);
   }
 
-  function concluirTele(id: string) {
-    alterarStatus(id, "Entregue");
+  async function concluirTele(id: string) {
+    return alterarStatus(id, "Entregue");
   }
 
   function gerarTextoParadas(tele: Tele, incluirObservacao: boolean) {
@@ -619,151 +650,294 @@ ${linkMaps}`
     }
   }
 
+  const telesFiltradas = teles.filter(
+    (tele: Tele) =>
+      ehDaDataSelecionada(tele) && ehDoMotoboySelecionado(tele) && ehDoClienteSelecionado(tele)
+  );
+
+  const totalFiltrado = telesFiltradas.reduce(
+    (total: number, tele: Tele) => total + converterValor(tele.valor),
+    0
+  );
+
+  const telesSemMotoboy = telesFiltradas.filter((tele: Tele) => !tele.motoboy).length;
+
+  const saldoPendenteFiltrado = telesFiltradas.reduce(
+    (total: number, tele: Tele) => total + saldoPendenteDaTele(tele),
+    0
+  );
+
+  const filtrosSecundariosAtivos = motoboyFiltro !== "todos" || clienteFiltro !== "todos";
+
+  function limparFiltros() {
+    setDataFiltro(new Date().toISOString().split("T")[0]);
+    setMotoboyFiltro("todos");
+    setClienteFiltro("todos");
+  }
+
   function totalPorStatus(status: string) {
-    return teles
-      .filter(
-        (tele: Tele) =>
-          tele.status === status &&
-          ehDaDataSelecionada(tele) &&
-          ehDoMotoboySelecionado(tele) &&
-          ehDoClienteSelecionado(tele)
-      )
+    return telesFiltradas
+      .filter((tele: Tele) => tele.status === status)
       .reduce((total: number, tele: Tele) => total + converterValor(tele.valor), 0);
   }
+
   return (
     <PageContainer>
-      <PageHeader titulo="Central de Operações" descricao="Gerencie todas as teles." />
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5 gap-5 items-start">
-        <div className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm">
-          <label className="text-sm font-medium text-slate-600">Data das operações</label>
+      <div className="mb-8 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+        <PageHeader
+          titulo="Central de Operações"
+          descricao="Acompanhe, filtre e movimente todas as teles do dia."
+        />
 
-          <input
-            type="date"
-            value={dataFiltro}
-            onChange={(e) => setDataFiltro(e.target.value)}
-            className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
-          />
-        </div>
+        <Link
+          href="/nova-tele"
+          className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 font-semibold text-white shadow-sm transition hover:bg-emerald-700 sm:w-auto"
+        >
+          <Plus size={20} />
+          Nova tele
+        </Link>
+      </div>
 
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
-          <label className="text-sm font-medium text-slate-600">Motoboy</label>
+      <section className="mb-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-5 md:flex-row md:items-center md:justify-between md:px-6">
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+              <Filter size={21} />
+            </div>
 
-          <select
-            value={motoboyFiltro}
-            onChange={(e) => setMotoboyFiltro(e.target.value)}
-            className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Filtros da operação</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Mostrando as teles conforme o período e os filtros selecionados.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={limparFiltros}
+            disabled={!filtrosSecundariosAtivos}
+            className="flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <option value="todos">Todos</option>
-            <option value="sem-motoboy">Sem motoboy</option>
-
-            {motoboys.map((motoboy: Motoboy) => (
-              <option key={motoboy.id || motoboy.nome} value={motoboy.nome}>
-                {motoboy.nome}
-              </option>
-            ))}
-          </select>
+            <RotateCcw size={16} />
+            Limpar filtros
+          </button>
         </div>
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
-          <label className="text-sm font-medium text-slate-600">Cliente</label>
 
-          <select
-            value={clienteFiltro}
-            onChange={(e) => setClienteFiltro(e.target.value)}
-            className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
-          >
-            <option value="todos">Todos</option>
+        <div className="grid grid-cols-1 gap-5 p-5 md:grid-cols-3 md:p-6">
+          <div>
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
+              <CalendarDays size={16} />
+              Data das operações
+            </label>
 
-            {[...new Set(clientes.map((cliente: Cliente) => cliente.nome))].sort().map((nome) => (
-              <option key={nome} value={nome}>
-                {nome}
-              </option>
-            ))}
-          </select>
+            <input
+              type="date"
+              value={dataFiltro}
+              onChange={(event) => setDataFiltro(event.target.value)}
+              className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+            />
+          </div>
+
+          <div>
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
+              <Bike size={16} />
+              Motoboy
+            </label>
+
+            <select
+              value={motoboyFiltro}
+              onChange={(event) => setMotoboyFiltro(event.target.value)}
+              className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+            >
+              <option value="todos">Todos os motoboys</option>
+              <option value="sem-motoboy">Somente sem motoboy</option>
+
+              {motoboys.map((motoboy: Motoboy) => (
+                <option key={motoboy.id || motoboy.nome} value={motoboy.nome}>
+                  {motoboy.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-slate-600">Cliente solicitante</label>
+
+            <select
+              value={clienteFiltro}
+              onChange={(event) => setClienteFiltro(event.target.value)}
+              className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+            >
+              <option value="todos">Todos os clientes</option>
+
+              {[...new Set(clientes.map((cliente: Cliente) => cliente.nome))].sort().map((nome) => (
+                <option key={nome} value={nome}>
+                  {nome}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
+      </section>
+
+      <div className="mb-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <ResumoOperacao
+          label="Teles filtradas"
+          value={String(telesFiltradas.length)}
+          description="Operações exibidas no quadro"
+        />
+
+        <ResumoOperacao
+          label="Valor das teles"
+          value={`R$ ${formatarValor(totalFiltrado)}`}
+          description="Total bruto das operações"
+        />
+
+        <ResumoOperacao
+          label="Sem motoboy"
+          value={String(telesSemMotoboy)}
+          description="Precisam de atribuição"
+          alerta={telesSemMotoboy > 0}
+        />
+
+        <ResumoOperacao
+          label="Saldo a receber"
+          value={`R$ ${formatarValor(saldoPendenteFiltrado)}`}
+          description="Valor ainda pendente"
+          alerta={saldoPendenteFiltrado > 0}
+        />
       </div>
 
       {teles.length === 0 && (
-        <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100 max-w-xl">
-          <h2 className="text-xl font-bold">Nenhuma tele cadastrada</h2>
-          <p className="text-slate-500 mt-2">Cadastre uma nova tele para ela aparecer aqui.</p>
+        <div className="mb-6 rounded-3xl border border-slate-100 bg-white p-8 text-center shadow-sm">
+          <h2 className="text-xl font-bold text-slate-900">Nenhuma tele cadastrada</h2>
+          <p className="mt-2 text-slate-500">
+            Cadastre uma nova tele para ela aparecer na Central de Operações.
+          </p>
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-5 items-start">
-        {statusOptions.map((status) => {
-          const telesDoStatus = teles.filter(
-            (tele: Tele) =>
-              tele.status === status &&
-              ehDaDataSelecionada(tele) &&
-              ehDoMotoboySelecionado(tele) &&
-              ehDoClienteSelecionado(tele)
-          );
+      {teles.length > 0 && telesFiltradas.length === 0 && (
+        <div className="mb-6 rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center">
+          <h2 className="text-xl font-bold text-slate-900">Nenhuma tele encontrada</h2>
+          <p className="mt-2 text-slate-500">
+            Não existem operações correspondentes à data e aos filtros escolhidos.
+          </p>
 
-          return (
-            <div
-              key={status}
-              onDragOver={(event) => {
-                event.preventDefault();
-                event.dataTransfer.dropEffect = "move";
-                setStatusSobrevoado(status);
-              }}
-              onDragLeave={(event) => {
-                if (!event.currentTarget.contains(event.relatedTarget as Node)) {
-                  setStatusSobrevoado(null);
-                }
-              }}
-              onDrop={(event) => void soltarTeleNaColuna(event, status)}
-              className={`rounded-3xl p-4 shadow-sm border min-h-[500px] transition ${
-                statusSobrevoado === status
-                  ? "ring-4 ring-emerald-300 ring-offset-2 scale-[1.01]"
-                  : ""
-              } ${corColuna(status)}`}
-            >
-              <div className="mb-5">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-bold">{status}</h2>
-                  <StatusBadge status={status} />
+          <button
+            type="button"
+            onClick={limparFiltros}
+            className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+          >
+            <RotateCcw size={16} />
+            Voltar para hoje
+          </button>
+        </div>
+      )}
+
+      <section className="w-full">
+        <div className="grid w-full grid-cols-1 items-start gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+          {statusOptions.map((status) => {
+            const telesDoStatus = teles.filter(
+              (tele: Tele) =>
+                tele.status === status &&
+                ehDaDataSelecionada(tele) &&
+                ehDoMotoboySelecionado(tele) &&
+                ehDoClienteSelecionado(tele)
+            );
+
+            return (
+              <div
+                key={status}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                  setStatusSobrevoado(status);
+                }}
+                onDragLeave={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+                    setStatusSobrevoado(null);
+                  }
+                }}
+                onDrop={(event) => void soltarTeleNaColuna(event, status)}
+                className={`min-h-[560px] min-w-0 rounded-3xl border p-4 shadow-sm transition ${
+                  statusSobrevoado === status
+                    ? "scale-[1.01] ring-4 ring-emerald-300 ring-offset-2"
+                    : ""
+                } ${corColuna(status)}`}
+              >
+                <div className="sticky top-0 z-10 -mx-1 mb-5 overflow-hidden rounded-2xl border border-white/70 bg-white/90 shadow-sm backdrop-blur">
+                  <div className="flex items-start justify-between gap-3 px-4 py-4">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`h-2.5 w-2.5 shrink-0 rounded-full ${corIndicadorStatus(
+                            status
+                          )}`}
+                        />
+
+                        <h2 className="text-base font-bold leading-5 text-slate-900">{status}</h2>
+                      </div>
+
+                      <p className="mt-2 text-xs text-slate-500">{descricaoStatus(status)}</p>
+                    </div>
+
+                    <span className="flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full bg-slate-900 px-2 text-xs font-bold text-white">
+                      {telesDoStatus.length}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/80 px-4 py-3">
+                    <span className="text-xs font-medium text-slate-500">Valor da coluna</span>
+
+                    <strong className="text-sm text-slate-900">
+                      R$ {formatarValor(totalPorStatus(status))}
+                    </strong>
+                  </div>
                 </div>
 
-                <p className="text-sm text-slate-500 mt-2">
-                  {telesDoStatus.length} teles • R$ {formatarValor(totalPorStatus(status))}
-                </p>
-              </div>
+                <div className="space-y-4">
+                  {telesDoStatus.length === 0 && (
+                    <div className="rounded-2xl border border-dashed border-white/70 bg-white/50 px-4 py-8 text-center text-sm text-slate-500">
+                      Arraste uma tele para esta coluna ou aguarde novas operações.
+                    </div>
+                  )}
 
-              <div className="space-y-4">
-                {telesDoStatus.map((tele: Tele) => (
-                  <TeleCard
-                    key={tele.id}
-                    tele={tele}
-                    arrastando={teleArrastandoId === tele.id}
-                    onDragStart={(event: React.DragEvent<HTMLDivElement>) =>
-                      iniciarArraste(event, tele.id)
-                    }
-                    onDragEnd={encerrarArraste}
-                    motoboys={motoboys}
-                    alterarStatus={alterarStatus}
-                    alterarMotoboy={alterarMotoboy}
-                    alterarEspera={alterarEspera}
-                    alterarSituacaoCobranca={alterarSituacaoCobranca}
-                    descobrirSituacaoCobranca={descobrirSituacaoCobranca}
-                    abrirPagamento={abrirPagamento}
-                    saldoPendenteDaTele={saldoPendenteDaTele}
-                    excluirTele={excluirTele}
-                    editarTele={editarTele}
-                    concluirTele={concluirTele}
-                    gerarOrcamento={gerarOrcamento}
-                    gerarTeleMotoboy={gerarTeleMotoboy}
-                    getParadas={getParadas}
-                    valorEspera={valorEspera}
-                    formatarValor={formatarValor}
-                    converterValor={converterValor}
-                  />
-                ))}
+                  {telesDoStatus.map((tele: Tele) => (
+                    <TeleCard
+                      key={tele.id}
+                      tele={tele}
+                      arrastando={teleArrastandoId === tele.id}
+                      onDragStart={(event: React.DragEvent<HTMLDivElement>) =>
+                        iniciarArraste(event, tele.id)
+                      }
+                      onDragEnd={encerrarArraste}
+                      motoboys={motoboys}
+                      alterarStatus={alterarStatus}
+                      alterarMotoboy={alterarMotoboy}
+                      alterarEspera={alterarEspera}
+                      alterarSituacaoCobranca={alterarSituacaoCobranca}
+                      descobrirSituacaoCobranca={descobrirSituacaoCobranca}
+                      abrirPagamento={abrirPagamento}
+                      saldoPendenteDaTele={saldoPendenteDaTele}
+                      solicitarExclusao={solicitarExclusao}
+                      editarTele={editarTele}
+                      concluirTele={concluirTele}
+                      gerarOrcamento={gerarOrcamento}
+                      gerarTeleMotoboy={gerarTeleMotoboy}
+                      getParadas={getParadas}
+                      valorEspera={valorEspera}
+                      formatarValor={formatarValor}
+                      converterValor={converterValor}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      </section>
 
       {modalAberto && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
@@ -925,188 +1099,188 @@ ${linkMaps}`
         </div>
       )}
 
-      {modalEdicaoAberto && teleEditando && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-          <div className="bg-white w-[95vw] max-w-[800px] max-h-[90vh] overflow-y-auto rounded-3xl p-5 md:p-8 shadow-xl">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold">Editar tele</h2>
+      {teleParaExcluir && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="titulo-excluir-tele"
+            className="w-full max-w-lg overflow-hidden rounded-3xl border border-red-100 bg-white shadow-2xl"
+          >
+            <div className="flex items-start gap-4 border-b border-red-100 bg-red-50 px-5 py-5 md:px-6">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-100 text-red-700">
+                <AlertTriangle size={23} />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <h2 id="titulo-excluir-tele" className="text-xl font-bold text-slate-900">
+                  Excluir esta tele?
+                </h2>
+                <p className="mt-1 text-sm leading-6 text-slate-600">
+                  Esta ação remove definitivamente a operação e não poderá ser desfeita.
+                </p>
+              </div>
 
               <button
-                onClick={() => setModalEdicaoAberto(false)}
-                className="w-10 h-10 rounded-xl border border-slate-200 flex items-center justify-center"
+                type="button"
+                onClick={cancelarExclusao}
+                disabled={excluindoTele}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-white disabled:cursor-wait disabled:opacity-50"
+                aria-label="Fechar confirmação"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
-              <div>
-                <label className="text-sm font-medium text-slate-600">Solicitante</label>
+            <div className="space-y-4 p-5 md:p-6">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Tele selecionada
+                </p>
 
-                <select
-                  value={teleEditando.solicitante}
-                  onChange={(e) => atualizarTeleEditando("solicitante", e.target.value)}
-                  className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4"
-                >
-                  {clientes.map((cliente: Cliente) => (
-                    <option key={cliente.id || cliente.nome} value={cliente.nome}>
-                      {cliente.nome}
-                    </option>
-                  ))}
-                </select>
+                <div className="mt-3 flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-900">{teleParaExcluir.solicitante}</p>
+                    <p className="mt-1 break-words text-sm leading-6 text-slate-600">
+                      {resumoDaRota(getParadas(teleParaExcluir))}
+                    </p>
+                  </div>
+
+                  <strong className="shrink-0 whitespace-nowrap text-emerald-700">
+                    R$ {teleParaExcluir.valor}
+                  </strong>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <StatusBadge status={teleParaExcluir.status} />
+
+                  <span className="rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-slate-500">
+                    {getParadas(teleParaExcluir).length}{" "}
+                    {getParadas(teleParaExcluir).length === 1 ? "parada" : "paradas"}
+                  </span>
+
+                  <span className="rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-slate-500">
+                    {teleParaExcluir.motoboy || "Sem motoboy"}
+                  </span>
+                </div>
               </div>
 
-              <InputModal
-                label="Valor"
-                value={teleEditando.valor}
-                onChange={(value: string) => atualizarTeleEditando("valor", value)}
-              />
-
-              <div>
-                <label className="text-sm font-medium text-slate-600">Motoboy</label>
-
-                <select
-                  value={teleEditando.motoboy || ""}
-                  onChange={(e) => atualizarTeleEditando("motoboy", e.target.value)}
-                  className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4"
-                >
-                  <option value="">Selecionar</option>
-                  {motoboys.map((motoboy: Motoboy) => (
-                    <option key={motoboy.id || motoboy.nome} value={motoboy.nome}>
-                      {motoboy.nome}
-                    </option>
-                  ))}
-                </select>
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
+                Confirme somente depois de verificar que esta não é uma tele válida ou necessária
+                para os fechamentos.
               </div>
 
-              <div>
-                <label className="text-sm font-medium text-slate-600">Status</label>
-
-                <select
-                  value={teleEditando.status}
-                  onChange={(e) => atualizarTeleEditando("status", e.target.value)}
-                  className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4"
-                >
-                  {statusOptions.map((status) => (
-                    <option key={status}>{status}</option>
-                  ))}
-                </select>
-              </div>
+              {erroExclusao && (
+                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {erroExclusao}
+                </div>
+              )}
             </div>
 
-            <h3 className="text-xl font-bold mb-4">Paradas</h3>
+            <div className="flex flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end md:px-6">
+              <button
+                type="button"
+                onClick={cancelarExclusao}
+                disabled={excluindoTele}
+                className="h-12 rounded-xl border border-slate-200 bg-white px-6 font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-50"
+              >
+                Manter tele
+              </button>
 
-            <div className="space-y-5">
-              {teleEditando.paradas.map((parada: any, index: number) => (
-                <div key={index} className="bg-slate-50 rounded-2xl p-5">
-                  <p className="font-bold mb-4">Parada {index + 1}</p>
+              <button
+                type="button"
+                onClick={() => void confirmarExclusaoTele()}
+                disabled={excluindoTele}
+                className="flex h-12 items-center justify-center gap-2 rounded-xl bg-red-600 px-6 font-semibold text-white transition hover:bg-red-700 disabled:cursor-wait disabled:opacity-60"
+              >
+                {excluindoTele ? (
+                  <>
+                    <Loader2 size={17} className="animate-spin" />
+                    Excluindo...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={17} />
+                    Excluir definitivamente
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <InputModal
-                      value={parada.tipo}
-                      onChange={(value: string) => atualizarParadaEditando(index, "tipo", value)}
-                    />
+      {modalEdicaoAberto && teleEditando && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-3 backdrop-blur-sm md:p-6">
+          <div className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-white/20 bg-slate-50 shadow-2xl">
+            <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-5 md:px-7">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-600">
+                  Central de Operações
+                </p>
+                <h2 className="mt-1 text-2xl font-bold text-slate-900">Editar tele</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Atualize a operação, as paradas e os dados de recebimento.
+                </p>
+              </div>
 
-                    <InputModal
-                      value={parada.cliente || parada.nomeCliente || ""}
-                      onChange={(value: string) => atualizarParadaEditando(index, "cliente", value)}
-                      placeholder="Nome do cliente"
-                    />
+              <button
+                type="button"
+                onClick={() => setModalEdicaoAberto(false)}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
+                aria-label="Fechar edição"
+              >
+                <X size={19} />
+              </button>
+            </div>
 
-                    <InputModal
-                      value={parada.contato || ""}
-                      onChange={(value: string) => atualizarParadaEditando(index, "contato", value)}
-                      placeholder="Contato"
-                    />
-
-                    <InputModal
-                      value={parada.endereco || ""}
-                      onChange={(value: string) =>
-                        atualizarParadaEditando(index, "endereco", value)
-                      }
-                      placeholder="Endereço"
-                    />
-
-                    <InputModal
-                      value={parada.observacao || ""}
-                      onChange={(value: string) =>
-                        atualizarParadaEditando(index, "observacao", value)
-                      }
-                      placeholder="Observação"
-                      className="md:col-span-2"
-                    />
+            <div className="flex-1 space-y-6 overflow-y-auto p-4 md:p-7">
+              <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-center gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-100 text-blue-700">
+                    <Bike size={19} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900">Dados operacionais</h3>
+                    <p className="text-xs text-slate-500">
+                      Cliente, valor, responsável e etapa atual.
+                    </p>
                   </div>
                 </div>
-              ))}
-            </div>
 
-            <div className="my-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
-              <h3 className="mb-4 text-xl font-bold">Financeiro</h3>
-
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                <div>
-                  <label className="text-sm font-medium text-slate-600">Forma de cobrança</label>
-
-                  <select
-                    value={teleEditando.formaCobranca || "na_hora"}
-                    onChange={(e) => atualizarTeleEditando("formaCobranca", e.target.value)}
-                    className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4"
-                  >
-                    <option value="na_hora">Na hora</option>
-                    <option value="semanal">Semanal</option>
-                    <option value="quinzenal">Quinzenal</option>
-                    <option value="mensal">Mensal</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium text-slate-600">Recebimento</label>
-
-                  <select
-                    value={teleEditando.recebimento || "pendente"}
-                    onChange={(e) => {
-                      const novoRecebimento = e.target.value;
-
-                      setTeleEditando((teleAtual: any) => ({
-                        ...teleAtual,
-                        recebimento: novoRecebimento,
-                        valorRecebido:
-                          novoRecebimento === "pendente"
-                            ? ""
-                            : teleAtual.valorRecebido || teleAtual.valor,
-                        motoboyRecebedor:
-                          novoRecebimento === "motoboy"
-                            ? teleAtual.motoboyRecebedor || teleAtual.motoboy || ""
-                            : "",
-                      }));
-                    }}
-                    className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4"
-                  >
-                    <option value="pendente">Pendente</option>
-                    <option value="escritorio">Recebido no escritório</option>
-                    <option value="motoboy">Recebido pelo motoboy</option>
-                  </select>
-                </div>
-
-                <InputModal
-                  label="Valor recebido"
-                  value={teleEditando.valorRecebido || ""}
-                  onChange={(value: string) => atualizarTeleEditando("valorRecebido", value)}
-                  placeholder="0,00"
-                  disabled={teleEditando.recebimento === "pendente"}
-                />
-
-                {teleEditando.recebimento === "motoboy" && (
+                <div className="grid grid-cols-1 gap-5 p-5 md:grid-cols-2">
                   <div>
-                    <label className="text-sm font-medium text-slate-600">Motoboy recebedor</label>
-
+                    <label className="text-sm font-medium text-slate-600">Solicitante</label>
                     <select
-                      value={teleEditando.motoboyRecebedor || ""}
-                      onChange={(e) => atualizarTeleEditando("motoboyRecebedor", e.target.value)}
-                      className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4"
+                      value={teleEditando.solicitante}
+                      onChange={(event) => atualizarTeleEditando("solicitante", event.target.value)}
+                      className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
                     >
-                      <option value="">Selecionar</option>
+                      {clientes.map((cliente: Cliente) => (
+                        <option key={cliente.id || cliente.nome} value={cliente.nome}>
+                          {cliente.nome}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
+                  <InputModal
+                    label="Valor da tele"
+                    value={teleEditando.valor}
+                    onChange={(value: string) => atualizarTeleEditando("valor", value)}
+                    placeholder="0,00"
+                  />
+
+                  <div>
+                    <label className="text-sm font-medium text-slate-600">
+                      Motoboy responsável
+                    </label>
+                    <select
+                      value={teleEditando.motoboy || ""}
+                      onChange={(event) => atualizarTeleEditando("motoboy", event.target.value)}
+                      className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                    >
+                      <option value="">Sem motoboy definido</option>
                       {motoboys.map((motoboy: Motoboy) => (
                         <option key={motoboy.id || motoboy.nome} value={motoboy.nome}>
                           {motoboy.nome}
@@ -1114,21 +1288,228 @@ ${linkMaps}`
                       ))}
                     </select>
                   </div>
-                )}
-              </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-slate-600">Status da operação</label>
+                    <select
+                      value={teleEditando.status}
+                      onChange={(event) => atualizarTeleEditando("status", event.target.value)}
+                      className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                    >
+                      {statusOptions.map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </section>
+
+              <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-center justify-between gap-4 border-b border-slate-100 bg-slate-50/70 px-5 py-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-100 text-violet-700">
+                      <MapPin size={19} />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-900">Rota e paradas</h3>
+                      <p className="text-xs text-slate-500">
+                        Confira os locais e informações de cada etapa.
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-bold text-white">
+                    {teleEditando.paradas.length}{" "}
+                    {teleEditando.paradas.length === 1 ? "parada" : "paradas"}
+                  </span>
+                </div>
+
+                <div className="space-y-4 p-5">
+                  {teleEditando.paradas.map((parada: Parada, index: number) => (
+                    <div
+                      key={parada.id || `${index}-${parada.endereco}`}
+                      className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/70"
+                    >
+                      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">
+                            {index + 1}
+                          </span>
+                          <div>
+                            <p className="text-sm font-bold text-slate-900">Parada {index + 1}</p>
+                            <p className="text-xs text-slate-500">
+                              {parada.tipo || "Tipo não informado"}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-4 p-4 md:grid-cols-2">
+                        <InputModal
+                          label="Tipo da parada"
+                          value={parada.tipo}
+                          onChange={(value: string) =>
+                            atualizarParadaEditando(index, "tipo", value)
+                          }
+                          placeholder="Coleta ou entrega"
+                        />
+
+                        <InputModal
+                          label="Cliente ou local"
+                          value={parada.cliente || parada.nomeCliente || ""}
+                          onChange={(value: string) =>
+                            atualizarParadaEditando(index, "cliente", value)
+                          }
+                          placeholder="Nome do cliente"
+                        />
+
+                        <InputModal
+                          label="Contato"
+                          value={parada.contato || ""}
+                          onChange={(value: string) =>
+                            atualizarParadaEditando(index, "contato", value)
+                          }
+                          placeholder="Nome ou telefone"
+                        />
+
+                        <InputModal
+                          label="Endereço"
+                          value={parada.endereco || ""}
+                          onChange={(value: string) =>
+                            atualizarParadaEditando(index, "endereco", value)
+                          }
+                          placeholder="Endereço completo"
+                        />
+
+                        <InputModal
+                          label="Observação"
+                          value={parada.observacao || ""}
+                          onChange={(value: string) =>
+                            atualizarParadaEditando(index, "observacao", value)
+                          }
+                          placeholder="Instruções desta parada"
+                          className="md:col-span-2"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-center gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                    <WalletCards size={19} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900">Financeiro</h3>
+                    <p className="text-xs text-slate-500">
+                      Defina cobrança, recebimento e responsável pelo valor.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-5 p-5 md:grid-cols-2">
+                  <div>
+                    <label className="text-sm font-medium text-slate-600">Forma de cobrança</label>
+                    <select
+                      value={teleEditando.formaCobranca || "na_hora"}
+                      onChange={(event) =>
+                        atualizarTeleEditando("formaCobranca", event.target.value)
+                      }
+                      className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                    >
+                      <option value="na_hora">Cobrar na hora</option>
+                      <option value="semanal">Fechamento semanal</option>
+                      <option value="quinzenal">Fechamento quinzenal</option>
+                      <option value="mensal">Fechamento mensal</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-slate-600">
+                      Situação do recebimento
+                    </label>
+                    <select
+                      value={teleEditando.recebimento || "pendente"}
+                      onChange={(event) => {
+                        const novoRecebimento = event.target.value;
+
+                        setTeleEditando((teleAtual: any) => ({
+                          ...teleAtual,
+                          recebimento: novoRecebimento,
+                          valorRecebido:
+                            novoRecebimento === "pendente"
+                              ? ""
+                              : teleAtual.valorRecebido || teleAtual.valor,
+                          motoboyRecebedor:
+                            novoRecebimento === "motoboy"
+                              ? teleAtual.motoboyRecebedor || teleAtual.motoboy || ""
+                              : "",
+                        }));
+                      }}
+                      className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                    >
+                      <option value="pendente">Pagamento pendente</option>
+                      <option value="escritorio">Recebido no escritório</option>
+                      <option value="motoboy">Recebido pelo motoboy</option>
+                    </select>
+                  </div>
+
+                  <InputModal
+                    label="Valor recebido"
+                    value={teleEditando.valorRecebido || ""}
+                    onChange={(value: string) => atualizarTeleEditando("valorRecebido", value)}
+                    placeholder="0,00"
+                    disabled={teleEditando.recebimento === "pendente"}
+                  />
+
+                  {teleEditando.recebimento === "motoboy" ? (
+                    <div>
+                      <label className="text-sm font-medium text-slate-600">
+                        Motoboy recebedor
+                      </label>
+                      <select
+                        value={teleEditando.motoboyRecebedor || ""}
+                        onChange={(event) =>
+                          atualizarTeleEditando("motoboyRecebedor", event.target.value)
+                        }
+                        className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                      >
+                        <option value="">Selecionar motoboy</option>
+                        {motoboys.map((motoboy: Motoboy) => (
+                          <option key={motoboy.id || motoboy.nome} value={motoboy.nome}>
+                            {motoboy.nome}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="flex min-h-20 items-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 text-sm text-slate-500">
+                      {teleEditando.recebimento === "pendente"
+                        ? "O valor continuará pendente para o fechamento."
+                        : "O recebimento ficará registrado no escritório."}
+                    </div>
+                  )}
+                </div>
+              </section>
             </div>
 
-            <div className="flex flex-col md:flex-row md:justify-between gap-4">
+            <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:justify-end md:px-7">
               <button
+                type="button"
                 onClick={() => setModalEdicaoAberto(false)}
-                className="px-5 py-3 rounded-xl border border-slate-200"
+                className="h-12 rounded-xl border border-slate-200 px-6 font-medium text-slate-600 transition hover:bg-slate-50"
               >
                 Cancelar
               </button>
 
               <button
-                onClick={salvarEdicaoTele}
-                className="px-5 py-3 rounded-xl bg-emerald-600 text-white"
+                type="button"
+                onClick={() => void salvarEdicaoTele()}
+                className="flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 font-semibold text-white transition hover:bg-emerald-700"
               >
                 Salvar alterações
               </button>
@@ -1146,6 +1527,93 @@ ${linkMaps}`
     </PageContainer>
   );
 }
+
+type ResumoOperacaoProps = {
+  label: string;
+  value: string;
+  description: string;
+  alerta?: boolean;
+};
+
+function ResumoOperacao({ label, value, description, alerta = false }: ResumoOperacaoProps) {
+  return (
+    <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+      <p className="text-sm font-medium text-slate-500">{label}</p>
+      <strong
+        className={`mt-2 block text-2xl font-bold ${alerta ? "text-orange-600" : "text-slate-900"}`}
+      >
+        {value}
+      </strong>
+      <p className="mt-1 text-xs text-slate-400">{description}</p>
+    </div>
+  );
+}
+
+function resumoDaRota(paradas: Parada[]) {
+  if (!paradas.length) return "Rota não informada";
+
+  const primeira = paradas[0];
+  const ultima = paradas[paradas.length - 1];
+
+  const origem =
+    primeira.cliente || primeira.nomeCliente || primeira.endereco || "Origem não informada";
+
+  if (paradas.length === 1) return origem;
+
+  const destino =
+    ultima.cliente || ultima.nomeCliente || ultima.endereco || "Destino não informado";
+
+  return `${origem} → ${destino}`;
+}
+
+function descricaoStatus(status: string) {
+  if (status === "Aguardando cliente") {
+    return "Operações aguardando confirmação.";
+  }
+
+  if (status === "Aguardando motoboy disponível") {
+    return "Teles ainda sem motoboy definido.";
+  }
+
+  if (status === "Aguardando coleta") {
+    return "Motoboy definido e aguardando início.";
+  }
+
+  if (status === "Em rota") {
+    return "Operações em andamento.";
+  }
+
+  if (status === "Entregue") {
+    return "Entregas concluídas no período.";
+  }
+
+  return "Operações desta etapa.";
+}
+
+function corIndicadorStatus(status: string) {
+  if (status === "Aguardando cliente") {
+    return "bg-slate-500";
+  }
+
+  if (status === "Aguardando motoboy disponível") {
+    return "bg-orange-500";
+  }
+
+  if (status === "Aguardando coleta") {
+    return "bg-violet-500";
+  }
+
+  if (status === "Em rota") {
+    return "bg-sky-500";
+  }
+
+  if (status === "Entregue") {
+    return "bg-emerald-500";
+  }
+
+  return "bg-slate-400";
+}
+
 function corColuna(status: string) {
   const texto = String(status).toLowerCase();
 
@@ -1259,7 +1727,7 @@ function TeleCard({
   descobrirSituacaoCobranca,
   abrirPagamento,
   saldoPendenteDaTele,
-  excluirTele,
+  solicitarExclusao,
   editarTele,
   concluirTele,
   gerarOrcamento,
@@ -1270,6 +1738,19 @@ function TeleCard({
   converterValor,
 }: any) {
   const [expandido, setExpandido] = useState(false);
+  const [acaoSalvando, setAcaoSalvando] = useState<string | null>(null);
+
+  async function executarAcao(chave: string, acao: () => Promise<unknown>) {
+    if (acaoSalvando) return;
+
+    setAcaoSalvando(chave);
+
+    try {
+      await acao();
+    } finally {
+      setAcaoSalvando(null);
+    }
+  }
 
   const espera = tele.esperaMinutos || 0;
   const acrescimoEspera = valorEspera(espera);
@@ -1297,50 +1778,57 @@ function TeleCard({
       <button
         type="button"
         onClick={() => setExpandido((estadoAtual) => !estadoAtual)}
-        className="w-full border-b border-slate-100 bg-slate-50 p-4 text-left transition hover:bg-slate-100"
+        className="w-full border-b border-slate-100 bg-white p-4 text-left transition hover:bg-slate-50"
       >
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge status={tele.status} />
-
               <SituacaoCobrancaBadge situacao={situacaoCobranca} />
 
-              <span className="rounded-lg bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
+              <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-500">
                 {paradas.length} {paradas.length === 1 ? "parada" : "paradas"}
               </span>
             </div>
 
-            <h3 className="mt-4 break-words text-[15px] font-bold leading-6 text-slate-900">
+            <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              {tele.solicitante}
+            </p>
+
+            <h3 className="mt-1 break-words text-[15px] font-bold leading-6 text-slate-900">
               {resumoRota}
             </h3>
-
-            <div className="mt-4 space-y-2 text-xs text-slate-500">
-              <div className="flex items-center gap-2">
-                <Bike size={14} className="shrink-0" />
-
-                <span className="leading-5">
-                  {tele.motoboy ? `Motoboy: ${tele.motoboy}` : "Motoboy não definido"}
-                </span>
-              </div>
-
-              {tele.criadoEm && (
-                <div className="pl-6 leading-5 text-slate-400">{tele.criadoEm}</div>
-              )}
-            </div>
           </div>
 
-          <div className="flex shrink-0 flex-col items-end gap-4">
+          <div className="flex shrink-0 flex-col items-end gap-3">
             <strong className="whitespace-nowrap text-base font-bold text-emerald-700">
               R$ {tele.valor}
             </strong>
 
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm">
-              {expandido ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm">
+              {expandido ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
             </span>
           </div>
         </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-2 border-t border-slate-100 pt-3 text-xs text-slate-500">
+          <div className="flex items-center gap-2">
+            <Bike size={14} className="shrink-0 text-slate-400" />
+
+            <span className={tele.motoboy ? "" : "font-medium text-orange-600"}>
+              {tele.motoboy || "Motoboy não definido"}
+            </span>
+          </div>
+
+          {tele.criadoEm && <p className="truncate pl-6 text-slate-400">{tele.criadoEm}</p>}
+        </div>
       </button>
+
+      {acaoSalvando && (
+        <div className="flex items-center justify-center gap-2 border-b border-emerald-100 bg-emerald-50 px-4 py-2 text-xs font-medium text-emerald-700">
+          <Loader2 size={14} className="animate-spin" />
+          Salvando alteração...
+        </div>
+      )}
 
       {expandido && (
         <>
@@ -1373,7 +1861,7 @@ function TeleCard({
 
                 <button
                   type="button"
-                  onClick={() => excluirTele(tele.id)}
+                  onClick={() => solicitarExclusao(tele)}
                   title="Excluir tele"
                   className="flex h-9 w-9 items-center justify-center rounded-xl border border-red-100 bg-white text-red-600 transition hover:bg-red-50"
                 >
@@ -1470,8 +1958,12 @@ function TeleCard({
 
                 <select
                   value={tele.motoboy || ""}
-                  onChange={(e) => alterarMotoboy(tele.id, e.target.value)}
-                  className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-emerald-500"
+                  disabled={Boolean(acaoSalvando)}
+                  onChange={(e) => {
+                    const novoMotoboy = e.target.value;
+                    void executarAcao("motoboy", () => alterarMotoboy(tele.id, novoMotoboy));
+                  }}
+                  className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-emerald-500 disabled:cursor-wait disabled:bg-slate-100"
                 >
                   <option value="">Selecionar motoboy</option>
 
@@ -1510,8 +2002,12 @@ function TeleCard({
 
                   <select
                     value={tele.status}
-                    onChange={(e) => alterarStatus(tele.id, e.target.value)}
-                    className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs outline-none focus:border-emerald-500"
+                    disabled={Boolean(acaoSalvando)}
+                    onChange={(e) => {
+                      const novoStatus = e.target.value as StatusTele;
+                      void executarAcao("status", () => alterarStatus(tele.id, novoStatus));
+                    }}
+                    className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs outline-none focus:border-emerald-500 disabled:cursor-wait disabled:bg-slate-100"
                   >
                     {statusOptions.map((status) => (
                       <option key={status}>{status}</option>
@@ -1584,8 +2080,13 @@ function TeleCard({
 
               <button
                 type="button"
-                onClick={() => alterarSituacaoCobranca(tele.id, "fim_semana")}
-                className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left text-sm transition ${
+                disabled={Boolean(acaoSalvando)}
+                onClick={() =>
+                  void executarAcao("cobranca", () =>
+                    alterarSituacaoCobranca(tele.id, "fim_semana")
+                  )
+                }
+                className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left text-sm transition disabled:cursor-wait disabled:opacity-60 ${
                   situacaoCobranca === "fim_semana"
                     ? "border-blue-300 bg-blue-50 text-blue-800"
                     : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
@@ -1600,8 +2101,13 @@ function TeleCard({
 
               <button
                 type="button"
-                onClick={() => alterarSituacaoCobranca(tele.id, "precisa_cobrar")}
-                className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left text-sm transition ${
+                disabled={Boolean(acaoSalvando)}
+                onClick={() =>
+                  void executarAcao("cobranca", () =>
+                    alterarSituacaoCobranca(tele.id, "precisa_cobrar")
+                  )
+                }
+                className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left text-sm transition disabled:cursor-wait disabled:opacity-60 ${
                   situacaoCobranca === "precisa_cobrar"
                     ? "border-amber-300 bg-amber-50 text-amber-800"
                     : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
@@ -1687,10 +2193,12 @@ function TeleCard({
             {tele.status !== "Entregue" && (
               <button
                 type="button"
-                onClick={() => concluirTele(tele.id)}
-                className="mt-3 h-11 w-full rounded-xl bg-emerald-600 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                disabled={Boolean(acaoSalvando)}
+                onClick={() => void executarAcao("concluir", () => concluirTele(tele.id))}
+                className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-60"
               >
-                Concluir entrega
+                {acaoSalvando === "concluir" && <Loader2 size={16} className="animate-spin" />}
+                {acaoSalvando === "concluir" ? "Concluindo..." : "Concluir entrega"}
               </button>
             )}
 
