@@ -132,11 +132,11 @@ export default function MotoboyPage() {
       }
 
       if (!usuarioRes.ok) {
-        throw new Error("NÃ£o foi possÃ­vel carregar seu usuÃ¡rio.");
+        throw new Error("Não foi possível carregar seu usuário.");
       }
 
       if (!telesRes.ok) {
-        let mensagem = "NÃ£o foi possÃ­vel carregar suas entregas.";
+        let mensagem = "Não foi possível carregar suas entregas.";
 
         try {
           const dadosErro = await telesRes.json();
@@ -155,7 +155,7 @@ export default function MotoboyPage() {
       setErro(
         erroCarregamento instanceof Error
           ? erroCarregamento.message
-          : "NÃ£o foi possÃ­vel carregar o painel."
+          : "Não foi possível carregar o painel."
       );
     } finally {
       setCarregando(false);
@@ -193,7 +193,7 @@ export default function MotoboyPage() {
         iniciarWatchPosition();
       }
     } catch (erroPresenca) {
-      console.error("Erro ao consultar presenÃ§a do motoboy:", erroPresenca);
+      console.error("Erro ao consultar presença do motoboy:", erroPresenca);
     }
   }
 
@@ -219,7 +219,7 @@ export default function MotoboyPage() {
     });
 
     if (!resposta.ok) {
-      let mensagem = "NÃ£o foi possÃ­vel enviar sua localizaÃ§Ã£o.";
+      let mensagem = "Não foi possível enviar sua localização.";
 
       try {
         const dadosErro = await resposta.json();
@@ -269,7 +269,7 @@ export default function MotoboyPage() {
           setErroLocalizacao(
             erroEnvio instanceof Error
               ? erroEnvio.message
-              : "NÃ£o foi possÃ­vel atualizar sua localizaÃ§Ã£o."
+              : "Não foi possível atualizar sua localização."
           );
         });
       },
@@ -341,7 +341,7 @@ export default function MotoboyPage() {
       });
 
       if (!resposta.ok) {
-        let mensagem = "NÃ£o foi possÃ­vel ficar offline.";
+        let mensagem = "Não foi possível ficar offline.";
 
         try {
           const dadosErro = await resposta.json();
@@ -356,7 +356,7 @@ export default function MotoboyPage() {
       setPrecisaoLocalizacao(null);
     } catch (erroOffline) {
       setErroLocalizacao(
-        erroOffline instanceof Error ? erroOffline.message : "NÃ£o foi possÃ­vel ficar offline."
+        erroOffline instanceof Error ? erroOffline.message : "Não foi possível ficar offline."
       );
     } finally {
       setAlterandoPresenca(false);
@@ -401,7 +401,7 @@ export default function MotoboyPage() {
     if (
       proximo === "ENTREGUE" &&
       !window.confirm(
-        "Confirmar que esta entrega foi concluÃ­da? Depois disso, o status nÃ£o poderÃ¡ ser alterado pelo aplicativo."
+        "Confirmar que esta entrega foi concluída? Depois disso, o status não poderá ser alterado pelo aplicativo."
       )
     ) {
       return;
@@ -423,7 +423,7 @@ export default function MotoboyPage() {
       });
 
       if (!resposta.ok) {
-        let mensagem = "NÃ£o foi possÃ­vel atualizar o status da tele.";
+        let mensagem = "Não foi possível atualizar o status da tele.";
 
         try {
           const dadosErro = await resposta.json();
@@ -450,7 +450,7 @@ export default function MotoboyPage() {
       setErro(
         erroAtualizacao instanceof Error
           ? erroAtualizacao.message
-          : "NÃ£o foi possÃ­vel atualizar o status."
+          : "Não foi possível atualizar o status."
       );
     } finally {
       setTeleAtualizando(null);
@@ -531,10 +531,10 @@ export default function MotoboyPage() {
                 </div>
 
                 <div>
-                  <p className="text-sm font-medium text-emerald-300">Ãrea do motoboy</p>
+                  <p className="text-sm font-medium text-emerald-300">Área do motoboy</p>
 
                   <h1 className="mt-1 text-2xl font-bold sm:text-3xl">
-                    OlÃ¡, {usuario?.nome || "Motoboy"}
+                    Olá, {usuario?.nome || "Motoboy"}
                   </h1>
 
                   <p className="mt-2 text-sm leading-6 text-slate-300">
@@ -593,7 +593,7 @@ export default function MotoboyPage() {
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-xl font-bold text-slate-900">
-                    {online ? "VocÃª estÃ¡ online" : "VocÃª estÃ¡ offline"}
+                    {online ? "Você está online" : "Você está offline"}
                   </h2>
 
                   <span
@@ -601,7 +601,7 @@ export default function MotoboyPage() {
                       online ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"
                     }`}
                   >
-                    {online ? "DisponÃ­vel" : "IndisponÃ­vel"}
+                    {online ? "Disponível" : "Indisponível"}
                   </span>
                 </div>
 
@@ -612,7 +612,7 @@ export default function MotoboyPage() {
                       : executandoNoAppAndroid()
                         ? "Sua localização está sendo compartilhada pelo aplicativo Android, inclusive com o app minimizado."
                         : "Sua posição está sendo compartilhada enquanto este painel permanecer aberto."
-                    : "Fique online para que o gestor veja sua posiÃ§Ã£o e possa despachar as teles mais prÃ³ximas."}
+                    : "Fique online para que o gestor veja sua posição e possa despachar as teles mais próximas."}
                 </p>
 
                 {online && (
@@ -621,11 +621,11 @@ export default function MotoboyPage() {
                       <LocateFixed size={14} />
                       {localizacaoAtualizadaEm
                         ? `Atualizada ${formatarTempoLocalizacao(localizacaoAtualizadaEm)}`
-                        : "Aguardando localizaÃ§Ã£o"}
+                        : "Aguardando localização"}
                     </span>
 
                     {precisaoLocalizacao !== null && (
-                      <span>PrecisÃ£o aproximada: {Math.round(precisaoLocalizacao)} m</span>
+                      <span>Precisão aproximada: {Math.round(precisaoLocalizacao)} m</span>
                     )}
                   </div>
                 )}
@@ -676,7 +676,7 @@ export default function MotoboyPage() {
           <CardResumo
             titulo="Entregas hoje"
             valor={String(telesHoje.length)}
-            subtitulo={`${entregasConcluidas.length} concluÃ­das`}
+            subtitulo={`${entregasConcluidas.length} concluídas`}
             icone={<PackageCheck size={21} />}
           />
 
@@ -696,7 +696,7 @@ export default function MotoboyPage() {
           />
 
           <CardResumo
-            titulo="Seu lÃ­quido"
+            titulo="Seu líquido"
             valor={formatarMoeda(liquidoHoje)}
             subtitulo="80% do bruto"
             icone={<WalletCards size={21} />}
@@ -732,7 +732,7 @@ export default function MotoboyPage() {
                   </p>
 
                   <h2 className="mt-1 text-xl font-bold sm:text-2xl">
-                    {ganhouTrocaOleo ? "Meta atingida" : "Troca de Ã³leo"}
+                    {ganhouTrocaOleo ? "Meta atingida" : "Troca de óleo"}
                   </h2>
 
                   <p
@@ -741,7 +741,7 @@ export default function MotoboyPage() {
                     }`}
                   >
                     {ganhouTrocaOleo
-                      ? "VocÃª atingiu a meta de bruto da semana e garantiu uma troca de Ã³leo grÃ¡tis."
+                      ? "Você atingiu a meta de bruto da semana e garantiu uma troca de óleo grátis."
                       : `Faltam ${formatarMoeda(faltaMeta)} para atingir a meta.`}
                   </p>
                 </div>
@@ -779,7 +779,7 @@ export default function MotoboyPage() {
 
             <div className="mt-3 flex items-center justify-between gap-4 text-sm">
               <span className={ganhouTrocaOleo ? "text-emerald-100" : "text-slate-500"}>
-                {Math.round(progressoMeta)}% concluÃ­do
+                {Math.round(progressoMeta)}% concluído
               </span>
 
               <span
@@ -796,7 +796,7 @@ export default function MotoboyPage() {
         <section className="mt-8 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
           <CabecalhoSecao
             titulo="Entregas em andamento"
-            descricao="Atualize cada etapa conforme o serviÃ§o avanÃ§a."
+            descricao="Atualize cada etapa conforme o serviço avança."
             quantidade={entregasAndamento.length}
             icone={<Route size={21} />}
           />
@@ -804,7 +804,7 @@ export default function MotoboyPage() {
           {entregasAndamento.length === 0 ? (
             <EstadoVazio
               titulo="Nenhuma entrega em andamento"
-              descricao="Quando uma tele for atribuÃ­da para hoje, ela aparecerÃ¡ aqui."
+              descricao="Quando uma tele for atribuída para hoje, ela aparecerá aqui."
               icone={<Route size={26} />}
             />
           ) : (
@@ -824,7 +824,7 @@ export default function MotoboyPage() {
 
         <section className="mt-8 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
           <CabecalhoSecao
-            titulo="Entregas concluÃ­das"
+            titulo="Entregas concluídas"
             descricao="Teles finalizadas hoje."
             quantidade={entregasConcluidas.length}
             icone={<CheckCircle2 size={21} />}
@@ -833,8 +833,8 @@ export default function MotoboyPage() {
 
           {entregasConcluidas.length === 0 ? (
             <EstadoVazio
-              titulo="Nenhuma entrega concluÃ­da"
-              descricao="As teles finalizadas hoje aparecerÃ£o nesta lista."
+              titulo="Nenhuma entrega concluída"
+              descricao="As teles finalizadas hoje aparecerão nesta lista."
               icone={<CheckCircle2 size={26} />}
             />
           ) : (
@@ -854,7 +854,7 @@ export default function MotoboyPage() {
         </section>
 
         <footer className="py-8 text-center text-xs text-slate-400">
-          Express Manager â€¢ Ãrea do motoboy
+          Express Manager • Área do motoboy
         </footer>
       </div>
     </main>
@@ -962,7 +962,7 @@ function CardTele({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <strong className="text-lg text-slate-900">
-              {tele.solicitante || "Solicitante nÃ£o informado"}
+              {tele.solicitante || "Solicitante não informado"}
             </strong>
 
             <span
@@ -1010,7 +1010,7 @@ function CardTele({
                     </p>
 
                     <p className="mt-1 break-words text-sm leading-6 text-slate-500">
-                      {parada.endereco || "EndereÃ§o nÃ£o informado"}
+                      {parada.endereco || "Endereço não informado"}
                     </p>
 
                     {parada.observacao && (
@@ -1028,7 +1028,7 @@ function CardTele({
 
           {observacao && (
             <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
-              <strong>ObservaÃ§Ã£o:</strong> {observacao}
+              <strong>Observação:</strong> {observacao}
             </div>
           )}
 
@@ -1065,7 +1065,7 @@ function CardTele({
               {formatarMoeda(Number(tele.total || 0))}
             </strong>
             <p className="mt-1 text-sm font-semibold text-emerald-700">
-              LÃ­quido {formatarMoeda(Number(tele.total || 0) * 0.8)}
+              Líquido {formatarMoeda(Number(tele.total || 0) * 0.8)}
             </p>
           </div>
 
@@ -1199,7 +1199,7 @@ function ordenarTeles(a: Tele, b: Tele) {
 }
 
 function formatarData(data?: string | null) {
-  if (!data) return "Data nÃ£o informada";
+  if (!data) return "Data não informada";
 
   return new Date(data).toLocaleDateString("pt-BR", {
     timeZone: FUSO_BRASIL,
@@ -1266,18 +1266,18 @@ function obterPosicaoAtual() {
 
 function mensagemErroGeolocalizacao(erro: GeolocationPositionError) {
   if (erro.code === erro.PERMISSION_DENIED) {
-    return "PermissÃ£o de localizaÃ§Ã£o negada. Libere a localizaÃ§Ã£o nas configuraÃ§Ãµes do navegador.";
+    return "Permissão de localização negada. Libere a localização nas configurações do navegador.";
   }
 
   if (erro.code === erro.POSITION_UNAVAILABLE) {
-    return "O celular nÃ£o conseguiu determinar sua localizaÃ§Ã£o.";
+    return "O celular não conseguiu determinar sua localização.";
   }
 
   if (erro.code === erro.TIMEOUT) {
-    return "A localizaÃ§Ã£o demorou para responder. Tente novamente em um local aberto.";
+    return "A localização demorou para responder. Tente novamente em um local aberto.";
   }
 
-  return "NÃ£o foi possÃ­vel acessar a localizaÃ§Ã£o do celular.";
+  return "Não foi possível acessar a localização do celular.";
 }
 
 function distanciaEmMetros(
@@ -1305,12 +1305,12 @@ function formatarTempoLocalizacao(data: string) {
   const segundos = Math.max(0, Math.floor((Date.now() - new Date(data).getTime()) / 1000));
 
   if (segundos < 10) return "agora";
-  if (segundos < 60) return `hÃ¡ ${segundos} segundos`;
+  if (segundos < 60) return `há ${segundos} segundos`;
 
   const minutos = Math.floor(segundos / 60);
 
-  if (minutos === 1) return "hÃ¡ 1 minuto";
-  if (minutos < 60) return `hÃ¡ ${minutos} minutos`;
+  if (minutos === 1) return "há 1 minuto";
+  if (minutos < 60) return `há ${minutos} minutos`;
 
   return new Date(data).toLocaleTimeString("pt-BR", {
     hour: "2-digit",
