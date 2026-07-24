@@ -1,6 +1,5 @@
-"use client";
+﻿"use client";
 
-import { Capacitor, registerPlugin } from "@capacitor/core";
 import {
   Bike,
   CalendarDays,
@@ -53,26 +52,6 @@ type PresencaMotoboy = {
   onlineDesde?: string | null;
   localizacaoAtualizadaEm?: string | null;
 };
-
-type ResultadoLocalizacaoNativa = {
-  ativo: boolean;
-  servicoEncontrado?: boolean;
-};
-
-type LocalizacaoNativaPlugin = {
-  iniciar(): Promise<ResultadoLocalizacaoNativa>;
-  parar(): Promise<ResultadoLocalizacaoNativa>;
-};
-
-const LocalizacaoNativa = registerPlugin<LocalizacaoNativaPlugin>("LocalizacaoNativa");
-
-function executandoNoAppAndroid() {
-  return (
-    typeof window !== "undefined" &&
-    Capacitor.isNativePlatform() &&
-    Capacitor.getPlatform() === "android"
-  );
-}
 
 type Tele = {
   id: string;
@@ -292,27 +271,16 @@ export default function MotoboyPage() {
 
     try {
       if (typeof navigator === "undefined" || !navigator.geolocation) {
-        throw new Error("Este aparelho não oferece suporte à localização.");
+        throw new Error("Este aparelho nÃ£o oferece suporte Ã  localizaÃ§Ã£o.");
       }
 
       const posicao = await obterPosicaoAtual();
 
       await enviarLocalizacao("ONLINE", posicao);
-
-      if (executandoNoAppAndroid()) {
-        await LocalizacaoNativa.iniciar();
-      }
-
       iniciarWatchPosition();
     } catch (erroOnline) {
-      try {
-        if (executandoNoAppAndroid()) {
-          await LocalizacaoNativa.parar();
-        }
-      } catch {}
-
       setErroLocalizacao(
-        erroOnline instanceof Error ? erroOnline.message : "Não foi possível ficar online."
+        erroOnline instanceof Error ? erroOnline.message : "NÃ£o foi possÃ­vel ficar online."
       );
     } finally {
       setAlterandoPresenca(false);
@@ -326,10 +294,6 @@ export default function MotoboyPage() {
     setErroLocalizacao("");
 
     try {
-      if (executandoNoAppAndroid()) {
-        await LocalizacaoNativa.parar();
-      }
-
       const resposta = await fetch("/api/motoboys/minha-localizacao", {
         method: "PUT",
         headers: {
@@ -365,12 +329,6 @@ export default function MotoboyPage() {
 
   async function sair() {
     try {
-      if (executandoNoAppAndroid()) {
-        try {
-          await LocalizacaoNativa.parar();
-        } catch {}
-      }
-
       if (online) {
         await fetch("/api/motoboys/minha-localizacao", {
           method: "PUT",
@@ -607,11 +565,7 @@ export default function MotoboyPage() {
 
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
                   {online
-                    ? executandoNoAppAndroid()
-                      ? "Sua localização está sendo compartilhada pelo aplicativo Android, inclusive com o app minimizado."
-                      : executandoNoAppAndroid()
-                        ? "Sua localização está sendo compartilhada pelo aplicativo Android, inclusive com o app minimizado."
-                        : "Sua posição está sendo compartilhada enquanto este painel permanecer aberto."
+                    ? "Sua posiÃ§Ã£o estÃ¡ sendo compartilhada enquanto este painel permanecer aberto."
                     : "Fique online para que o gestor veja sua posiÃ§Ã£o e possa despachar as teles mais prÃ³ximas."}
                 </p>
 
