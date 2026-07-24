@@ -200,6 +200,9 @@ model Motoboy {
   onlineDesde             DateTime?
   localizacaoAtualizadaEm DateTime?
 
+  appTokenHash     String?   @unique
+  appTokenCriadoEm DateTime?
+
   teles      Tele[]
   movimentos MovimentoFinanceiroMotoboy[]
 
