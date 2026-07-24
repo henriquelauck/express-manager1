@@ -22,20 +22,34 @@ type ResultadoInterpretacao = {
 
 function converterTipo(tipo: string): ParadaAtendimento["tipo"] {
   const normalizado = String(tipo || "")
+    .trim()
     .toUpperCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 
-  if (normalizado.includes("COLETA")) {
+  /*
+   * Tipos compostos devem ser verificados primeiro.
+   *
+   * "ENTREGA E COLETA" também contém as palavras
+   * "ENTREGA" e "COLETA". Se verificarmos os tipos
+   * simples antes, a informação composta será perdida.
+   */
+  if (normalizado === "ENTREGA_E_COLETA" || normalizado === "COLETA_E_ENTREGA") {
+    return "ENTREGA_E_COLETA";
+  }
+
+  if (normalizado === "TROCAR" || normalizado === "TROCA") {
+    return "TROCA";
+  }
+
+  if (normalizado === "COLETA") {
     return "COLETA";
   }
 
-  if (normalizado.includes("ENTREGA")) {
+  if (normalizado === "ENTREGA") {
     return "ENTREGA";
-  }
-
-  if (normalizado.includes("TROCA")) {
-    return "TROCA";
   }
 
   return "OUTRA";
@@ -68,9 +82,7 @@ function resolverIntencao({
   intencaoAtual: string | null;
   novaIntencao: string;
 }) {
-  const novaNormalizada = String(
-    novaIntencao || ""
-  )
+  const novaNormalizada = String(novaIntencao || "")
     .trim()
     .toUpperCase();
 
@@ -78,25 +90,13 @@ function resolverIntencao({
     return intencaoAtual;
   }
 
-  if (
-    novaNormalizada === "DESCONHECIDO" ||
-    novaNormalizada === "NAO_SUPORTADO"
-  ) {
+  if (novaNormalizada === "DESCONHECIDO" || novaNormalizada === "NAO_SUPORTADO") {
     return intencaoAtual;
   }
 
-  const intencoesExplicitas = [
-    "CRIAR_TELE",
-    "FALAR_HUMANO",
-    "CANCELAR",
-    "CANCELAR_TELE",
-  ];
+  const intencoesExplicitas = ["CRIAR_TELE", "FALAR_HUMANO", "CANCELAR", "CANCELAR_TELE"];
 
-  if (
-    intencoesExplicitas.includes(
-      novaNormalizada
-    )
-  ) {
+  if (intencoesExplicitas.includes(novaNormalizada)) {
     return novaNormalizada;
   }
 
@@ -117,13 +117,11 @@ export function atualizarAtendimento(
     ? resultado.origemSolicitante
     : atendimento.operacao.origemSolicitante;
 
-const intencao = resolverIntencao({
-  intencaoAtual:
-    atendimento.operacao.intencao,
+  const intencao = resolverIntencao({
+    intencaoAtual: atendimento.operacao.intencao,
 
-  novaIntencao:
-    resultado.intencao,
-});
+    novaIntencao: resultado.intencao,
+  });
 
   return {
     ...atendimento,
@@ -132,7 +130,7 @@ const intencao = resolverIntencao({
 
     operacao: {
       ...atendimento.operacao,
-intencao,
+      intencao,
       solicitante,
 
       origemSolicitante,

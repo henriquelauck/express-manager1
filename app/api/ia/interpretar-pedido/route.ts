@@ -1,4 +1,5 @@
 import { executarEtapa } from "@/core/ia/agente/executarEtapa";
+import { buscarMemoriaIA } from "@/core/ia/aprendizado/buscarMemoriaIA";
 import { registrarExemploAtendimento } from "@/core/ia/aprendizado/registrarExemploAtendimento";
 import { decidirFluxoMensagem } from "@/core/ia/atendimento/decidirFluxoMensagem";
 import { gerarPlanoOperacional } from "@/core/ia/atendimento/gerarPlanoOperacional";
@@ -7,11 +8,11 @@ import { processarAtendimento } from "@/core/ia/atendimento/processarAtendimento
 import {
   buscarAtendimentoAtivo,
   salvarAtendimento,
+  type CanalAtendimento,
 } from "@/core/ia/atendimento/repositorio/atendimentoRepository";
 import { criarAtendimentoVazio } from "@/core/ia/atendimento/sessao/Atendimento";
 import { gerarDecisoes } from "@/core/ia/gerarDecisoes";
 import { gerarPendenciasOperacionais } from "@/core/ia/gerarPendenciasOperacionais";
-import { resolverLocalRecorrente } from "@/core/ia/historico/resolverLocalRecorrente";
 import {
   ErroEntradaPipelineIA,
   normalizarEntradaPipelineIA,
@@ -84,6 +85,14 @@ export async function POST(request: Request) {
   try {
     const body: unknown = await request.json();
 
+    const canal: CanalAtendimento =
+      typeof body === "object" &&
+      body !== null &&
+      "canal" in body &&
+      (body as { canal?: unknown }).canal === "WHATSAPP"
+        ? "WHATSAPP"
+        : "SIMULADOR";
+
     const { mensagem, telefoneRemetente } = normalizarEntradaPipelineIA(body);
 
     const clientes = await prisma.cliente.findMany({
@@ -115,7 +124,7 @@ export async function POST(request: Request) {
     const atendimentoExistente = telefoneRemetente
       ? await buscarAtendimentoAtivo({
           telefoneRemetente,
-          canal: "SIMULADOR",
+          canal,
         })
       : null;
 
@@ -126,6 +135,44 @@ export async function POST(request: Request) {
         telefoneRemetente,
       });
 
+    const mensagemNormalizada = mensagem
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+
+    const mensagemPossuiContextoOperacional =
+      /\b(pegar|buscar|coletar|levar|entregar|retirar|coleta|entrega|retorno|trocar)\b/.test(
+        mensagemNormalizada
+      );
+
+    const memoriaIA = mensagemPossuiContextoOperacional
+      ? await buscarMemoriaIA({
+          telefoneRemetente,
+
+          solicitante: atendimentoInicial.operacao.solicitante ?? clientePeloTelefone?.nome ?? null,
+
+          mensagemCliente: mensagem,
+
+          limite: 8,
+        })
+      : {
+          habilitada: false,
+
+          modo: "DESATIVADO",
+
+          exemplos: [],
+
+          quantidadeEncontrada: 0,
+
+          quantidadeMinimaExemplos: 0,
+
+          possuiMemoriaSuficiente: false,
+
+          confiancaMinimaSugestao: 0.75,
+
+          confiancaMinimaAutomatico: 0.95,
+        };
     const decisaoFluxo = decidirFluxoMensagem({
       atendimento: atendimentoExistente,
       mensagem,
@@ -146,7 +193,17 @@ export async function POST(request: Request) {
           }
         : await interpretarPedido(mensagem, {
             clientes: nomesClientes,
+
             clientesReconhecidos: [],
+
+            memoria: memoriaIA.habilitada
+              ? {
+                  solicitante:
+                    atendimentoInicial.operacao.solicitante ?? clientePeloTelefone?.nome ?? null,
+
+                  exemplos: memoriaIA.exemplos,
+                }
+              : null,
           });
 
     const solicitantePelaMensagem = resolverSolicitante(pedido.solicitante, nomesClientes);
@@ -220,46 +277,8 @@ export async function POST(request: Request) {
           };
         }
 
-        if (nomeSolicitanteResolvido) {
-          const tipoHistorico =
-            parada.tipo === "COLETA" || parada.tipo === "ENTREGA" ? parada.tipo : undefined;
-
-          const localRecorrente = await resolverLocalRecorrente({
-            solicitante: nomeSolicitanteResolvido,
-
-            textoLocal: parada.texto,
-
-            tipo: tipoHistorico,
-          });
-
-          if (localRecorrente.encontrado && localRecorrente.cliente && localRecorrente.endereco) {
-            return {
-              tipo: parada.tipo,
-
-              texto: parada.texto,
-
-              textoOriginal: parada.textoOriginal,
-
-              resolvidaPorContexto: true,
-
-              motivoContexto: localRecorrente.motivo,
-
-              cliente: localRecorrente.cliente,
-
-              confianca: localRecorrente.confianca,
-
-              enderecoHistorico: localRecorrente.endereco,
-
-              telefoneHistorico: localRecorrente.telefone,
-
-              origemResolucao: "HISTORICO_SOLICITANTE" as const,
-
-              quantidadeUsosHistorico: localRecorrente.quantidadeUsos,
-
-              motivoHistorico: localRecorrente.motivo,
-            };
-          }
-        }
+        // Histórico não participa mais da interpretação operacional.
+        // O aprendizado permanece disponível apenas para evolução da IA.
 
         informacoesFaltantes.push(
           `Cliente ou local "${parada.texto}" não identificado com segurança.`
@@ -568,7 +587,7 @@ export async function POST(request: Request) {
     const atendimento = telefoneRemetente
       ? await salvarAtendimento({
           atendimento: atendimentoProcessado,
-          canal: "SIMULADOR",
+          canal,
         })
       : atendimentoProcessado;
 
@@ -579,7 +598,7 @@ export async function POST(request: Request) {
     const atendimentoPersistidoFinal = telefoneRemetente
       ? await salvarAtendimento({
           atendimento: atendimentoFinal,
-          canal: "SIMULADOR",
+          canal,
         })
       : atendimentoFinal;
     const paradasOperacionaisFinais = atendimentoFinal.operacao.paradas.map((parada) => ({

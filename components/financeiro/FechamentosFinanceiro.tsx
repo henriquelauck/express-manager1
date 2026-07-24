@@ -1,28 +1,83 @@
 "use client";
 
 import { useExpressManager } from "@/context/ExpressManagerContext";
-import { CheckCircle, DollarSign } from "lucide-react";
+import {
+  AlertCircle,
+  Bike,
+  CheckCircle2,
+  DollarSign,
+  Loader2,
+  Plus,
+  ReceiptText,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 
-function converterValor(valor: unknown) {
-  const numero = Number(String(valor || "0").replace(",", "."));
+type RecebedorTipo = "ESCRITORIO" | "MOTOBOY";
 
+type Recebimento = {
+  recebedorTipo: RecebedorTipo;
+  motoboyId: string | null;
+  motoboyNome: string;
+  valorRecebido: string;
+};
+
+function converterValor(valor: unknown) {
+  const numero = Number(String(valor ?? "0").replace(",", "."));
   return Number.isFinite(numero) ? numero : 0;
 }
 
-function saldoTele(tele: any) {
-  const total = converterValor(tele.total || tele.valor);
-  const recebido = converterValor(tele.valorRecebido || 0);
+function formatarValor(valor: number) {
+  return valor.toFixed(2).replace(".", ",");
+}
 
-  return Math.max(total - recebido, 0);
+function valorTotalTele(tele: any) {
+  return converterValor(tele.total ?? tele.valor);
+}
+
+function valorRecebidoTele(tele: any) {
+  const total = valorTotalTele(tele);
+  const recebido = converterValor(tele.valorRecebido);
+
+  return Math.max(0, Math.min(recebido, total));
+}
+
+function saldoTele(tele: any) {
+  return Math.max(valorTotalTele(tele) - valorRecebidoTele(tele), 0);
+}
+
+function dataLocalISO(valor: unknown) {
+  if (!valor) return "";
+
+  if (typeof valor === "string") {
+    const texto = valor.trim();
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) {
+      return texto;
+    }
+
+    const dataBr = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+
+    if (dataBr) {
+      return `${dataBr[3]}-${dataBr[2]}-${dataBr[1]}`;
+    }
+  }
+
+  const data = new Date(String(valor));
+
+  if (Number.isNaN(data.getTime())) return "";
+
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(data);
 }
 
 function dataDaTele(tele: any) {
-  if (tele.dataTele) {
-    return new Date(tele.dataTele).toISOString().slice(0, 10);
-  }
-
-  return "";
+  return dataLocalISO(tele.dataTele || tele.createdAt || tele.criadoEm);
 }
 
 export default function FechamentosFinanceiro() {
@@ -32,20 +87,21 @@ export default function FechamentosFinanceiro() {
   const [dataFim, setDataFim] = useState("");
   const [clienteSelecionado, setClienteSelecionado] = useState<any>(null);
   const [distribuicoes, setDistribuicoes] = useState<any[]>([]);
+  const [recebimentos, setRecebimentos] = useState<Recebimento[]>([]);
   const [fechando, setFechando] = useState(false);
-  const [recebimentos, setRecebimentos] = useState<any[]>([]);
+  const [erro, setErro] = useState("");
 
-  function formatarValor(valor: number) {
-    return valor.toFixed(2).replace(".", ",");
-  }
+  const periodoInvalido = Boolean(dataInicio && dataFim) && dataInicio > dataFim;
 
   const clientesComFechamento = useMemo(() => {
+    if (periodoInvalido) return [];
+
     return clientes
-      .filter((cliente: any) => String(cliente.formaCobranca).toUpperCase() !== "NA_HORA")
+      .filter((cliente: any) => String(cliente.formaCobranca || "").toUpperCase() !== "NA_HORA")
       .map((cliente: any) => {
         const telesCliente = teles.filter((tele: any) => {
           if (tele.solicitante !== cliente.nome) return false;
-          if (saldoTele(tele) <= 0) return false;
+          if (saldoTele(tele) <= 0.009) return false;
 
           const dataTele = dataDaTele(tele);
 
@@ -64,23 +120,31 @@ export default function FechamentosFinanceiro() {
         };
       })
       .filter((cliente: any) => cliente.teles.length > 0);
-  }, [clientes, teles, dataInicio, dataFim]);
+  }, [clientes, teles, dataInicio, dataFim, periodoInvalido]);
+
+  const totalRecebidoAgora = useMemo(() => {
+    return recebimentos.reduce((soma, item) => soma + converterValor(item.valorRecebido), 0);
+  }, [recebimentos]);
+
+  const saldoDepoisFechamento = clienteSelecionado
+    ? Math.max(converterValor(clienteSelecionado.total) - totalRecebidoAgora, 0)
+    : 0;
 
   function abrirFechamento(cliente: any) {
     const grupos = Object.values(
       cliente.teles.reduce((acc: any, tele: any) => {
-        const nome = tele.motoboy || tele.motoboyNome || "Sem motoboy";
+        const nome = tele.motoboyNome || tele.motoboy || "Sem motoboy";
 
         if (!acc[nome]) {
-          const motoboy = motoboys.find((m: any) => m.nome === nome);
+          const motoboy = motoboys.find(
+            (item: any) => item.id === tele.motoboyId || item.nome === nome
+          );
 
           acc[nome] = {
             motoboyNome: nome,
             motoboyId: motoboy?.id || null,
             total: 0,
             quantidade: 0,
-            recebedorTipo: "ESCRITORIO",
-            valorRecebido: "0",
           };
         }
 
@@ -91,8 +155,8 @@ export default function FechamentosFinanceiro() {
       }, {})
     ) as any[];
 
+    setErro("");
     setDistribuicoes(grupos);
-
     setRecebimentos([
       {
         recebedorTipo: "ESCRITORIO",
@@ -101,47 +165,90 @@ export default function FechamentosFinanceiro() {
         valorRecebido: formatarValor(cliente.total),
       },
     ]);
-
     setClienteSelecionado(cliente);
   }
 
-  function atualizarDistribuicao(index: number, campo: string, valor: any) {
-    const novas = [...distribuicoes];
-    novas[index] = {
-      ...novas[index],
-      [campo]: valor,
-    };
-    setDistribuicoes(novas);
+  function fecharModal() {
+    if (fechando) return;
+
+    setClienteSelecionado(null);
+    setDistribuicoes([]);
+    setRecebimentos([]);
+    setErro("");
+  }
+
+  function adicionarRecebimento() {
+    setRecebimentos((atuais) => [
+      ...atuais,
+      {
+        recebedorTipo: "ESCRITORIO",
+        motoboyId: null,
+        motoboyNome: "",
+        valorRecebido: "0,00",
+      },
+    ]);
+  }
+
+  function removerRecebimento(index: number) {
+    if (recebimentos.length === 1) return;
+
+    setRecebimentos((atuais) => atuais.filter((_, itemIndex) => itemIndex !== index));
+  }
+
+  function atualizarRecebimento(index: number, atualizacao: Partial<Recebimento>) {
+    setErro("");
+
+    setRecebimentos((atuais) =>
+      atuais.map((item, itemIndex) =>
+        itemIndex === index
+          ? {
+              ...item,
+              ...atualizacao,
+            }
+          : item
+      )
+    );
   }
 
   async function confirmarFechamento() {
     if (!clienteSelecionado || fechando) return;
 
+    setErro("");
+
     if (!dataInicio || !dataFim) {
-      alert("Selecione o período do fechamento.");
+      setErro("Selecione o período do fechamento.");
       return;
     }
 
-    const invalida = recebimentos.some((item) => {
-      const valorRecebido = converterValor(item.valorRecebido);
+    if (dataInicio > dataFim) {
+      setErro("A data inicial não pode ser posterior à data final.");
+      return;
+    }
 
-      if (item.recebedorTipo === "MOTOBOY" && !item.motoboyId) return true;
-      if (valorRecebido < 0) return true;
+    if (totalRecebidoAgora <= 0.009) {
+      setErro("Informe ao menos um valor recebido para realizar o fechamento.");
+      return;
+    }
+
+    if (totalRecebidoAgora > converterValor(clienteSelecionado.total) + 0.009) {
+      setErro("O valor recebido não pode ser maior que o saldo aberto.");
+      return;
+    }
+
+    const recebimentoInvalido = recebimentos.some((item) => {
+      const valor = converterValor(item.valorRecebido);
+
+      if (valor < 0) return true;
+
+      if (valor > 0.009 && item.recebedorTipo === "MOTOBOY" && !item.motoboyId) {
+        return true;
+      }
 
       return false;
     });
 
-    const totalRecebidoAgora = recebimentos.reduce((soma, item) => {
-      return soma + converterValor(item.valorRecebido);
-    }, 0);
-
-    if (invalida) {
-      alert("Verifique os valores recebidos.");
-      return;
-    }
-
-    if (totalRecebidoAgora > clienteSelecionado.total) {
-      alert("O valor recebido não pode ser maior que o total do fechamento.");
+    if (recebimentoInvalido) {
+      setErro("Revise os valores e selecione o motoboy em todos os recebimentos correspondentes.");
       return;
     }
 
@@ -163,27 +270,25 @@ export default function FechamentosFinanceiro() {
       });
 
       if (!resposta.ok) {
-        let mensagemErro = "Erro ao fechar cliente.";
+        let mensagem = "Não foi possível concluir o fechamento.";
 
         try {
-          const erro = await resposta.json();
-          mensagemErro = erro.erro || mensagemErro;
+          const dadosErro = await resposta.json();
+          mensagem = dadosErro?.erro || mensagem;
         } catch {}
 
-        alert(mensagemErro);
-        return;
+        throw new Error(mensagem);
       }
 
       await recarregarDados();
-
-      setClienteSelecionado(null);
-      setDistribuicoes([]);
-      setRecebimentos([]);
-
+      fecharModal();
       alert("Fechamento realizado com sucesso!");
-    } catch (error) {
-      console.error("Erro ao confirmar fechamento:", error);
-      alert("Não foi possível concluir o fechamento. Verifique sua conexão e tente novamente.");
+    } catch (erroFechamento) {
+      setErro(
+        erroFechamento instanceof Error
+          ? erroFechamento.message
+          : "Não foi possível concluir o fechamento."
+      );
     } finally {
       setFechando(false);
     }
@@ -191,60 +296,73 @@ export default function FechamentosFinanceiro() {
 
   return (
     <>
-      <div className="bg-white rounded-3xl p-5 md:p-6 shadow-sm border border-slate-100 mb-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <div>
-            <label className="text-sm font-medium text-slate-600">Data inicial</label>
-            <input
-              type="date"
-              value={dataInicio}
-              onChange={(e) => setDataInicio(e.target.value)}
-              className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
-            />
-          </div>
+      <div className="mb-8 rounded-3xl border border-slate-100 bg-white p-5 shadow-sm md:p-6">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <FiltroData
+            label="Data inicial"
+            value={dataInicio}
+            onChange={(valor) => {
+              setDataInicio(valor);
+              setErro("");
+            }}
+          />
 
-          <div>
-            <label className="text-sm font-medium text-slate-600">Data final</label>
-            <input
-              type="date"
-              value={dataFim}
-              onChange={(e) => setDataFim(e.target.value)}
-              className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
-            />
-          </div>
+          <FiltroData
+            label="Data final"
+            value={dataFim}
+            onChange={(valor) => {
+              setDataFim(valor);
+              setErro("");
+            }}
+          />
         </div>
+
+        {periodoInvalido && (
+          <div className="mt-4 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <AlertCircle size={18} className="mt-0.5 shrink-0" />A data inicial não pode ser
+            posterior à data final.
+          </div>
+        )}
       </div>
 
       {clientesComFechamento.length === 0 ? (
-        <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100 text-center text-slate-500">
-          Nenhum cliente com fechamento aberto nesse período.
+        <div className="rounded-3xl border border-slate-100 bg-white p-10 text-center shadow-sm">
+          <ReceiptText size={40} className="mx-auto text-slate-300" />
+          <h2 className="mt-4 text-lg font-bold text-slate-900">Nenhum fechamento disponível</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Selecione um período com teles ainda em aberto.
+          </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
           {clientesComFechamento.map((cliente: any) => (
             <div
               key={cliente.id || cliente.nome}
-              className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100"
+              className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm"
             >
-              <h2 className="text-xl font-bold">{cliente.nome}</h2>
-              <p className="text-sm text-slate-500 mt-1">{cliente.formaCobranca}</p>
+              <h2 className="text-xl font-bold text-slate-900">{cliente.nome}</h2>
 
-              <div className="bg-slate-50 rounded-2xl p-4 mt-5">
+              <p className="mt-1 text-sm text-slate-500">
+                {cliente.formaCobranca || "Cobrança periódica"}
+              </p>
+
+              <div className="mt-5 rounded-2xl bg-slate-50 p-4">
                 <p className="text-sm text-slate-500">Teles em aberto</p>
-                <h3 className="text-2xl font-bold">{cliente.teles.length}</h3>
+                <h3 className="text-2xl font-bold text-slate-900">{cliente.teles.length}</h3>
 
-                <p className="text-sm text-slate-500 mt-4">Saldo aberto</p>
+                <p className="mt-4 text-sm text-slate-500">Saldo aberto</p>
                 <h3 className="text-2xl font-bold text-orange-600">
                   R$ {formatarValor(cliente.total)}
                 </h3>
               </div>
 
               <button
+                type="button"
                 onClick={() => abrirFechamento(cliente)}
-                className="w-full h-12 rounded-2xl bg-emerald-600 text-white font-semibold mt-5 flex items-center justify-center gap-2"
+                className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 font-semibold text-white transition hover:bg-emerald-700"
               >
                 <DollarSign size={18} />
-                Fechar cliente
+                Registrar fechamento
               </button>
             </div>
           ))}
@@ -252,175 +370,266 @@ export default function FechamentosFinanceiro() {
       )}
 
       {clienteSelecionado && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-2xl rounded-3xl p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-2xl font-bold">Fechar {clienteSelecionado.nome}</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
+          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-100 bg-white px-5 py-5 md:px-7">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-600">
+                  Fechamento financeiro
+                </p>
+                <h2 className="mt-1 text-2xl font-bold text-slate-900">
+                  {clienteSelecionado.nome}
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  {clienteSelecionado.teles.length} teles • R${" "}
+                  {formatarValor(clienteSelecionado.total)} em aberto
+                </p>
+              </div>
 
-            <p className="text-slate-500 mt-2">
-              {clienteSelecionado.teles.length} teles abertas • R${" "}
-              {formatarValor(clienteSelecionado.total)}
-            </p>
+              <button
+                type="button"
+                onClick={fecharModal}
+                disabled={fechando}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 disabled:opacity-50"
+              >
+                <X size={18} />
+              </button>
+            </div>
 
-            <div className="mt-6 space-y-4">
-              <h3 className="font-bold text-lg">Distribuição do pagamento</h3>
+            <div className="space-y-7 p-5 md:p-7">
+              {erro && (
+                <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  <AlertCircle size={18} className="mt-0.5 shrink-0" />
+                  <span>{erro}</span>
+                </div>
+              )}
 
-              <div className="mt-6 space-y-6">
-                <div>
-                  <h3 className="font-bold text-lg mb-3">Produção</h3>
+              <section>
+                <h3 className="text-lg font-bold text-slate-900">Produção por motoboy</h3>
 
-                  <div className="space-y-3">
-                    {distribuicoes.map((item) => (
-                      <div
-                        key={item.motoboyNome}
-                        className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex justify-between"
-                      >
+                <div className="mt-3 space-y-3">
+                  {distribuicoes.map((item) => (
+                    <div
+                      key={item.motoboyNome}
+                      className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50 p-4"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+                          <Bike size={19} />
+                        </div>
+
                         <div>
-                          <strong>{item.motoboyNome}</strong>
+                          <strong className="text-slate-900">{item.motoboyNome}</strong>
                           <p className="text-sm text-slate-500">{item.quantidade} teles</p>
                         </div>
-
-                        <strong className="text-orange-600">R$ {formatarValor(item.total)}</strong>
                       </div>
-                    ))}
+
+                      <strong className="text-orange-600">R$ {formatarValor(item.total)}</strong>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section>
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900">Recebimentos</h3>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Informe quanto cada pessoa recebeu.
+                    </p>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={adicionarRecebimento}
+                    disabled={fechando}
+                    className="flex h-10 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    <Plus size={16} />
+                    Adicionar
+                  </button>
                 </div>
 
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-bold text-lg">Recebimentos</h3>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setRecebimentos([
-                          ...recebimentos,
-                          {
-                            recebedorTipo: "ESCRITORIO",
-                            motoboyId: null,
-                            motoboyNome: "",
-                            valorRecebido: "0",
-                          },
-                        ])
-                      }
-                      className="px-4 h-10 rounded-xl bg-emerald-600 text-white text-sm"
+                <div className="mt-4 space-y-4">
+                  {recebimentos.map((item, index) => (
+                    <div
+                      key={index}
+                      className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
                     >
-                      + Adicionar
-                    </button>
-                  </div>
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_1fr_1fr_auto]">
+                        <div>
+                          <label className="text-sm font-medium text-slate-600">
+                            Quem recebeu?
+                          </label>
 
-                  <div className="space-y-3">
-                    {recebimentos.map((item, index) => (
-                      <div
-                        key={index}
-                        className="bg-slate-50 rounded-2xl p-4 border border-slate-100"
-                      >
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div>
-                            <label className="text-sm font-medium text-slate-600">
-                              Quem recebeu?
-                            </label>
+                          <select
+                            value={item.recebedorTipo}
+                            disabled={fechando}
+                            onChange={(evento) =>
+                              atualizarRecebimento(index, {
+                                recebedorTipo: evento.target.value as RecebedorTipo,
+                                motoboyId: null,
+                                motoboyNome: "",
+                              })
+                            }
+                            className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4"
+                          >
+                            <option value="ESCRITORIO">Escritório</option>
+                            <option value="MOTOBOY">Motoboy</option>
+                          </select>
+                        </div>
 
-                            <select
-                              value={item.recebedorTipo}
-                              onChange={(e) => {
-                                const novas = [...recebimentos];
-                                novas[index] = {
-                                  ...novas[index],
-                                  recebedorTipo: e.target.value,
-                                  motoboyId: null,
-                                  motoboyNome: "",
-                                };
-                                setRecebimentos(novas);
-                              }}
-                              className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 bg-white"
-                            >
-                              <option value="ESCRITORIO">Escritório</option>
-                              <option value="MOTOBOY">Motoboy</option>
-                            </select>
-                          </div>
+                        <div>
+                          <label className="text-sm font-medium text-slate-600">Motoboy</label>
 
-                          {item.recebedorTipo === "MOTOBOY" && (
-                            <div>
-                              <label className="text-sm font-medium text-slate-600">Motoboy</label>
+                          <select
+                            value={item.motoboyId || ""}
+                            disabled={fechando || item.recebedorTipo !== "MOTOBOY"}
+                            onChange={(evento) => {
+                              const motoboy = motoboys.find(
+                                (registro: any) => registro.id === evento.target.value
+                              );
 
-                              <select
-                                value={item.motoboyId || ""}
-                                onChange={(e) => {
-                                  const motoboy = motoboys.find(
-                                    (m: any) => m.id === e.target.value
-                                  );
+                              atualizarRecebimento(index, {
+                                motoboyId: motoboy?.id || null,
+                                motoboyNome: motoboy?.nome || "",
+                              });
+                            }}
+                            className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 disabled:bg-slate-100"
+                          >
+                            <option value="">
+                              {item.recebedorTipo === "MOTOBOY" ? "Selecione" : "Não se aplica"}
+                            </option>
 
-                                  const novas = [...recebimentos];
-                                  novas[index] = {
-                                    ...novas[index],
-                                    motoboyId: motoboy?.id || null,
-                                    motoboyNome: motoboy?.nome || "",
-                                  };
-                                  setRecebimentos(novas);
-                                }}
-                                className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 bg-white"
-                              >
-                                <option value="">Selecione</option>
-                                {motoboys.map((motoboy: any) => (
-                                  <option key={motoboy.id} value={motoboy.id}>
-                                    {motoboy.nome}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          )}
+                            {motoboys.map((motoboy: any) => (
+                              <option key={motoboy.id} value={motoboy.id}>
+                                {motoboy.nome}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
 
-                          <div>
-                            <label className="text-sm font-medium text-slate-600">
-                              Valor recebido
-                            </label>
+                        <div>
+                          <label className="text-sm font-medium text-slate-600">
+                            Valor recebido
+                          </label>
 
-                            <input
-                              value={item.valorRecebido}
-                              onChange={(e) => {
-                                const novas = [...recebimentos];
-                                novas[index] = {
-                                  ...novas[index],
-                                  valorRecebido: e.target.value,
-                                };
-                                setRecebimentos(novas);
-                              }}
-                              className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 bg-white"
-                            />
-                          </div>
+                          <input
+                            value={item.valorRecebido}
+                            disabled={fechando}
+                            onChange={(evento) =>
+                              atualizarRecebimento(index, {
+                                valorRecebido: evento.target.value,
+                              })
+                            }
+                            placeholder="0,00"
+                            className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4"
+                          />
+                        </div>
+
+                        <div className="flex items-end">
+                          <button
+                            type="button"
+                            onClick={() => removerRecebimento(index)}
+                            disabled={fechando || recebimentos.length === 1}
+                            className="flex h-12 w-12 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-600 disabled:opacity-30"
+                            title="Remover recebimento"
+                          >
+                            <Trash2 size={17} />
+                          </button>
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ))}
                 </div>
+              </section>
+
+              <div className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-3">
+                <Resumo titulo="Saldo aberto" valor={clienteSelecionado.total} />
+                <Resumo titulo="Recebido agora" valor={totalRecebidoAgora} positivo />
+                <Resumo
+                  titulo="Restará aberto"
+                  valor={saldoDepoisFechamento}
+                  alerta={saldoDepoisFechamento > 0.009}
+                />
               </div>
             </div>
 
-            <div className="flex flex-col md:flex-row gap-3 mt-8">
+            <div className="sticky bottom-0 flex flex-col-reverse gap-3 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:justify-end md:px-7">
               <button
-                onClick={() => {
-                  setClienteSelecionado(null);
-                  setDistribuicoes([]);
-                  setRecebimentos([]);
-                  setFechando(false);
-                }}
-                className="w-full h-12 rounded-xl border border-slate-200"
+                type="button"
+                onClick={fecharModal}
+                disabled={fechando}
+                className="h-12 rounded-xl border border-slate-200 px-6 font-medium text-slate-700 disabled:opacity-50"
               >
                 Cancelar
               </button>
 
               <button
-                onClick={confirmarFechamento}
+                type="button"
+                onClick={() => void confirmarFechamento()}
                 disabled={fechando}
-                className="w-full h-12 rounded-xl bg-emerald-600 text-white font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 font-semibold text-white disabled:opacity-60"
               >
-                <CheckCircle size={18} />
-                {fechando ? "Fechando..." : "Confirmar fechamento"}
+                {fechando ? (
+                  <Loader2 size={18} className="animate-spin" />
+                ) : (
+                  <CheckCircle2 size={18} />
+                )}
+
+                {fechando ? "Processando..." : "Confirmar fechamento"}
               </button>
             </div>
           </div>
         </div>
       )}
     </>
+  );
+}
+
+function FiltroData({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div>
+      <label className="text-sm font-medium text-slate-600">{label}</label>
+      <input
+        type="date"
+        value={value}
+        onChange={(evento) => onChange(evento.target.value)}
+        className="mt-2 h-12 w-full rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
+      />
+    </div>
+  );
+}
+
+function Resumo({
+  titulo,
+  valor,
+  positivo = false,
+  alerta = false,
+}: {
+  titulo: string;
+  valor: number;
+  positivo?: boolean;
+  alerta?: boolean;
+}) {
+  return (
+    <div>
+      <p className="text-xs text-slate-500">{titulo}</p>
+      <strong
+        className={`mt-1 block ${
+          positivo ? "text-emerald-700" : alerta ? "text-orange-600" : "text-slate-900"
+        }`}
+      >
+        R$ {formatarValor(valor)}
+      </strong>
+    </div>
   );
 }

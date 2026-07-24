@@ -1,9 +1,25 @@
 "use client";
 import PageContainer from "@/components/ui/PageContainer";
 import PageHeader from "@/components/ui/PageHeader";
-import { useState } from "react";
-import { Plus, Users, Pencil, Phone, MapPin, List } from "lucide-react";
 import { useExpressManager } from "@/context/ExpressManagerContext";
+import {
+  AlertCircle,
+  AlertTriangle,
+  Building2,
+  CheckCircle2,
+  List,
+  Loader2,
+  MapPin,
+  Pencil,
+  Phone,
+  Plus,
+  ReceiptText,
+  Search,
+  Trash2,
+  Users,
+  X,
+} from "lucide-react";
+import { useMemo, useState } from "react";
 
 export default function ClientesPage() {
   const { clientes, setClientes } = useExpressManager();
@@ -11,13 +27,37 @@ export default function ClientesPage() {
   const [tela, setTela] = useState<"lista" | "cadastro">("lista");
   const [editandoIndex, setEditandoIndex] = useState<number | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [busca, setBusca] = useState("");
+  const [erroFormulario, setErroFormulario] = useState("");
+  const [sucessoFormulario, setSucessoFormulario] = useState("");
+  const [clienteParaExcluir, setClienteParaExcluir] = useState<any | null>(null);
+  const [excluindoCliente, setExcluindoCliente] = useState(false);
+  const [erroExclusao, setErroExclusao] = useState("");
 
   const [form, setForm] = useState({
     nome: "",
     telefone: "",
     endereco1: "",
     endereco2: "",
+    formaCobranca: "SEMANAL",
   });
+
+  const clientesFiltrados = useMemo(() => {
+    const termo = busca.trim().toLowerCase();
+
+    if (!termo) return clientes;
+
+    return clientes.filter((cliente) => {
+      const conteudo = [cliente.nome, cliente.telefone, cliente.endereco1, cliente.endereco2]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return conteudo.includes(termo);
+    });
+  }, [busca, clientes]);
+
+  const clientesComDoisEnderecos = clientes.filter((cliente) => Boolean(cliente.endereco2)).length;
 
   async function recarregarClientes() {
     const resposta = await fetch("/api/clientes");
@@ -25,70 +65,183 @@ export default function ClientesPage() {
     setClientes(clientesAtualizados);
   }
 
-  function abrirCadastro() {
+  function limparFormulario() {
+    setForm({
+      nome: "",
+      telefone: "",
+      endereco1: "",
+      endereco2: "",
+      formaCobranca: "SEMANAL",
+    });
     setEditandoIndex(null);
-    setForm({ nome: "", telefone: "", endereco1: "", endereco2: "" });
+    setErroFormulario("");
+    setSucessoFormulario("");
+  }
+
+  function abrirCadastro() {
+    limparFormulario();
     setTela("cadastro");
   }
 
   function abrirEdicao(index: number) {
+    const cliente = clientes[index];
+
+    setErroFormulario("");
+    setSucessoFormulario("");
     setEditandoIndex(index);
     setForm({
-      nome: clientes[index].nome || "",
-      telefone: clientes[index].telefone || "",
-      endereco1: clientes[index].endereco1 || "",
-      endereco2: clientes[index].endereco2 || "",
+      nome: cliente.nome || "",
+      telefone: cliente.telefone || "",
+      endereco1: cliente.endereco1 || "",
+      endereco2: cliente.endereco2 || "",
+      formaCobranca: cliente.formaCobranca || "SEMANAL",
     });
     setTela("cadastro");
   }
 
+  function cancelarFormulario() {
+    if (salvando) return;
+
+    limparFormulario();
+    setTela("lista");
+  }
+
   async function salvarCliente() {
-    if (!form.nome || !form.telefone || !form.endereco1) return;
+    if (salvando) return;
+
+    const nome = form.nome.trim();
+    const telefone = form.telefone.trim();
+    const endereco1 = form.endereco1.trim();
+    const endereco2 = form.endereco2.trim();
+    const formaCobranca = form.formaCobranca;
+
+    setErroFormulario("");
+    setSucessoFormulario("");
+
+    if (!nome || !telefone || !endereco1) {
+      setErroFormulario("Preencha o nome, o telefone e o endereço principal.");
+      return;
+    }
 
     setSalvando(true);
 
-    const editando = editandoIndex !== null;
-    const clienteAtual = editando ? clientes[editandoIndex] : null;
+    try {
+      const editando = editandoIndex !== null;
+      const clienteAtual = editando ? clientes[editandoIndex] : null;
 
-    await fetch("/api/clientes", {
-      method: editando ? "PUT" : "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        id: clienteAtual?.id,
-        nome: form.nome,
-        telefone: form.telefone,
-        endereco1: form.endereco1,
-        endereco2: form.endereco2,
-      }),
-    });
+      const resposta = await fetch("/api/clientes", {
+        method: editando ? "PUT" : "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: clienteAtual?.id,
+          nome,
+          telefone,
+          endereco1,
+          endereco2,
+          formaCobranca,
+        }),
+      });
 
-    await recarregarClientes();
+      if (!resposta.ok) {
+        let mensagem = "Não foi possível salvar o cliente.";
 
-    setForm({ nome: "", telefone: "", endereco1: "", endereco2: "" });
-    setEditandoIndex(null);
-    setTela("lista");
-    setSalvando(false);
+        try {
+          const dadosErro = await resposta.json();
+          mensagem = dadosErro?.erro || dadosErro?.message || mensagem;
+        } catch {
+          const textoErro = await resposta.text();
+          if (textoErro) mensagem = textoErro;
+        }
+
+        throw new Error(mensagem);
+      }
+
+      await recarregarClientes();
+
+      setSucessoFormulario(
+        editando ? "Cliente atualizado com sucesso." : "Cliente cadastrado com sucesso."
+      );
+
+      setTimeout(() => {
+        limparFormulario();
+        setTela("lista");
+      }, 700);
+    } catch (erro) {
+      setErroFormulario(
+        erro instanceof Error ? erro.message : "Não foi possível salvar o cliente."
+      );
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  function solicitarExclusao(cliente: any) {
+    setErroExclusao("");
+    setClienteParaExcluir(cliente);
+  }
+
+  function cancelarExclusao() {
+    if (excluindoCliente) return;
+
+    setErroExclusao("");
+    setClienteParaExcluir(null);
+  }
+
+  async function confirmarExclusao() {
+    if (!clienteParaExcluir?.id || excluindoCliente) return;
+
+    setExcluindoCliente(true);
+    setErroExclusao("");
+
+    try {
+      const resposta = await fetch("/api/clientes", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: clienteParaExcluir.id,
+        }),
+      });
+
+      if (!resposta.ok) {
+        let mensagem = "Não foi possível excluir o cliente.";
+
+        try {
+          const dadosErro = await resposta.json();
+          mensagem = dadosErro?.erro || dadosErro?.message || mensagem;
+        } catch {
+          const textoErro = await resposta.text();
+          if (textoErro) mensagem = textoErro;
+        }
+
+        throw new Error(mensagem);
+      }
+
+      await recarregarClientes();
+      setClienteParaExcluir(null);
+    } catch (erro) {
+      setErroExclusao(erro instanceof Error ? erro.message : "Não foi possível excluir o cliente.");
+    } finally {
+      setExcluindoCliente(false);
+    }
   }
 
   return (
     <PageContainer>
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-8">
-        <div>
-          <PageHeader
-  titulo="Clientes"
-  descricao="Cadastre, edite e consulte seus clientes."
-/>
-        </div>
+      <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <PageHeader titulo="Clientes" descricao="Cadastre, edite e consulte seus clientes." />
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full lg:w-auto">
+        <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:w-auto">
           <button
+            type="button"
             onClick={() => setTela("lista")}
-            className={`px-6 py-4 rounded-2xl flex items-center justify-center gap-2 shadow-sm ${
+            className={`flex items-center justify-center gap-2 rounded-2xl px-6 py-4 shadow-sm transition ${
               tela === "lista"
                 ? "bg-emerald-600 text-white"
-                : "bg-white text-slate-700"
+                : "bg-white text-slate-700 hover:bg-slate-50"
             }`}
           >
             <List size={22} />
@@ -96,11 +249,12 @@ export default function ClientesPage() {
           </button>
 
           <button
+            type="button"
             onClick={abrirCadastro}
-            className={`px-6 py-4 rounded-2xl flex items-center justify-center gap-2 shadow-sm ${
+            className={`flex items-center justify-center gap-2 rounded-2xl px-6 py-4 shadow-sm transition ${
               tela === "cadastro"
                 ? "bg-emerald-600 text-white"
-                : "bg-white text-slate-700"
+                : "bg-white text-slate-700 hover:bg-slate-50"
             }`}
           >
             <Plus size={22} />
@@ -110,135 +264,488 @@ export default function ClientesPage() {
       </div>
 
       {tela === "lista" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {clientes.map((cliente, index) => (
-            <div
-              key={cliente.id || index}
-              className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100"
-            >
-              <div className="flex items-start justify-between gap-3 mb-6">
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center">
-                    <Users size={30} />
+        <>
+          <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+            <ResumoCliente
+              label="Clientes cadastrados"
+              valor={String(clientes.length)}
+              descricao="Total disponível na base"
+              icon={<Users size={20} />}
+            />
+
+            <ResumoCliente
+              label="Com endereço extra"
+              valor={String(clientesComDoisEnderecos)}
+              descricao="Possuem dois endereços salvos"
+              icon={<MapPin size={20} />}
+            />
+
+            <ResumoCliente
+              label="Resultados exibidos"
+              valor={String(clientesFiltrados.length)}
+              descricao={busca ? "Conforme a busca atual" : "Todos os clientes"}
+              icon={<Search size={20} />}
+            />
+          </div>
+
+          <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <label className="text-sm font-medium text-slate-600">Buscar cliente</label>
+
+            <div className="relative mt-2">
+              <Search
+                size={19}
+                className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+              />
+
+              <input
+                value={busca}
+                onChange={(event) => setBusca(event.target.value)}
+                placeholder="Nome, telefone ou endereço"
+                className="h-12 w-full rounded-xl border border-slate-200 bg-white pl-11 pr-4 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+              />
+            </div>
+          </section>
+
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+            {clientesFiltrados.map((cliente) => {
+              const indexOriginal = clientes.findIndex(
+                (item) =>
+                  item.id === cliente.id ||
+                  (item.nome === cliente.nome && item.telefone === cliente.telefone)
+              );
+
+              return (
+                <article
+                  key={cliente.id || `${cliente.nome}-${cliente.telefone}`}
+                  className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                >
+                  <div className="flex items-start justify-between gap-4 border-b border-slate-100 bg-slate-50/70 p-5">
+                    <div className="flex min-w-0 items-center gap-4">
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                        <Building2 size={26} />
+                      </div>
+
+                      <div className="min-w-0">
+                        <h2 className="truncate text-lg font-bold text-slate-900">
+                          {cliente.nome}
+                        </h2>
+                        <p className="mt-1 text-xs font-medium uppercase tracking-wide text-slate-400">
+                          Cliente cadastrado
+                        </p>
+
+                        <span className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                          <ReceiptText size={13} />
+                          {formatarFormaCobranca(cliente.formaCobranca)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => abrirEdicao(indexOriginal)}
+                        className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+                        aria-label={`Editar ${cliente.nome}`}
+                      >
+                        <Pencil size={18} />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => solicitarExclusao(cliente)}
+                        className="flex h-10 w-10 items-center justify-center rounded-xl border border-red-200 bg-white text-red-600 transition hover:bg-red-50"
+                        aria-label={`Excluir ${cliente.nome}`}
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
                   </div>
 
-                  <div>
-                    <h2 className="text-xl font-bold">{cliente.nome}</h2>
-                    <p className="text-sm text-slate-500">Cliente cadastrado</p>
+                  <div className="space-y-4 p-5 text-sm text-slate-600">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
+                        <Phone size={16} />
+                      </div>
+                      <span className="break-all">
+                        {cliente.telefone || "Telefone não informado"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
+                        <MapPin size={16} />
+                      </div>
+                      <span className="leading-6">
+                        {cliente.endereco1 || "Endereço não informado"}
+                      </span>
+                    </div>
+
+                    {cliente.endereco2 && (
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
+                          <MapPin size={16} />
+                        </div>
+                        <span className="leading-6">{cliente.endereco2}</span>
+                      </div>
+                    )}
                   </div>
-                </div>
+                </article>
+              );
+            })}
+
+            {clientes.length === 0 && (
+              <div className="rounded-3xl border border-slate-100 bg-white p-8 shadow-sm">
+                <h2 className="text-xl font-bold">Nenhum cliente cadastrado</h2>
+                <p className="mt-2 text-slate-500">
+                  Clique em Cadastrar cliente para adicionar o primeiro.
+                </p>
+              </div>
+            )}
+
+            {clientes.length > 0 && clientesFiltrados.length === 0 && (
+              <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center md:col-span-2 xl:col-span-3">
+                <h2 className="text-xl font-bold text-slate-900">Nenhum cliente encontrado</h2>
+                <p className="mt-2 text-slate-500">
+                  Revise o nome, telefone ou endereço pesquisado.
+                </p>
 
                 <button
-                  onClick={() => abrirEdicao(index)}
-                  className="w-10 h-10 rounded-xl border border-slate-200 flex items-center justify-center hover:bg-slate-50"
+                  type="button"
+                  onClick={() => setBusca("")}
+                  className="mt-5 rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
                 >
-                  <Pencil size={18} />
+                  Limpar busca
                 </button>
               </div>
+            )}
+          </div>
+        </>
+      )}
 
-              <div className="space-y-3 text-sm text-slate-600">
-                <p className="flex items-center gap-2">
-                  <Phone size={16} /> {cliente.telefone}
-                </p>
-
-                <p className="flex items-start gap-2">
-                  <MapPin size={16} className="mt-1" />
-                  <span>{cliente.endereco1}</span>
-                </p>
-
-                {cliente.endereco2 && (
-                  <p className="flex items-start gap-2">
-                    <MapPin size={16} className="mt-1" />
-                    <span>{cliente.endereco2}</span>
-                  </p>
-                )}
+      {clienteParaExcluir && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="titulo-excluir-cliente"
+            className="w-full max-w-lg overflow-hidden rounded-3xl border border-red-100 bg-white shadow-2xl"
+          >
+            <div className="flex items-start gap-4 border-b border-red-100 bg-red-50 px-5 py-5 md:px-6">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-100 text-red-700">
+                <AlertTriangle size={23} />
               </div>
-            </div>
-          ))}
 
-          {clientes.length === 0 && (
-            <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100">
-              <h2 className="text-xl font-bold">Nenhum cliente cadastrado</h2>
-              <p className="text-slate-500 mt-2">
-                Clique em Cadastrar cliente para adicionar o primeiro.
-              </p>
+              <div className="min-w-0 flex-1">
+                <h2 id="titulo-excluir-cliente" className="text-xl font-bold text-slate-900">
+                  Excluir este cliente?
+                </h2>
+
+                <p className="mt-1 text-sm leading-6 text-slate-600">
+                  A exclusão só será permitida quando não existirem teles ou fechamentos vinculados.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={cancelarExclusao}
+                disabled={excluindoCliente}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-white disabled:cursor-wait disabled:opacity-50"
+                aria-label="Fechar confirmação"
+              >
+                <X size={18} />
+              </button>
             </div>
-          )}
+
+            <div className="space-y-4 p-5 md:p-6">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Cliente selecionado
+                </p>
+
+                <p className="mt-3 text-lg font-bold text-slate-900">{clienteParaExcluir.nome}</p>
+
+                <div className="mt-3 space-y-2 text-sm text-slate-600">
+                  <p className="flex items-center gap-2">
+                    <Phone size={15} />
+                    {clienteParaExcluir.telefone || "Telefone não informado"}
+                  </p>
+
+                  <p className="flex items-start gap-2">
+                    <MapPin size={15} className="mt-0.5 shrink-0" />
+                    <span>{clienteParaExcluir.endereco1 || "Endereço não informado"}</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
+                Clientes com histórico financeiro ou operacional não podem ser excluídos para
+                preservar os registros do sistema.
+              </div>
+
+              {erroExclusao && (
+                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700">
+                  {erroExclusao}
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end md:px-6">
+              <button
+                type="button"
+                onClick={cancelarExclusao}
+                disabled={excluindoCliente}
+                className="h-12 rounded-xl border border-slate-200 bg-white px-6 font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-50"
+              >
+                Manter cliente
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void confirmarExclusao()}
+                disabled={excluindoCliente}
+                className="flex h-12 items-center justify-center gap-2 rounded-xl bg-red-600 px-6 font-semibold text-white transition hover:bg-red-700 disabled:cursor-wait disabled:opacity-60"
+              >
+                {excluindoCliente ? (
+                  <>
+                    <Loader2 size={17} className="animate-spin" />
+                    Verificando...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={17} />
+                    Excluir cliente
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
       {tela === "cadastro" && (
-        <div className="bg-white rounded-3xl p-5 md:p-8 shadow-sm border border-slate-100 max-w-3xl">
-          <h2 className="text-2xl font-bold mb-6">
-            {editandoIndex !== null ? "Editar cliente" : "Cadastrar cliente"}
-          </h2>
+        <section className="max-w-4xl overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm">
+          <div className="border-b border-slate-100 bg-slate-50/70 px-5 py-5 md:px-8">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-600">
+              Cadastro de clientes
+            </p>
 
-          <div className="space-y-5">
-            <Input
-              label="Nome do cliente"
-              value={form.nome}
-              onChange={(value: string) => setForm({ ...form, nome: value })}
-            />
+            <h2 className="mt-1 text-2xl font-bold text-slate-900">
+              {editandoIndex !== null ? "Editar cliente" : "Cadastrar cliente"}
+            </h2>
 
-            <Input
-              label="Telefone"
-              value={form.telefone}
-              onChange={(value: string) =>
-                setForm({ ...form, telefone: value })
-              }
-            />
-
-            <Input
-              label="Endereço 1"
-              value={form.endereco1}
-              onChange={(value: string) =>
-                setForm({ ...form, endereco1: value })
-              }
-            />
-
-            <Input
-              label="Endereço 2"
-              value={form.endereco2}
-              onChange={(value: string) =>
-                setForm({ ...form, endereco2: value })
-              }
-            />
+            <p className="mt-1 text-sm text-slate-500">Os campos com asterisco são obrigatórios.</p>
           </div>
 
-          <div className="flex flex-col md:flex-row md:justify-end gap-3 mt-8">
+          <div className="space-y-6 p-5 md:p-8">
+            {erroFormulario && (
+              <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <AlertCircle size={18} className="mt-0.5 shrink-0" />
+                <span>{erroFormulario}</span>
+              </div>
+            )}
+
+            {sucessoFormulario && (
+              <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
+                <span>{sucessoFormulario}</span>
+              </div>
+            )}
+
+            <div className="rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
+              <h3 className="font-bold text-slate-900">Dados principais</h3>
+              <p className="mt-1 text-xs text-slate-500">
+                Informações usadas para identificar e contatar o cliente.
+              </p>
+
+              <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
+                <Input
+                  label="Nome do cliente"
+                  value={form.nome}
+                  required
+                  disabled={salvando}
+                  onChange={(value: string) => {
+                    setErroFormulario("");
+                    setForm({ ...form, nome: value });
+                  }}
+                />
+
+                <Input
+                  label="Telefone"
+                  value={form.telefone}
+                  required
+                  disabled={salvando}
+                  onChange={(value: string) => {
+                    setErroFormulario("");
+                    setForm({ ...form, telefone: value });
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
+              <h3 className="font-bold text-slate-900">Endereços</h3>
+              <p className="mt-1 text-xs text-slate-500">
+                Salve o endereço principal e, quando necessário, um segundo local.
+              </p>
+
+              <div className="mt-5 space-y-5">
+                <Input
+                  label="Endereço principal"
+                  value={form.endereco1}
+                  required
+                  disabled={salvando}
+                  placeholder="Rua, número, bairro e cidade"
+                  onChange={(value: string) => {
+                    setErroFormulario("");
+                    setForm({ ...form, endereco1: value });
+                  }}
+                />
+
+                <Input
+                  label="Segundo endereço"
+                  value={form.endereco2}
+                  disabled={salvando}
+                  placeholder="Opcional"
+                  onChange={(value: string) => setForm({ ...form, endereco2: value })}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                  <ReceiptText size={19} />
+                </div>
+
+                <div>
+                  <h3 className="font-bold text-slate-900">Forma de cobrança</h3>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Define o padrão usado nas novas teles deste cliente.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5">
+                <label className="text-sm font-medium text-slate-600">Cobrança padrão</label>
+
+                <select
+                  value={form.formaCobranca}
+                  disabled={salvando}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      formaCobranca: event.target.value,
+                    })
+                  }
+                  className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 disabled:cursor-wait disabled:bg-slate-100"
+                >
+                  <option value="NA_HORA">Cobrar na hora</option>
+                  <option value="SEMANAL">Fechamento semanal</option>
+                </select>
+
+                <p className="mt-2 text-xs leading-5 text-slate-500">
+                  Essa configuração pode ser alterada depois e não modifica teles antigas.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end md:px-8">
             <button
-              onClick={() => setTela("lista")}
-              className="w-full md:w-auto px-5 py-3 rounded-xl border border-slate-200"
+              type="button"
+              onClick={cancelarFormulario}
+              disabled={salvando}
+              className="h-12 w-full rounded-xl border border-slate-200 bg-white px-6 font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-50 sm:w-auto"
             >
               Cancelar
             </button>
 
             <button
-              onClick={salvarCliente}
+              type="button"
+              onClick={() => void salvarCliente()}
               disabled={salvando}
-              className="w-full md:w-autopx-5 py-3 rounded-xl bg-emerald-600 text-white disabled:opacity-50"
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-60 sm:w-auto"
             >
+              {salvando && <Loader2 size={17} className="animate-spin" />}
+
               {salvando
                 ? "Salvando..."
                 : editandoIndex !== null
-                ? "Salvar alterações"
-                : "Salvar cliente"}
+                  ? "Salvar alterações"
+                  : "Salvar cliente"}
             </button>
           </div>
-        </div>
+        </section>
       )}
     </PageContainer>
   );
 }
 
-function Input({ label, value, onChange }: any) {
+type ResumoClienteProps = {
+  label: string;
+  valor: string;
+  descricao: string;
+  icon: React.ReactNode;
+};
+
+function ResumoCliente({ label, valor, descricao, icon }: ResumoClienteProps) {
+  return (
+    <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-slate-500">{label}</p>
+          <strong className="mt-2 block text-2xl font-bold text-slate-900">{valor}</strong>
+          <p className="mt-1 text-xs text-slate-400">{descricao}</p>
+        </div>
+
+        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+          {icon}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function formatarFormaCobranca(forma: string | undefined) {
+  const mapa: Record<string, string> = {
+    NA_HORA: "Cobrar na hora",
+    SEMANAL: "Semanal",
+    QUINZENAL: "Semanal",
+    MENSAL: "Semanal",
+  };
+
+  return mapa[forma || "SEMANAL"] || "Semanal";
+}
+
+type InputProps = {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+  disabled?: boolean;
+  placeholder?: string;
+};
+
+function Input({
+  label,
+  value,
+  onChange,
+  required = false,
+  disabled = false,
+  placeholder = "",
+}: InputProps) {
   return (
     <div>
-      <label className="text-sm font-medium text-slate-600">{label}</label>
+      <label className="text-sm font-medium text-slate-600">
+        {label}
+        {required && <span className="ml-1 text-red-500">*</span>}
+      </label>
       <input
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
+        disabled={disabled}
+        placeholder={placeholder}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-2 h-12 w-full rounded-xl border border-slate-200 px-4 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 disabled:cursor-wait disabled:bg-slate-100"
       />
     </div>
   );

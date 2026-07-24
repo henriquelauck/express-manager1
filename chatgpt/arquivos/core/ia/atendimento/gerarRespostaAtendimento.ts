@@ -164,6 +164,22 @@ function gerarRespostaPeloEstado(atendimento: Atendimento): RespostaAtendimento 
       };
     }
 
+    case "AGUARDANDO_DADOS_COMPLEMENTARES":
+      return {
+        tipo: "SOLICITAR_INFORMACOES",
+
+        mensagem: [
+          "Para confirmar a entrega, preciso destas informações:",
+          "",
+          "Nome do cliente:",
+          "Precisa cobrar a entrega?",
+        ].join("\n"),
+
+        podeEnviarAutomaticamente: false,
+
+        informacoesSolicitadas: ["nome do cliente", "confirmação se precisa cobrar a entrega"],
+      };
+
     case "PRONTO_PARA_CALCULAR_ROTA":
       return gerarRespostaPedidoCompreendido(atendimento.operacao.paradas);
 

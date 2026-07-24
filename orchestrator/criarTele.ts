@@ -73,7 +73,7 @@ export async function criarTelePeloOrquestrador(
         tempoMinutos: dados.tempoMinutos ?? null,
 
         recebimento: "pendente",
-        formaCobranca: "semanal",
+        formaCobranca: dados.formaCobranca || "semanal",
         valorRecebido: 0,
         motoboyRecebedor: null,
         fechamentoId: null,

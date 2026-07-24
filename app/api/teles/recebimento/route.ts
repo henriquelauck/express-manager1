@@ -1,32 +1,198 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
 
-function recebimentoParaBanco(recebimento: string) {
-  const mapa: any = {
-    pendente: "PENDENTE",
-    escritorio: "ESCRITORIO",
-    motoboy: "MOTOBOY",
-  };
+type TipoMovimento = "CLIENTE" | "ESCRITORIO" | "AJUSTE";
 
-  return mapa[recebimento] || "PENDENTE";
+type MovimentoBody = {
+  motoboyId?: string;
+  tipo?: string;
+  clienteNome?: string | null;
+  valor?: number | string;
+  descricao?: string;
+  teleId?: string | null;
+  fechamentoId?: string | null;
+  dataReferenciaInicio?: string | null;
+  dataReferenciaFim?: string | null;
+};
+
+function converterValor(valor: unknown) {
+  const numero = Number(String(valor ?? "0").replace(",", "."));
+  return Number.isFinite(numero) ? numero : 0;
 }
 
-export async function PUT(request: Request) {
-  const body = await request.json();
+function dataOuNull(data: unknown) {
+  const valor = String(data || "").trim();
 
-  const valor = Number(String(body.valor || "0").replace(",", "."));
+  if (!valor) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) return null;
 
-  const tele = await prisma.tele.update({
-    where: { id: body.id },
-    data: {
-      recebimento: recebimentoParaBanco(body.recebimento),
-      valorRecebido: body.recebimento === "pendente" ? 0 : valor,
-      dataRecebimento:
-        body.recebimento === "pendente" ? null : new Date(),
-      motoboyRecebedor:
-        body.recebimento === "motoboy" ? body.motoboy || null : null,
-    },
-  });
+  return new Date(`${valor}T12:00:00-03:00`);
+}
 
-  return NextResponse.json({ ok: true, tele });
+function normalizarTipo(valor: unknown): TipoMovimento | null {
+  const tipo = String(valor || "").trim().toUpperCase();
+
+  if (
+    tipo === "CLIENTE" ||
+    tipo === "ESCRITORIO" ||
+    tipo === "AJUSTE"
+  ) {
+    return tipo;
+  }
+
+  return null;
+}
+
+function respostaErro(mensagem: string, status: number) {
+  return NextResponse.json({ erro: mensagem }, { status });
+}
+
+export async function GET() {
+  try {
+    const movimentos =
+      await prisma.movimentoFinanceiroMotoboy.findMany({
+        include: {
+          motoboy: true,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+    return NextResponse.json(
+      movimentos.map((movimento) => ({
+        id: movimento.id,
+        clienteNome: movimento.clienteNome,
+        motoboyId: movimento.motoboyId,
+        motoboy: movimento.motoboy.nome,
+        tipo: movimento.tipo,
+        valor: Number(movimento.valor || 0),
+        descricao: movimento.descricao,
+        teleId: movimento.teleId,
+        fechamentoId: movimento.fechamentoId,
+        dataReferenciaInicio:
+          movimento.dataReferenciaInicio,
+        dataReferenciaFim: movimento.dataReferenciaFim,
+        criadoEm: movimento.createdAt,
+      }))
+    );
+  } catch (erro) {
+    console.error("Erro ao buscar movimentos:", erro);
+
+    return respostaErro(
+      "Não foi possível carregar os movimentos financeiros.",
+      500
+    );
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = (await request.json()) as MovimentoBody;
+
+    const motoboyId = String(body.motoboyId || "").trim();
+    const tipo = normalizarTipo(body.tipo);
+    const valor = converterValor(body.valor);
+    const descricao = String(body.descricao || "").trim();
+    const dataInicio = dataOuNull(body.dataReferenciaInicio);
+    const dataFim = dataOuNull(body.dataReferenciaFim);
+
+    if (!motoboyId || !tipo) {
+      return respostaErro(
+        "Motoboy e tipo são obrigatórios.",
+        400
+      );
+    }
+
+    if (tipo === "CLIENTE") {
+      return respostaErro(
+        "Movimentos de clientes são gerados automaticamente pelas teles e fechamentos.",
+        400
+      );
+    }
+
+    if (valor === 0) {
+      return respostaErro(
+        "Informe um valor diferente de zero.",
+        400
+      );
+    }
+
+    if (tipo === "ESCRITORIO" && valor < 0) {
+      return respostaErro(
+        "Pagamentos do escritório não podem ter valor negativo.",
+        400
+      );
+    }
+
+    if (
+      dataInicio &&
+      dataFim &&
+      dataInicio.getTime() > dataFim.getTime()
+    ) {
+      return respostaErro(
+        "A data inicial não pode ser posterior à data final.",
+        400
+      );
+    }
+
+    const motoboy = await prisma.motoboy.findUnique({
+      where: {
+        id: motoboyId,
+      },
+      select: {
+        id: true,
+        nome: true,
+      },
+    });
+
+    if (!motoboy) {
+      return respostaErro("Motoboy não encontrado.", 404);
+    }
+
+    const movimento =
+      await prisma.movimentoFinanceiroMotoboy.create({
+        data: {
+          motoboyId,
+          tipo,
+          clienteNome: null,
+          valor,
+          descricao:
+            descricao ||
+            (tipo === "ESCRITORIO"
+              ? "Pagamento do escritório"
+              : "Ajuste financeiro"),
+          teleId: null,
+          fechamentoId: null,
+          dataReferenciaInicio: dataInicio,
+          dataReferenciaFim: dataFim,
+        },
+      });
+
+    return NextResponse.json(
+      {
+        id: movimento.id,
+        motoboyId: movimento.motoboyId,
+        motoboy: motoboy.nome,
+        tipo: movimento.tipo,
+        clienteNome: movimento.clienteNome,
+        valor: Number(movimento.valor || 0),
+        descricao: movimento.descricao,
+        teleId: movimento.teleId,
+        fechamentoId: movimento.fechamentoId,
+        dataReferenciaInicio:
+          movimento.dataReferenciaInicio,
+        dataReferenciaFim: movimento.dataReferenciaFim,
+        criadoEm: movimento.createdAt,
+      },
+      { status: 201 }
+    );
+  } catch (erro) {
+    console.error("Erro ao criar movimento:", erro);
+
+    return respostaErro(
+      "Não foi possível registrar o movimento financeiro.",
+      500
+    );
+  }
 }

@@ -30,6 +30,7 @@ export type Tele = {
   total: number;
 
   recebido: boolean;
+  dataOperacao: string;
 
   recebimento: StatusRecebimento;
   formaCobranca: FormaCobranca;

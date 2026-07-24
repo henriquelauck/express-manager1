@@ -149,6 +149,40 @@ type AnaliseAtendimentoIA = {
     } | null;
   };
 
+  planoAgente: {
+    objetivo: string;
+
+    estado: string;
+
+    proximaEtapa: string;
+
+    podeExecutarAcao: boolean;
+
+    requerConfirmacaoHumana: boolean;
+
+    acoes: {
+      etapa: string;
+
+      status: string;
+
+      motivo: string;
+    }[];
+  };
+
+  decisoes: {
+    tipo: string;
+
+    status: string;
+
+    resultado: string | null;
+
+    confianca: number | null;
+
+    referencia?: string;
+
+    motivo: string;
+  }[];
+
   erro?: string;
 };
 
@@ -427,27 +461,55 @@ export default function CentralAtendimentoPage() {
         setAnalisandoIA(true);
         setErroIA(null);
 
-        const resposta = await fetch("/api/ia/interpretar-pedido", {
+        const resposta = await fetch(`/api/atendimentos/conversas/${conversa.id}/intepretar`, {
           method: "POST",
-
-          headers: {
-            "Content-Type": "application/json",
-          },
-
-          body: JSON.stringify({
-            mensagem: ultimaMensagemCliente.conteudo,
-
-            telefoneRemetente: conversa.telefoneRemetente,
-          }),
         });
 
-        const dados = (await resposta.json()) as AnaliseAtendimentoIA;
+        const retorno = await resposta.json();
 
-        if (!resposta.ok) {
+        const dados = retorno.interpretacao as AnaliseAtendimentoIA;
+
+        if (!resposta.ok || !dados) {
           throw new Error(dados.erro ?? "Não foi possível analisar a mensagem.");
         }
 
         setAnaliseIA(dados);
+
+        const podeCriarAutomaticamente =
+          dados.propostaOperacional.status === "PRONTA_PARA_REVISAO" &&
+          dados.propostaOperacional.pendencias.length === 0 &&
+          !dados.atendimento.operacao.teleCriada &&
+          !dados.atendimento.operacao.teleId;
+
+        if (podeCriarAutomaticamente) {
+          window.setTimeout(() => {
+            void criarTeleViaIA(dados)
+              .then((tele) => {
+                setTeleCriada(tele);
+
+                setAnaliseIA((atual) =>
+                  atual
+                    ? {
+                        ...atual,
+                        atendimento: {
+                          ...atual.atendimento,
+                          operacao: {
+                            ...atual.atendimento.operacao,
+                            teleCriada: true,
+                            teleId: tele.id,
+                          },
+                        },
+                      }
+                    : atual
+                );
+              })
+              .catch((erro) => {
+                console.error("Erro ao criar tele automaticamente:", erro);
+              });
+          }, 300);
+        }
+
+        setMensagemClienteAnalisadaId(ultimaMensagemCliente.id);
 
         setMensagemClienteAnalisadaId(ultimaMensagemCliente.id);
       } catch (error) {
@@ -460,20 +522,6 @@ export default function CentralAtendimentoPage() {
     },
     [analiseIA, mensagemClienteAnalisadaId]
   );
-
-  useEffect(() => {
-    if (!conversaAtual || carregandoConversa) {
-      return;
-    }
-
-    const timeout = window.setTimeout(() => {
-      void analisarUltimaMensagemCliente(conversaAtual);
-    }, 100);
-
-    return () => {
-      window.clearTimeout(timeout);
-    };
-  }, [conversaAtual, carregandoConversa, analisarUltimaMensagemCliente]);
 
   async function criarTeleDaAnalise() {
     if (!analiseIA || criandoTele || !conversaAtual) {
@@ -933,14 +981,28 @@ export default function CentralAtendimentoPage() {
             </div>
 
             {conversaAtual && (
-              <button
-                type="button"
-                onClick={() => void carregarConversa(conversaAtual.id)}
-                disabled={carregandoConversa}
-                className="rounded-xl border border-zinc-700 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
-              >
-                Atualizar chat
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMensagemClienteAnalisadaId(null);
+                    void analisarUltimaMensagemCliente(conversaAtual);
+                  }}
+                  disabled={analisandoIA || carregandoConversa}
+                  className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {analisandoIA ? "Interpretando..." : "🧠 Interpretar conversa"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => void carregarConversa(conversaAtual.id)}
+                  disabled={carregandoConversa}
+                  className="rounded-xl border border-zinc-700 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Atualizar chat
+                </button>
+              </div>
             )}
           </header>
 
@@ -1075,8 +1137,13 @@ export default function CentralAtendimentoPage() {
               </button>
             </div>
           ) : !analiseIA ? (
-            <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-500">
-              Nenhuma mensagem do cliente disponível para análise.
+            <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+              <p className="text-sm font-semibold text-zinc-300">Conversa ainda não interpretada</p>
+
+              <p className="mt-2 text-sm text-zinc-500">
+                Clique em “Interpretar conversa” para analisar o histórico completo deste
+                atendimento.
+              </p>
             </div>
           ) : (
             <div className="mt-5 space-y-4">
@@ -1162,6 +1229,97 @@ export default function CentralAtendimentoPage() {
                   </div>
                 </div>
               )}
+              {analiseIA.propostaOperacional.avisos.length > 0 && (
+                <div className="rounded-xl border border-blue-900 bg-blue-950/20 p-4">
+                  <p className="text-xs font-semibold text-blue-300">Avisos da IA</p>
+
+                  <div className="mt-2 space-y-2">
+                    {analiseIA.propostaOperacional.avisos.map((aviso, indice) => (
+                      <div
+                        key={`${aviso}-${indice}`}
+                        className="rounded-lg border border-blue-900/60 bg-zinc-950 p-3"
+                      >
+                        <p className="text-sm leading-relaxed text-blue-100">ℹ️ {aviso}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                <p className="text-xs font-semibold text-zinc-500">Plano do Agente</p>
+
+                <div className="mt-3 space-y-2">
+                  {analiseIA.planoAgente.acoes.map((acao) => {
+                    const icone =
+                      acao.status === "CONCLUIDA"
+                        ? "✅"
+                        : acao.status === "PENDENTE"
+                          ? "⏳"
+                          : acao.status === "NAO_APLICAVEL"
+                            ? "➖"
+                            : "⚠️";
+
+                    return (
+                      <div
+                        key={acao.etapa}
+                        className="rounded-lg border border-zinc-800 bg-zinc-900 p-3"
+                      >
+                        <p className="text-sm font-semibold">
+                          {icone} {acao.etapa.replaceAll("_", " ")}
+                        </p>
+
+                        <p className="mt-1 text-xs text-zinc-500">{acao.motivo}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                <p className="text-xs font-semibold text-zinc-500">Decisões da IA</p>
+
+                <div className="mt-3 space-y-2">
+                  {analiseIA.decisoes.length === 0 ? (
+                    <p className="text-sm text-zinc-500">Nenhuma decisão registrada.</p>
+                  ) : (
+                    analiseIA.decisoes.map((decisao, indice) => (
+                      <div
+                        key={`${decisao.tipo}-${decisao.referencia ?? indice}`}
+                        className="rounded-lg border border-zinc-800 bg-zinc-900 p-3"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-sm font-semibold">
+                            {decisao.tipo.replaceAll("_", " ")}
+                          </p>
+
+                          <span className="rounded-full border border-zinc-700 px-2 py-1 text-[10px] text-zinc-300">
+                            {decisao.status}
+                          </span>
+                        </div>
+
+                        {decisao.referencia && (
+                          <p className="mt-1 text-xs text-emerald-300">{decisao.referencia}</p>
+                        )}
+
+                        <p className="mt-2 text-sm text-zinc-200">
+                          {decisao.resultado ?? "Sem resultado"}
+                        </p>
+
+                        <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+                          {decisao.motivo}
+                        </p>
+
+                        {decisao.confianca !== null && (
+                          <p className="mt-2 text-[11px] text-blue-300">
+                            Confiança: {Math.round(decisao.confianca * 100)}%
+                          </p>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
 
               <div className="rounded-xl border border-blue-900 bg-blue-950/20 p-4">
                 <p className="text-xs font-semibold text-blue-300">Resposta sugerida</p>

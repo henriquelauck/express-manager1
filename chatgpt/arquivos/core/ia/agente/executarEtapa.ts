@@ -56,12 +56,14 @@ async function executarCalculoRota(atendimento: Atendimento): Promise<ResultadoE
       temRetorno: atendimento.operacao.temRetorno,
     });
 
+    const exigeConfirmacao = atendimento.operacao.estrategia.exigeConfirmacaoOrcamento;
+
     const atendimentoAtualizado: Atendimento = {
       ...atendimento,
 
       atualizadoEm: new Date().toISOString(),
 
-      status: "AGUARDANDO_CLIENTE",
+      status: exigeConfirmacao ? "AGUARDANDO_CLIENTE" : "AGUARDANDO_SISTEMA",
 
       operacao: {
         ...atendimento.operacao,
@@ -77,25 +79,41 @@ async function executarCalculoRota(atendimento: Atendimento): Promise<ResultadoE
 
           valorSugerido: resultadoRota.valorSugerido,
 
-          valorConfirmado: null,
+          valorConfirmado: exigeConfirmacao ? null : resultadoRota.valorSugerido,
 
           polyline: resultadoRota.polyline,
         },
+
+        orcamentoConfirmado: !exigeConfirmacao,
       },
 
-      estado: {
-        etapa: "AGUARDANDO_CONFIRMACAO_ORCAMENTO",
+      estado: exigeConfirmacao
+        ? {
+            etapa: "AGUARDANDO_CONFIRMACAO_ORCAMENTO",
 
-        aguardando: "CONFIRMACAO_ORCAMENTO",
+            aguardando: "CONFIRMACAO_ORCAMENTO",
 
-        ultimaAcao: "A distância, o tempo e o valor da rota foram calculados.",
+            ultimaAcao: "A distância, o tempo e o valor da rota foram calculados.",
 
-        proximaAcao: "Apresentar o orçamento ao cliente e aguardar a confirmação.",
+            proximaAcao: "Apresentar o orçamento ao cliente e aguardar a confirmação.",
 
-        motivo: "A rota está calculada e o orçamento ainda não foi confirmado.",
+            motivo: "A rota está calculada e o orçamento ainda não foi confirmado.",
 
-        precisaHumano: false,
-      },
+            precisaHumano: false,
+          }
+        : {
+            etapa: "PRONTO_PARA_CRIAR_TELE",
+
+            aguardando: null,
+
+            ultimaAcao: "A distância, o tempo e o valor da rota foram calculados.",
+
+            proximaAcao: "Criar a tele automaticamente no Express Manager.",
+
+            motivo: "A estratégia operacional dispensa confirmação de orçamento.",
+
+            precisaHumano: false,
+          },
     };
 
     return {

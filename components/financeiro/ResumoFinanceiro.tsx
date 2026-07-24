@@ -1,62 +1,163 @@
 "use client";
 
-import { useMemo } from "react";
-import { Bike, Building2, CheckCircle, Clock, DollarSign, FileText } from "lucide-react";
 import { useExpressManager } from "@/context/ExpressManagerContext";
+import { Bike, Building2, CheckCircle2, CircleDollarSign, Clock3, FileText } from "lucide-react";
+import { useMemo } from "react";
+
+function converterValor(valor: unknown) {
+  const numero = Number(String(valor || "0").replace(",", "."));
+  return Number.isFinite(numero) ? numero : 0;
+}
+
+function formatarValor(valor: number) {
+  return valor.toFixed(2).replace(".", ",");
+}
+
+function valorTotalTele(tele: any) {
+  return converterValor(tele.total ?? tele.valor);
+}
+
+function valorRecebidoTele(tele: any) {
+  const total = valorTotalTele(tele);
+  const recebido = converterValor(tele.valorRecebido);
+
+  return Math.max(0, Math.min(recebido, total));
+}
+
+function saldoTele(tele: any) {
+  return Math.max(valorTotalTele(tele) - valorRecebidoTele(tele), 0);
+}
 
 export default function ResumoFinanceiro() {
   const { teles } = useExpressManager();
 
-  function converterValor(valor: any) {
-    return Number(String(valor || "0").replace(",", "."));
-  }
-
-  function formatarValor(valor: number) {
-    return valor.toFixed(2).replace(".", ",");
-  }
-
   const dados = useMemo(() => {
-    const pendentes = teles.filter((tele: any) => (tele.recebimento || "pendente") === "pendente");
-    const escritorio = teles.filter((tele: any) => tele.recebimento === "escritorio");
-    const motoboy = teles.filter((tele: any) => tele.recebimento === "motoboy");
+    return teles.reduce(
+      (resumo: any, tele: any) => {
+        const total = valorTotalTele(tele);
+        const recebido = valorRecebidoTele(tele);
+        const saldo = saldoTele(tele);
+        const tipoRecebimento = String(tele.recebimento || "pendente").toLowerCase();
 
-    const totalGeral = teles.reduce((soma: number, tele: any) => soma + converterValor(tele.valor), 0);
-    const totalPendente = pendentes.reduce((soma: number, tele: any) => soma + converterValor(tele.valor), 0);
-    const totalEscritorio = escritorio.reduce((soma: number, tele: any) => soma + converterValor(tele.valor), 0);
-    const totalMotoboy = motoboy.reduce((soma: number, tele: any) => soma + converterValor(tele.valor), 0);
+        resumo.totalGeral += total;
+        resumo.totalRecebido += recebido;
+        resumo.totalPendente += saldo;
+        resumo.quantidade += 1;
 
-    return {
-      totalGeral,
-      totalPendente,
-      totalEscritorio,
-      totalMotoboy,
-      ticketMedio: teles.length > 0 ? totalGeral / teles.length : 0,
-      quantidade: teles.length,
-    };
+        if (recebido > 0.009) {
+          if (tipoRecebimento === "motoboy") {
+            resumo.totalMotoboy += recebido;
+          } else {
+            resumo.totalEscritorio += recebido;
+          }
+        }
+
+        if (saldo <= 0.009) {
+          resumo.telesQuitadas += 1;
+        } else if (recebido > 0.009) {
+          resumo.telesParciais += 1;
+        } else {
+          resumo.telesPendentes += 1;
+        }
+
+        return resumo;
+      },
+      {
+        totalGeral: 0,
+        totalRecebido: 0,
+        totalPendente: 0,
+        totalEscritorio: 0,
+        totalMotoboy: 0,
+        quantidade: 0,
+        telesQuitadas: 0,
+        telesParciais: 0,
+        telesPendentes: 0,
+      }
+    );
   }, [teles]);
+
+  const ticketMedio = dados.quantidade > 0 ? dados.totalGeral / dados.quantidade : 0;
 
   return (
     <div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
-        <Card titulo="Faturamento total" valor={`R$ ${formatarValor(dados.totalGeral)}`} icon={<DollarSign size={26} />} />
-        <Card titulo="A receber" valor={`R$ ${formatarValor(dados.totalPendente)}`} icon={<Clock size={26} />} />
-        <Card titulo="Recebido escritório" valor={`R$ ${formatarValor(dados.totalEscritorio)}`} icon={<Building2 size={26} />} />
-        <Card titulo="Em mãos motoboys" valor={`R$ ${formatarValor(dados.totalMotoboy)}`} icon={<Bike size={26} />} />
-        <Card titulo="Ticket médio" valor={`R$ ${formatarValor(dados.ticketMedio)}`} icon={<FileText size={26} />} />
-        <Card titulo="Total de teles" valor={`${dados.quantidade}`} icon={<CheckCircle size={26} />} />
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+        <Card
+          titulo="Faturamento total"
+          valor={`R$ ${formatarValor(dados.totalGeral)}`}
+          descricao={`${dados.quantidade} teles no total`}
+          icon={<CircleDollarSign size={25} />}
+        />
+
+        <Card
+          titulo="A receber"
+          valor={`R$ ${formatarValor(dados.totalPendente)}`}
+          descricao={`${dados.telesPendentes} pendentes e ${dados.telesParciais} parciais`}
+          icon={<Clock3 size={25} />}
+          destaque={dados.totalPendente > 0}
+        />
+
+        <Card
+          titulo="Recebido no escritório"
+          valor={`R$ ${formatarValor(dados.totalEscritorio)}`}
+          descricao="Valores efetivamente recebidos"
+          icon={<Building2 size={25} />}
+        />
+
+        <Card
+          titulo="Em mãos dos motoboys"
+          valor={`R$ ${formatarValor(dados.totalMotoboy)}`}
+          descricao="Valores recebidos direto dos clientes"
+          icon={<Bike size={25} />}
+        />
+
+        <Card
+          titulo="Total já recebido"
+          valor={`R$ ${formatarValor(dados.totalRecebido)}`}
+          descricao={`${dados.telesQuitadas} teles quitadas`}
+          icon={<CheckCircle2 size={25} />}
+        />
+
+        <Card
+          titulo="Ticket médio"
+          valor={`R$ ${formatarValor(ticketMedio)}`}
+          descricao="Média bruta por tele"
+          icon={<FileText size={25} />}
+        />
       </div>
     </div>
   );
 }
 
-function Card({ titulo, valor, icon }: any) {
+type CardProps = {
+  titulo: string;
+  valor: string;
+  descricao: string;
+  icon: React.ReactNode;
+  destaque?: boolean;
+};
+
+function Card({ titulo, valor, descricao, icon, destaque = false }: CardProps) {
   return (
-    <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-      <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mb-5">
+    <div
+      className={`rounded-3xl border bg-white p-6 shadow-sm ${
+        destaque ? "border-orange-200" : "border-slate-100"
+      }`}
+    >
+      <div
+        className={`mb-5 flex h-13 w-13 items-center justify-center rounded-2xl ${
+          destaque ? "bg-orange-100 text-orange-700" : "bg-emerald-100 text-emerald-700"
+        }`}
+      >
         {icon}
       </div>
-      <p className="text-sm text-slate-500">{titulo}</p>
-      <h2 className="text-3xl font-bold mt-2">{valor}</h2>
+
+      <p className="text-sm font-medium text-slate-500">{titulo}</p>
+
+      <h2 className={`mt-2 text-3xl font-bold ${destaque ? "text-orange-600" : "text-slate-900"}`}>
+        {valor}
+      </h2>
+
+      <p className="mt-2 text-xs leading-5 text-slate-400">{descricao}</p>
     </div>
   );
 }

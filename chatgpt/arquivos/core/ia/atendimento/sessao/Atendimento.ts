@@ -14,7 +14,7 @@ export type MensagemAtendimento = {
   criadaEm: string;
 };
 
-export type TipoParadaAtendimento = "COLETA" | "ENTREGA" | "TROCA" | "OUTRA";
+export type TipoParadaAtendimento = "COLETA" | "ENTREGA" | "TROCA" | "ENTREGA_E_COLETA" | "OUTRA";
 
 export type OrigemDadoAtendimento =
   | "MENSAGEM"
@@ -25,6 +25,12 @@ export type OrigemDadoAtendimento =
   | "GOOGLE_MAPS"
   | "CONFIRMACAO_CLIENTE"
   | "SISTEMA";
+
+export type DadosComplementaresParada = {
+  nomeCliente: string | null;
+
+  cobrarEntrega: boolean | null;
+};
 
 export type ParadaAtendimento = {
   tipo: TipoParadaAtendimento;
@@ -42,6 +48,8 @@ export type ParadaAtendimento = {
   origem: OrigemDadoAtendimento | null;
 
   confirmada: boolean;
+
+  dadosComplementares?: DadosComplementaresParada;
 };
 
 export type EstadoEtapaAtendimento =
@@ -50,6 +58,7 @@ export type EstadoEtapaAtendimento =
   | "AGUARDANDO_COLETA"
   | "AGUARDANDO_ENTREGA"
   | "AGUARDANDO_ENDERECO"
+  | "AGUARDANDO_DADOS_COMPLEMENTARES"
   | "PRONTO_PARA_CALCULAR_ROTA"
   | "CALCULANDO_ROTA"
   | "AGUARDANDO_CONFIRMACAO_ORCAMENTO"
@@ -68,6 +77,7 @@ export type InformacaoAguardadaAtendimento =
   | "ENTREGA"
   | "ENDERECO_COLETA"
   | "ENDERECO_ENTREGA"
+  | "DADOS_COMPLEMENTARES"
   | "CONFIRMACAO_ORCAMENTO"
   | "CONFIRMACAO_TELE"
   | "RESPOSTA_MOTOBOY"
@@ -110,6 +120,18 @@ export type MotoboyAtendimento = {
   confirmado: boolean;
 };
 
+export type EstrategiaAtendimento = {
+  exigeConfirmacaoOrcamento: boolean;
+
+  criarTeleAutomaticamente: boolean;
+
+  usarOrcamentoEstruturado: boolean;
+
+  mensagemAposCriarTele: string | null;
+
+  mensagemAposAtribuirMotoboy: string | null;
+};
+
 export type OperacaoAtendimento = {
   intencao: string | null;
 
@@ -126,6 +148,8 @@ export type OperacaoAtendimento = {
   rota: RotaAtendimento;
 
   motoboy: MotoboyAtendimento;
+
+  estrategia: EstrategiaAtendimento;
 
   orcamentoConfirmado: boolean;
 
@@ -227,6 +251,18 @@ export function criarAtendimentoVazio({
         atribuido: false,
 
         confirmado: false,
+      },
+
+      estrategia: {
+        exigeConfirmacaoOrcamento: true,
+
+        criarTeleAutomaticamente: false,
+
+        usarOrcamentoEstruturado: true,
+
+        mensagemAposCriarTele: null,
+
+        mensagemAposAtribuirMotoboy: null,
       },
 
       orcamentoConfirmado: false,

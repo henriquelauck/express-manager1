@@ -1,4 +1,3 @@
-import { resolverLocalRecorrente } from "@/core/ia/historico/resolverLocalRecorrente";
 import { aplicarRegrasOperacionais } from "@/core/ia/motor-operacional/aplicarRegrasOperacionais";
 import { prisma } from "@/lib/prisma";
 import { detectarDadosComplementaresPendentes } from "./detectarDadosComplementares";
@@ -468,35 +467,7 @@ async function enriquecerParadasComCadastro(atendimento: Atendimento): Promise<A
         };
       }
 
-      if (!solicitante) {
-        return parada;
-      }
-
-      const historico = await resolverLocalRecorrente({
-        solicitante,
-
-        textoLocal: textoParaResolver,
-
-        tipo: parada.tipo === "COLETA" || parada.tipo === "ENTREGA" ? parada.tipo : undefined,
-      });
-
-      if (!historico.encontrado || !historico.cliente || !historico.endereco) {
-        return parada;
-      }
-
-      return {
-        ...parada,
-
-        cliente: historico.cliente,
-
-        endereco: historico.endereco,
-
-        telefone: historico.telefone,
-
-        confianca: historico.confianca,
-
-        origem: "HISTORICO_SOLICITANTE",
-      };
+      return parada;
     })
   );
 

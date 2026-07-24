@@ -1,0 +1,164 @@
+===== components/nova-tele/ListaParadas.tsx =====
+"use client";
+
+import type { Cliente } from "@/types/Cliente";
+import type { Parada } from "@/types/Parada";
+import { Plus } from "lucide-react";
+import CardParada from "./CardParada";
+
+type LocalFrequente = {
+  cliente: string;
+  endereco: string;
+  contato: string;
+};
+
+type ListaParadasProps = {
+  paradas: Parada[];
+  clientes: Cliente[];
+  locaisFrequentes: LocalFrequente[];
+  onAtualizar: (index: number, campo: keyof Parada, valor: string) => void;
+  onRemover: (index: number) => void;
+  onAdicionar: () => void;
+};
+
+export default function ListaParadas({
+  paradas,
+  clientes,
+  locaisFrequentes,
+  onAtualizar,
+  onRemover,
+  onAdicionar,
+}: ListaParadasProps) {
+  return (
+    <>
+      <div className="space-y-6">
+        {paradas.map((parada, index) => (
+          <CardParada
+            key={parada.id}
+            parada={parada}
+            index={index}
+            podeRemover={paradas.length > 1}
+            onAtualizar={onAtualizar}
+            onRemover={onRemover}
+          />
+        ))}
+      </div>
+
+      <datalist id="clientes-lista">
+        {clientes.map((cliente) => (
+          <option key={cliente.id || cliente.nome} value={cliente.nome} />
+        ))}
+      </datalist>
+
+      <datalist id="locais-frequentes-lista">
+        {locaisFrequentes.map((local) => (
+          <option key={local.cliente.toLowerCase()} value={local.cliente} />
+        ))}
+      </datalist>
+
+      <button
+        type="button"
+        onClick={onAdicionar}
+        className="mt-6 flex h-14 w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-emerald-400 text-emerald-700 hover:bg-emerald-50"
+      >
+        <Plus size={22} />
+        Adicionar parada
+      </button>
+    </>
+  );
+}
+
+===== components/nova-tele/ResumoFinanceiro.tsx =====
+"use client";
+
+import { formatarValor } from "@/lib/services/tele.service";
+
+type ResumoFinanceiroProps = {
+  valorBase: number;
+  retorno: number;
+  espera: number;
+  total: number;
+  tipoRota: string;
+};
+
+export default function ResumoFinanceiro({
+  valorBase,
+  retorno,
+  espera,
+  total,
+  tipoRota,
+}: ResumoFinanceiroProps) {
+  return (
+    <div className="rounded-2xl bg-slate-50 p-5 md:col-span-2">
+      <div className="mb-2 flex justify-between text-sm">
+        <span>Valor base</span>
+        <strong>R$ {formatarValor(valorBase)}</strong>
+      </div>
+
+      <div className="mb-2 flex justify-between text-sm">
+        <span>Retorno</span>
+        <strong>R$ {formatarValor(retorno)}</strong>
+      </div>
+
+      <div className="mb-4 flex justify-between text-sm">
+        <span>Espera</span>
+        <strong>R$ {formatarValor(espera)}</strong>
+      </div>
+
+      <div className="flex items-center justify-between border-t border-slate-200 pt-4">
+        <span className="font-bold">Total</span>
+
+        <h2 className="text-3xl font-bold text-emerald-700">R$ {formatarValor(total)}</h2>
+      </div>
+
+      <p className="mt-2 text-sm text-slate-500">Tipo: {tipoRota}</p>
+    </div>
+  );
+}
+
+===== hooks/useParadas.ts =====
+import { gerarId } from "@/lib/utils/id";
+import type { Parada } from "@/types/Parada";
+import { useState } from "react";
+
+export function useParadas() {
+  const [paradas, setParadas] = useState<Parada[]>([
+    {
+      id: gerarId(),
+      tipo: "Entrega",
+      cliente: "",
+      endereco: "",
+      contato: "",
+      observacao: "",
+    },
+  ]);
+
+  function adicionarParada() {
+    setParadas((paradasAtuais) => [
+      ...paradasAtuais,
+      {
+        id: gerarId(),
+        tipo: "Entrega",
+        cliente: "",
+        endereco: "",
+        contato: "",
+        observacao: "",
+      },
+    ]);
+  }
+
+  function removerParada(index: number) {
+    setParadas((paradasAtuais) => {
+      if (paradasAtuais.length === 1) return paradasAtuais;
+
+      return paradasAtuais.filter((_, i) => i !== index);
+    });
+  }
+
+  return {
+    paradas,
+    setParadas,
+    adicionarParada,
+    removerParada,
+  };
+}

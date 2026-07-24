@@ -83,6 +83,24 @@ function criarAtualizacaoLocal(texto: string): Partial<ParadaAtendimento> | unde
   };
 }
 
+function criarAtualizacaoEndereco(
+  texto: string
+): Partial<ParadaAtendimento> | undefined {
+  const endereco = limparLocal(texto);
+
+  if (!endereco || !pareceEndereco(endereco)) {
+    return undefined;
+  }
+
+  return {
+    endereco,
+    confianca: 1,
+    origem: "CONFIRMACAO_CLIENTE",
+    confirmada: true,
+    textoOriginal: endereco,
+  };
+}
+
 function extrairColeta(mensagem: string): Partial<ParadaAtendimento> | undefined {
   const correspondencia = mensagem.match(
     /(?:coleta|coletar|buscar|busca|pegar|pega|retirar|retira)\s+(?:deve\s+ser\s+feita\s+)?(?:é\s+|e\s+)?(.+?)(?=\s*(?:,|;)?\s*(?:e\s+)?(?:a\s+)?(?:entrega|entregar|leva|levar)\b|$)/i
@@ -164,6 +182,44 @@ export function interpretarRespostaContextual(
       },
     };
   }
+
+if (atendimento.estado.aguardando === "ENDERECO_COLETA") {
+  const endereco = criarAtualizacaoEndereco(texto);
+
+  if (!endereco) {
+    return {
+      consumida: false,
+      atualizacoes: {},
+    };
+  }
+
+  return {
+    consumida: true,
+
+    atualizacoes: {
+      coleta: endereco,
+    },
+  };
+}
+
+if (atendimento.estado.aguardando === "ENDERECO_ENTREGA") {
+  const endereco = criarAtualizacaoEndereco(texto);
+
+  if (!endereco) {
+    return {
+      consumida: false,
+      atualizacoes: {},
+    };
+  }
+
+  return {
+    consumida: true,
+
+    atualizacoes: {
+      entrega: endereco,
+    },
+  };
+}
 
   const coletaExtraida = extrairColeta(texto);
 

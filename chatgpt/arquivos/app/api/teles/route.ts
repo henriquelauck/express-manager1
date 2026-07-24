@@ -1,21 +1,23 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import type { StatusTele as StatusTeleBanco } from "@prisma/client";
+import { NextResponse } from "next/server";
 
-function statusParaBanco(status: string) {
-  const mapa: any = {
+function statusParaBanco(status: string): StatusTeleBanco {
+  const mapa: Record<string, StatusTeleBanco> = {
     "Aguardando cliente": "AGUARDANDO_CLIENTE",
     "Aguardando motoboy disponível": "AGUARDANDO_MOTOBOY",
+    "Aguardando coleta": "AGUARDANDO_COLETA",
     "Em rota": "EM_ROTA",
     Entregue: "ENTREGUE",
   };
 
-  return mapa[status] || "AGUARDANDO_CLIENTE";
+  return mapa[status] ?? "AGUARDANDO_CLIENTE";
 }
-
 function statusParaTela(status: string) {
-  const mapa: any = {
+  const mapa: Record<string, string> = {
     AGUARDANDO_CLIENTE: "Aguardando cliente",
     AGUARDANDO_MOTOBOY: "Aguardando motoboy disponível",
+    AGUARDANDO_COLETA: "Aguardando coleta",
     EM_ROTA: "Em rota",
     ENTREGUE: "Entregue",
   };
@@ -91,7 +93,8 @@ function formatarTeleParaTela(tele: any) {
     motoboyId: tele.motoboyId,
     motoboy: tele.motoboyNome || tele.motoboy?.nome || "",
     status: statusParaTela(tele.status),
-    criadoEm: formatarData(tele.dataTele || tele.createdAt),
+    criadoEm: formatarData(tele.createdAt),
+    dataOperacao: formatarData(tele.dataTele),
     dataTele: tele.dataTele,
     distanciaKm: tele.distanciaKm,
     tempoMinutos: tele.tempoMinutos,
@@ -170,9 +173,7 @@ export async function POST(request: Request) {
     data: {
       clienteId: cliente?.id,
       solicitante: body.solicitante,
-      dataTele: body.dataTele
-  ? new Date(`${body.dataTele}T12:00:00`)
-  : new Date(),
+      dataTele: body.dataTele ? new Date(`${body.dataTele}T12:00:00`) : new Date(),
       motoboyId: motoboy?.id,
       motoboyNome: body.motoboy || "",
       status: statusParaBanco(body.status || "Aguardando cliente"),
@@ -236,26 +237,20 @@ export async function PUT(request: Request) {
       where: { id: body.id },
       data: {
         solicitante: body.solicitante,
-        dataTele: body.dataTele
-          ? new Date(`${body.dataTele.slice(0, 10)}T12:00:00`)
-          : undefined,
+        dataTele: body.dataTele ? new Date(`${body.dataTele.slice(0, 10)}T12:00:00`) : undefined,
 
         motoboyId: motoboy?.id || null,
         motoboyNome: body.motoboy || "",
         status: statusParaBanco(body.status),
         tipoRota: body.tipoRota || "Entrega",
 
-        valorBase:
-          body.valorBase || Number(String(body.valor || "0").replace(",", ".")),
+        valorBase: body.valorBase || Number(String(body.valor || "0").replace(",", ".")),
         retorno: body.retorno || 0,
         espera: body.espera || 0,
-        total:
-          body.total || Number(String(body.valor || "0").replace(",", ".")),
+        total: body.total || Number(String(body.valor || "0").replace(",", ".")),
 
         recebimento: recebimentoParaBanco(body.recebimento || "pendente"),
-        formaCobranca: formaCobrancaParaBanco(
-          body.formaCobranca || "semanal"
-        ),
+        formaCobranca: formaCobrancaParaBanco(body.formaCobranca || "semanal"),
         valorRecebido: body.valorRecebido || 0,
         motoboyRecebedor: body.motoboyRecebedor || null,
         fechamentoId: body.fechamentoId || null,

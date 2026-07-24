@@ -1,4 +1,6 @@
 import { executarEtapa } from "@/core/ia/agente/executarEtapa";
+import { buscarMemoriaIA } from "@/core/ia/aprendizado/buscarMemoriaIA";
+import { registrarExemploAtendimento } from "@/core/ia/aprendizado/registrarExemploAtendimento";
 import { decidirFluxoMensagem } from "@/core/ia/atendimento/decidirFluxoMensagem";
 import { gerarPlanoOperacional } from "@/core/ia/atendimento/gerarPlanoOperacional";
 import { gerarRespostaAtendimento } from "@/core/ia/atendimento/gerarRespostaAtendimento";
@@ -6,6 +8,7 @@ import { processarAtendimento } from "@/core/ia/atendimento/processarAtendimento
 import {
   buscarAtendimentoAtivo,
   salvarAtendimento,
+  type CanalAtendimento,
 } from "@/core/ia/atendimento/repositorio/atendimentoRepository";
 import { criarAtendimentoVazio } from "@/core/ia/atendimento/sessao/Atendimento";
 import { gerarDecisoes } from "@/core/ia/gerarDecisoes";
@@ -83,6 +86,14 @@ export async function POST(request: Request) {
   try {
     const body: unknown = await request.json();
 
+    const canal: CanalAtendimento =
+      typeof body === "object" &&
+      body !== null &&
+      "canal" in body &&
+      (body as { canal?: unknown }).canal === "WHATSAPP"
+        ? "WHATSAPP"
+        : "SIMULADOR";
+
     const { mensagem, telefoneRemetente } = normalizarEntradaPipelineIA(body);
 
     const clientes = await prisma.cliente.findMany({
@@ -114,7 +125,7 @@ export async function POST(request: Request) {
     const atendimentoExistente = telefoneRemetente
       ? await buscarAtendimentoAtivo({
           telefoneRemetente,
-          canal: "SIMULADOR",
+          canal,
         })
       : null;
 
@@ -124,6 +135,16 @@ export async function POST(request: Request) {
         id: crypto.randomUUID(),
         telefoneRemetente,
       });
+
+    const memoriaIA = await buscarMemoriaIA({
+      telefoneRemetente,
+
+      solicitante: atendimentoInicial.operacao.solicitante ?? clientePeloTelefone?.nome ?? null,
+
+      mensagemCliente: mensagem,
+
+      limite: 8,
+    });
 
     const decisaoFluxo = decidirFluxoMensagem({
       atendimento: atendimentoExistente,
@@ -145,7 +166,17 @@ export async function POST(request: Request) {
           }
         : await interpretarPedido(mensagem, {
             clientes: nomesClientes,
+
             clientesReconhecidos: [],
+
+            memoria: memoriaIA.habilitada
+              ? {
+                  solicitante:
+                    atendimentoInicial.operacao.solicitante ?? clientePeloTelefone?.nome ?? null,
+
+                  exemplos: memoriaIA.exemplos,
+                }
+              : null,
           });
 
     const solicitantePelaMensagem = resolverSolicitante(pedido.solicitante, nomesClientes);
@@ -381,6 +412,7 @@ export async function POST(request: Request) {
     const statusParaCore = {
       AGUARDANDO_CLIENTE: "Aguardando cliente",
       AGUARDANDO_MOTOBOY: "Aguardando motoboy disponível",
+      AGUARDANDO_COLETA: "Aguardando coleta",
       EM_ROTA: "Em rota",
       ENTREGUE: "Entregue",
     } as const;
@@ -395,6 +427,12 @@ export async function POST(request: Request) {
       motoboy: tele.motoboyNome || tele.motoboy?.nome || "",
 
       status: statusParaCore[tele.status],
+
+      dataOperacao: tele.dataTele
+        ? new Date(tele.dataTele).toLocaleString("pt-BR", {
+            timeZone: "America/Sao_Paulo",
+          })
+        : "",
 
       criadoEm: tele.createdAt.toISOString(),
       dataTele: tele.dataTele.toISOString(),
@@ -560,7 +598,7 @@ export async function POST(request: Request) {
     const atendimento = telefoneRemetente
       ? await salvarAtendimento({
           atendimento: atendimentoProcessado,
-          canal: "SIMULADOR",
+          canal,
         })
       : atendimentoProcessado;
 
@@ -571,7 +609,7 @@ export async function POST(request: Request) {
     const atendimentoPersistidoFinal = telefoneRemetente
       ? await salvarAtendimento({
           atendimento: atendimentoFinal,
-          canal: "SIMULADOR",
+          canal,
         })
       : atendimentoFinal;
     const paradasOperacionaisFinais = atendimentoFinal.operacao.paradas.map((parada) => ({
@@ -708,6 +746,66 @@ export async function POST(request: Request) {
 
       propostaOperacional,
     };
+
+    await registrarExemploAtendimento({
+      atendimentoId: atendimentoPersistidoFinal.id,
+
+      teleId: atendimentoPersistidoFinal.operacao.teleId,
+
+      telefoneRemetente: telefoneRemetente || "",
+
+      solicitante: atendimentoPersistidoFinal.operacao.solicitante,
+
+      mensagemCliente: mensagem,
+
+      interpretacaoIA: {
+        intencao: pedido.intencao,
+
+        solicitanteInformado: pedido.solicitante,
+
+        paradasInterpretadas: pedido.paradas,
+
+        precisaHumano: pedido.precisaHumano,
+
+        informacoesFaltantes: pedido.informacoesFaltantes,
+      },
+
+      sugestaoIA: {
+        respostaAtendimento,
+
+        planoAgente,
+
+        propostaOperacional: {
+          status: propostaOperacional.status,
+
+          paradas: propostaOperacional.paradas,
+
+          pendencias: propostaOperacional.pendencias,
+
+          avisos: propostaOperacional.avisos,
+
+          motoboySugerido: propostaOperacional.motoboySugerido,
+        },
+      },
+
+      operacaoFinal: {
+        atendimentoId: atendimentoPersistidoFinal.id,
+
+        estado: atendimentoPersistidoFinal.estado,
+
+        status: atendimentoPersistidoFinal.status,
+
+        operacao: atendimentoPersistidoFinal.operacao,
+
+        execucao: {
+          executou: resultadoExecucao.executou,
+
+          etapaExecutada: resultadoExecucao.etapaExecutada,
+
+          mensagem: resultadoExecucao.mensagem ?? null,
+        },
+      },
+    });
 
     return NextResponse.json(pedidoFinal);
   } catch (error) {

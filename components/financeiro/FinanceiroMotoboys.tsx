@@ -1,194 +1,245 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Bike, Copy, DollarSign, FileText, Plus, X, Trash2 } from "lucide-react";
 import { useExpressManager } from "@/context/ExpressManagerContext";
+import { Bike, Copy, DollarSign, FileText, Loader2, Plus, Trash2, X } from "lucide-react";
+import { useMemo, useState } from "react";
+
+function converterValor(valor: unknown) {
+  const numero = Number(String(valor ?? "0").replace(",", "."));
+  return Number.isFinite(numero) ? numero : 0;
+}
+
+function formatarValor(valor: number) {
+  return valor.toFixed(2).replace(".", ",");
+}
+
+function dataLocalISO(valor: unknown) {
+  if (!valor) return "";
+
+  if (typeof valor === "string") {
+    const texto = valor.trim();
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) {
+      return texto;
+    }
+
+    const dataBr = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+
+    if (dataBr) {
+      return `${dataBr[3]}-${dataBr[2]}-${dataBr[1]}`;
+    }
+  }
+
+  const data = new Date(String(valor));
+
+  if (Number.isNaN(data.getTime())) return "";
+
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(data);
+}
+
+function formatarData(valor: unknown) {
+  const dataISO = dataLocalISO(valor);
+
+  if (!dataISO) return "-";
+
+  const [ano, mes, dia] = dataISO.split("-");
+  return `${dia}/${mes}/${ano}`;
+}
+
+function dataDaTele(tele: any) {
+  return dataLocalISO(tele.dataTele || tele.createdAt || tele.criadoEm);
+}
+
+function valorTotalTele(tele: any) {
+  return converterValor(tele.total ?? tele.valor);
+}
+
+function nomeDestino(tele: any) {
+  if (Array.isArray(tele.paradas) && tele.paradas.length > 0) {
+    const paradaPrincipal =
+      tele.paradas.find((parada: any) => parada.cliente !== tele.solicitante) || tele.paradas[0];
+
+    return (
+      paradaPrincipal.cliente || paradaPrincipal.nomeCliente || tele.nomeCliente || "Não informado"
+    );
+  }
+
+  return tele.nomeCliente || "Não informado";
+}
 
 export default function FinanceiroMotoboys() {
-  const {
-    motoboys,
-    teles,
-    movimentosFinanceirosMotoboy,
-    recarregarDados,
-  } = useExpressManager();
+  const { motoboys, teles, movimentosFinanceirosMotoboy, recarregarDados } = useExpressManager();
 
-  const [motoboySelecionado, setMotoboySelecionado] = useState("");
+  const [motoboyIdSelecionado, setMotoboyIdSelecionado] = useState("");
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
 
   const [modalAberto, setModalAberto] = useState(false);
-  const [valorPagamento, setValorPagamento] = useState("");
-  const [descricaoPagamento, setDescricaoPagamento] = useState("PIX semanal");
+  const [tipoLancamento, setTipoLancamento] = useState<"ESCRITORIO" | "AJUSTE">("ESCRITORIO");
+  const [valorLancamento, setValorLancamento] = useState("");
+  const [descricaoLancamento, setDescricaoLancamento] = useState("PIX semanal");
   const [dataReferenciaInicio, setDataReferenciaInicio] = useState("");
-const [dataReferenciaFim, setDataReferenciaFim] = useState("");
+  const [dataReferenciaFim, setDataReferenciaFim] = useState("");
   const [salvando, setSalvando] = useState(false);
+  const [excluindoId, setExcluindoId] = useState("");
+  const [erroModal, setErroModal] = useState("");
 
-async function excluirMovimento(id: string) {
-  const confirmar = confirm("Excluir este recebimento?");
-
-  if (!confirmar) return;
-
-  const resposta = await fetch(`/api/movimentos-financeiros-motoboy/${id}`, {
-    method: "DELETE",
-  });
-
-  if (!resposta.ok) {
-    alert("Erro ao excluir recebimento.");
-    return;
-  }
-
-  await recarregarDados();
-
-  alert("Recebimento excluído.");
-}
-
-  function converterValor(valor: any) {
-    return Number(String(valor || "0").replace(",", "."));
-  }
-
-  function formatarValor(valor: number) {
-    return valor.toFixed(2).replace(".", ",");
-  }
-
-  function formatarData(data: any) {
-  if (!data) return "-";
-
-  return new Date(data).toLocaleDateString("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-  });
-}
-
-  function dataDaTele(criadoEm: string) {
-    return criadoEm.split(",")[0];
-  }
-
-  function dataParaComparar(dataBR: string) {
-    const [dia, mes, ano] = dataBR.split("/");
-    return `${ano}-${mes}-${dia}`;
-  }
-
-  function nomeDestino(tele: any) {
-    if (tele.paradas?.length > 0) {
-      const paradaPrincipal =
-        tele.paradas.find((parada: any) => parada.cliente !== tele.solicitante) ||
-        tele.paradas[0];
-
-      return paradaPrincipal.cliente || paradaPrincipal.nomeCliente || tele.nomeCliente;
-    }
-
-    return tele.nomeCliente;
-  }
-
-  const motoboyAtual = motoboys.find(
-    (motoboy: any) => motoboy.nome === motoboySelecionado
-  );
+  const motoboyAtual = motoboys.find((motoboy: any) => motoboy.id === motoboyIdSelecionado);
 
   const telesDoMotoboy = useMemo(() => {
-    return teles.filter((tele: any) => {
-      if (!motoboySelecionado) return false;
-      if (tele.motoboy !== motoboySelecionado) return false;
+    if (!motoboyAtual) return [];
 
-      const dataTele = dataParaComparar(dataDaTele(tele.criadoEm));
+    return teles.filter((tele: any) => {
+      const pertenceAoMotoboy =
+        tele.motoboyId === motoboyAtual.id ||
+        tele.motoboyNome === motoboyAtual.nome ||
+        tele.motoboy === motoboyAtual.nome;
+
+      if (!pertenceAoMotoboy) return false;
+
+      const dataTele = dataDaTele(tele);
 
       if (dataInicio && dataTele < dataInicio) return false;
       if (dataFim && dataTele > dataFim) return false;
 
       return true;
     });
-  }, [teles, motoboySelecionado, dataInicio, dataFim]);
+  }, [teles, motoboyAtual, dataInicio, dataFim]);
 
   const movimentosDoMotoboy = useMemo(() => {
-  return movimentosFinanceirosMotoboy.filter((movimento: any) => {
-    if (!motoboyAtual) return false;
-    if (movimento.motoboyId !== motoboyAtual.id) return false;
+    if (!motoboyAtual) return [];
 
-    const inicio = movimento.dataReferenciaInicio
-      ? movimento.dataReferenciaInicio.slice(0, 10)
-      : new Date(movimento.criadoEm).toISOString().slice(0, 10);
+    return movimentosFinanceirosMotoboy.filter((movimento: any) => {
+      if (movimento.motoboyId !== motoboyAtual.id) {
+        return false;
+      }
 
-    const fim = movimento.dataReferenciaFim
-      ? movimento.dataReferenciaFim.slice(0, 10)
-      : new Date(movimento.criadoEm).toISOString().slice(0, 10);
+      const inicio = dataLocalISO(movimento.dataReferenciaInicio || movimento.criadoEm);
+      const fim = dataLocalISO(movimento.dataReferenciaFim || movimento.criadoEm);
 
-    if (dataInicio && fim < dataInicio) return false;
-    if (dataFim && inicio > dataFim) return false;
+      if (dataInicio && fim < dataInicio) return false;
+      if (dataFim && inicio > dataFim) return false;
 
-    return true;
-  });
-}, [
-  movimentosFinanceirosMotoboy,
-  motoboyAtual,
-  dataInicio,
-  dataFim,
-]);
+      return true;
+    });
+  }, [movimentosFinanceirosMotoboy, motoboyAtual, dataInicio, dataFim]);
 
   const totalBruto = telesDoMotoboy.reduce(
-    (soma: number, tele: any) => soma + converterValor(tele.valor),
+    (soma: number, tele: any) => soma + valorTotalTele(tele),
     0
   );
 
   const valorMotoboy = totalBruto * 0.8;
 
-const recebidoClienteAntigo = telesDoMotoboy
-  .filter((tele: any) => {
-    const recebimento = String(tele.recebimento || "").toLowerCase();
+  const movimentosCliente = movimentosDoMotoboy.filter(
+    (movimento: any) => movimento.tipo === "CLIENTE"
+  );
 
-    const jaTemMovimento = movimentosDoMotoboy.some(
-      (movimento: any) =>
-        movimento.tipo === "CLIENTE" &&
-        movimento.fechamentoId &&
-        movimento.fechamentoId === tele.fechamentoId
-    );
+  const telesComMovimento = new Set(
+    movimentosCliente.map((movimento: any) => movimento.teleId).filter(Boolean)
+  );
 
-    return (
-      recebimento === "motoboy" &&
-      !jaTemMovimento &&
-      (!tele.motoboyRecebedor ||
-        tele.motoboyRecebedor === motoboySelecionado)
-    );
-  })
-  .reduce((soma: number, tele: any) => {
-    return soma + converterValor(tele.valorRecebido || tele.valor);
-  }, 0);
-  
+  const fechamentosComMovimento = new Set(
+    movimentosCliente.map((movimento: any) => movimento.fechamentoId).filter(Boolean)
+  );
 
-  const recebidoCliente =
-  recebidoClienteAntigo +
-  movimentosDoMotoboy
-    .filter((movimento: any) => movimento.tipo === "CLIENTE")
-    .reduce(
-      (soma: number, movimento: any) => soma + Number(movimento.valor || 0),
-      0
-    );
+  const recebimentosAntigos = telesDoMotoboy
+    .filter((tele: any) => {
+      const recebidoPeloMotoboy = String(tele.recebimento || "").toLowerCase() === "motoboy";
+
+      if (!recebidoPeloMotoboy) return false;
+      if (telesComMovimento.has(tele.id)) return false;
+
+      if (tele.fechamentoId && fechamentosComMovimento.has(tele.fechamentoId)) {
+        return false;
+      }
+
+      const nomeRecebedor = tele.motoboyRecebedor || tele.motoboyNome || tele.motoboy;
+
+      return !nomeRecebedor || nomeRecebedor === motoboyAtual?.nome;
+    })
+    .map((tele: any) => ({
+      id: `legado-${tele.id}`,
+      titulo: tele.solicitante || "Cliente",
+      descricao: "Recebimento antigo da tele",
+      data: tele.dataRecebimento || tele.dataTele || tele.createdAt || tele.criadoEm,
+      valor: converterValor(tele.valorRecebido || valorTotalTele(tele)),
+      automatico: true,
+    }));
+
+  const recebidoClienteMovimentos = movimentosCliente.reduce(
+    (soma: number, movimento: any) => soma + converterValor(movimento.valor),
+    0
+  );
+
+  const recebidoClienteAntigo = recebimentosAntigos.reduce(
+    (soma: number, movimento: any) => soma + converterValor(movimento.valor),
+    0
+  );
+
+  const recebidoCliente = recebidoClienteMovimentos + recebidoClienteAntigo;
 
   const recebidoEscritorio = movimentosDoMotoboy
     .filter((movimento: any) => movimento.tipo === "ESCRITORIO")
-    .reduce((soma: number, movimento: any) => soma + Number(movimento.valor || 0), 0);
+    .reduce((soma: number, movimento: any) => soma + converterValor(movimento.valor), 0);
 
   const ajustes = movimentosDoMotoboy
     .filter((movimento: any) => movimento.tipo === "AJUSTE")
-    .reduce((soma: number, movimento: any) => soma + Number(movimento.valor || 0), 0);
+    .reduce((soma: number, movimento: any) => soma + converterValor(movimento.valor), 0);
 
   const jaRecebeu = recebidoCliente + recebidoEscritorio + ajustes;
   const saldo = valorMotoboy - jaRecebeu;
 
-  const textoExtrato = useMemo(() => {
-    if (!motoboySelecionado) return "";
+  const historicoFinanceiro = useMemo(() => {
+    const movimentos = movimentosDoMotoboy.map((movimento: any) => ({
+      id: movimento.id,
+      titulo:
+        movimento.tipo === "CLIENTE"
+          ? movimento.clienteNome || "Cliente"
+          : movimento.tipo === "ESCRITORIO"
+            ? "Escritório"
+            : "Ajuste",
+      descricao:
+        movimento.descricao || (movimento.tipo === "CLIENTE" ? "Recebido direto do cliente" : "-"),
+      data: movimento.dataReferenciaFim || movimento.dataReferenciaInicio || movimento.criadoEm,
+      valor: converterValor(movimento.valor),
+      automatico:
+        movimento.tipo === "CLIENTE" ||
+        Boolean(movimento.teleId) ||
+        Boolean(movimento.fechamentoId),
+    }));
 
-    const agrupado = telesDoMotoboy.reduce((acc: any, tele: any) => {
-      const data = dataDaTele(tele.criadoEm);
+    return [...movimentos, ...recebimentosAntigos].sort(
+      (a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime()
+    );
+  }, [movimentosDoMotoboy, recebimentosAntigos]);
+
+  const textoExtrato = useMemo(() => {
+    if (!motoboyAtual) return "";
+
+    const agrupado = telesDoMotoboy.reduce((acc: Record<string, any[]>, tele: any) => {
+      const data = formatarData(dataDaTele(tele));
+
       if (!acc[data]) acc[data] = [];
       acc[data].push(tele);
+
       return acc;
     }, {});
 
-    let texto = `EXTRATO MOTOBOY - ${motoboySelecionado.toUpperCase()}\n\n`;
+    let texto = `EXTRATO MOTOBOY - ${motoboyAtual.nome.toUpperCase()}\n\n`;
 
-    Object.keys(agrupado).forEach((data) => {
+    Object.entries(agrupado).forEach(([data, telesDoDia]) => {
       texto += `${data}\n`;
 
-      agrupado[data].forEach((tele: any) => {
-        texto += `- ${tele.solicitante} → ${nomeDestino(tele)} - R$${tele.valor}\n`;
+      telesDoDia.forEach((tele: any) => {
+        texto += `- ${tele.solicitante || "Sem cliente"} → ${nomeDestino(
+          tele
+        )} - R$${formatarValor(valorTotalTele(tele))}\n`;
       });
 
       texto += "\n";
@@ -196,291 +247,294 @@ const recebidoClienteAntigo = telesDoMotoboy
 
     texto += `Total de teles - ${telesDoMotoboy.length}\n`;
     texto += `Total bruto - R$${formatarValor(totalBruto)}\n`;
-    texto += `Valor do motoboy - R$${formatarValor(valorMotoboy)}\n`;
+    texto += `Valor do motoboy (80%) - R$${formatarValor(valorMotoboy)}\n`;
     texto += `Recebido de clientes - R$${formatarValor(recebidoCliente)}\n`;
     texto += `Recebido do escritório - R$${formatarValor(recebidoEscritorio)}\n`;
-    texto += `Saldo - R$${formatarValor(saldo)}`;
+    texto += `Ajustes - R$${formatarValor(ajustes)}\n`;
+    texto += `${
+      saldo >= 0 ? "Saldo a receber" : "Recebeu a mais"
+    } - R$${formatarValor(Math.abs(saldo))}`;
 
     return texto;
   }, [
-    motoboySelecionado,
+    motoboyAtual,
     telesDoMotoboy,
     totalBruto,
     valorMotoboy,
     recebidoCliente,
     recebidoEscritorio,
+    ajustes,
     saldo,
   ]);
 
-const historicoFinanceiro = [
-  ...movimentosDoMotoboy.map((movimento: any) => ({
-    id: movimento.id,
-    titulo:
-      movimento.tipo === "CLIENTE"
-        ? movimento.clienteNome || "Cliente"
-        : movimento.tipo === "ESCRITORIO"
-        ? "Escritório"
-        : "Ajuste",
-    descricao:
-      movimento.tipo === "CLIENTE"
-        ? movimento.descricao || "Recebido direto do cliente"
-        : movimento.descricao || "-",
-    data: movimento.criadoEm,
-    valor: Number(movimento.valor || 0),
-  })),
-
- ...telesDoMotoboy
-  .filter((tele: any) => {
-    const recebimento = String(tele.recebimento || "").toLowerCase();
-
-    const jaTemMovimento = movimentosDoMotoboy.some(
-      (movimento: any) =>
-        movimento.tipo === "CLIENTE" &&
-        movimento.fechamentoId &&
-        movimento.fechamentoId === tele.fechamentoId
-    );
-
-    return (
-      recebimento === "motoboy" &&
-      !jaTemMovimento &&
-      (!tele.motoboyRecebedor ||
-        tele.motoboyRecebedor === motoboySelecionado)
-    );
-  })
-    .map((tele: any) => ({
-      id: `tele-${tele.id}`,
-      titulo: tele.solicitante,
-      descricao: "Recebido direto do cliente",
-      data: tele.dataRecebimento || tele.dataTele || tele.criadoEm,
-      valor: converterValor(tele.valorRecebido || tele.valor),
-    })),
-].sort(
-  (a: any, b: any) =>
-    new Date(b.data).getTime() - new Date(a.data).getTime()
-);
-
-  function copiarExtrato() {
-    navigator.clipboard.writeText(textoExtrato);
-    alert("Extrato copiado!");
+  function abrirLancamento(tipo: "ESCRITORIO" | "AJUSTE") {
+    setTipoLancamento(tipo);
+    setErroModal("");
+    setValorLancamento(tipo === "ESCRITORIO" && saldo > 0 ? formatarValor(saldo) : "");
+    setDescricaoLancamento(tipo === "ESCRITORIO" ? "PIX semanal" : "Ajuste financeiro");
+    setDataReferenciaInicio(dataInicio);
+    setDataReferenciaFim(dataFim);
+    setModalAberto(true);
   }
 
-  function abrirPagamento() {
-  setValorPagamento(saldo > 0 ? formatarValor(saldo) : "");
-  setDescricaoPagamento("PIX semanal");
-  setDataReferenciaInicio(dataInicio || "");
-  setDataReferenciaFim(dataFim || "");
-  setModalAberto(true);
-}
+  function fecharModal() {
+    if (salvando) return;
 
-  async function registrarPagamento() {
-    if (!motoboyAtual) return;
+    setModalAberto(false);
+    setErroModal("");
+  }
 
-    const valor = converterValor(valorPagamento);
+  async function registrarLancamento() {
+    if (!motoboyAtual || salvando) return;
 
-    if (valor <= 0) {
-      alert("Informe um valor válido.");
+    const valor = converterValor(valorLancamento);
+
+    setErroModal("");
+
+    if (valor === 0) {
+      setErroModal("Informe um valor diferente de zero.");
+      return;
+    }
+
+    if (tipoLancamento === "ESCRITORIO" && valor < 0) {
+      setErroModal("O pagamento do escritório não pode ser negativo.");
+      return;
+    }
+
+    if (dataReferenciaInicio && dataReferenciaFim && dataReferenciaInicio > dataReferenciaFim) {
+      setErroModal("A data inicial não pode ser posterior à data final.");
       return;
     }
 
     setSalvando(true);
 
-    const resposta = await fetch("/api/movimentos-financeiros-motoboy", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        motoboyId: motoboyAtual.id,
-        tipo: "ESCRITORIO",
-        valor,
-        descricao: descricaoPagamento || "Pagamento escritório",
-        dataReferenciaInicio,
-dataReferenciaFim,
-      }),
-    });
+    try {
+      const resposta = await fetch("/api/movimentos-financeiros-motoboy", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          motoboyId: motoboyAtual.id,
+          tipo: tipoLancamento,
+          valor,
+          descricao: descricaoLancamento,
+          dataReferenciaInicio,
+          dataReferenciaFim,
+        }),
+      });
 
-    if (!resposta.ok) {
-      alert("Erro ao registrar pagamento.");
+      if (!resposta.ok) {
+        let mensagem = "Não foi possível registrar o lançamento.";
+
+        try {
+          const dadosErro = await resposta.json();
+          mensagem = dadosErro?.erro || mensagem;
+        } catch {}
+
+        throw new Error(mensagem);
+      }
+
+      await recarregarDados();
+      fecharModal();
+    } catch (erro) {
+      setErroModal(
+        erro instanceof Error ? erro.message : "Não foi possível registrar o lançamento."
+      );
+    } finally {
       setSalvando(false);
-      return;
     }
+  }
 
-    await recarregarDados();
+  async function excluirMovimento(id: string) {
+    if (excluindoId) return;
 
-    setModalAberto(false);
-    setValorPagamento("");
-    setDescricaoPagamento("PIX semanal");
-    setSalvando(false);
+    const confirmou = window.confirm("Excluir este lançamento manual?");
 
-    alert("Pagamento registrado com sucesso!");
+    if (!confirmou) return;
+
+    setExcluindoId(id);
+
+    try {
+      const resposta = await fetch(`/api/movimentos-financeiros-motoboy/${id}`, {
+        method: "DELETE",
+      });
+
+      if (!resposta.ok) {
+        let mensagem = "Não foi possível excluir o lançamento.";
+
+        try {
+          const dadosErro = await resposta.json();
+          mensagem = dadosErro?.erro || mensagem;
+        } catch {}
+
+        throw new Error(mensagem);
+      }
+
+      await recarregarDados();
+    } catch (erro) {
+      alert(erro instanceof Error ? erro.message : "Não foi possível excluir o lançamento.");
+    } finally {
+      setExcluindoId("");
+    }
+  }
+
+  async function copiarExtrato() {
+    try {
+      await navigator.clipboard.writeText(textoExtrato);
+      alert("Extrato copiado!");
+    } catch {
+      alert("Não foi possível copiar o extrato.");
+    }
   }
 
   return (
-  <>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8 bg-white rounded-3xl p-5 md:p-8 shadow-sm border border-slate-100">
+    <>
+      <div className="mb-8 grid grid-cols-1 gap-5 rounded-3xl border border-slate-100 bg-white p-5 shadow-sm md:grid-cols-3 md:p-8">
         <div>
           <label className="text-sm font-medium text-slate-600">Motoboy</label>
+
           <select
-            value={motoboySelecionado}
-            onChange={(e) => setMotoboySelecionado(e.target.value)}
-            className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
+            value={motoboyIdSelecionado}
+            onChange={(evento) => setMotoboyIdSelecionado(evento.target.value)}
+            className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 outline-none focus:border-emerald-500"
           >
             <option value="">Selecione</option>
+
             {motoboys.map((motoboy: any) => (
-              <option key={motoboy.id || motoboy.nome} value={motoboy.nome}>
+              <option key={motoboy.id} value={motoboy.id}>
                 {motoboy.nome}
               </option>
             ))}
           </select>
         </div>
 
-        <div>
-          <label className="text-sm font-medium text-slate-600">Data inicial</label>
-          <input
-            type="date"
-            value={dataInicio}
-            onChange={(e) => setDataInicio(e.target.value)}
-            className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
-          />
-        </div>
+        <FiltroData label="Data inicial" value={dataInicio} onChange={setDataInicio} />
 
-        <div>
-          <label className="text-sm font-medium text-slate-600">Data final</label>
-          <input
-            type="date"
-            value={dataFim}
-            onChange={(e) => setDataFim(e.target.value)}
-            className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
-          />
-        </div>
+        <FiltroData label="Data final" value={dataFim} onChange={setDataFim} />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6 mb-8">
-        <Card titulo="Teles" valor={`${telesDoMotoboy.length}`} icon={<FileText size={26} />} />
-        <Card titulo="Total bruto" valor={`R$ ${formatarValor(totalBruto)}`} icon={<DollarSign size={26} />} />
-        <Card titulo="Valor motoboy" valor={`R$ ${formatarValor(valorMotoboy)}`} icon={<Bike size={26} />} />
-        <Card titulo="Já recebeu" valor={`R$ ${formatarValor(jaRecebeu)}`} icon={<DollarSign size={26} />} />
+      <div className="mb-8 grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-5">
+        <Card titulo="Teles" valor={`${telesDoMotoboy.length}`} icon={<FileText size={24} />} />
+        <Card
+          titulo="Total bruto"
+          valor={`R$ ${formatarValor(totalBruto)}`}
+          icon={<DollarSign size={24} />}
+        />
+        <Card
+          titulo="Valor motoboy"
+          valor={`R$ ${formatarValor(valorMotoboy)}`}
+          icon={<Bike size={24} />}
+        />
+        <Card
+          titulo="Já recebeu"
+          valor={`R$ ${formatarValor(jaRecebeu)}`}
+          icon={<DollarSign size={24} />}
+        />
         <Card
           titulo={saldo >= 0 ? "A receber" : "Recebeu a mais"}
           valor={`R$ ${formatarValor(Math.abs(saldo))}`}
-          icon={<DollarSign size={26} />}
+          icon={<DollarSign size={24} />}
+          alerta={saldo !== 0}
         />
       </div>
 
-      {motoboySelecionado && (
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 mb-8">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      {motoboyAtual && (
+        <div className="mb-8 rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div>
-              <h2 className="text-2xl font-bold">Acerto do motoboy</h2>
-              <p className="text-slate-500 mt-1">
-                Cliente: R$ {formatarValor(recebidoCliente)} • Escritório: R$ {formatarValor(recebidoEscritorio)}
+              <h2 className="text-2xl font-bold text-slate-900">Acerto de {motoboyAtual.nome}</h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Clientes: R$ {formatarValor(recebidoCliente)} • Escritório: R${" "}
+                {formatarValor(recebidoEscritorio)} • Ajustes: R$ {formatarValor(ajustes)}
               </p>
             </div>
 
-            <button
-              onClick={abrirPagamento}
-              disabled={!motoboyAtual}
-              className="w-full md:w-auto h-12 px-6 rounded-xl bg-emerald-600 text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-40"
-            >
-              <Plus size={18} />
-              Registrar pagamento
-            </button>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => abrirLancamento("AJUSTE")}
+                className="flex h-12 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 font-semibold text-slate-700"
+              >
+                <Plus size={18} />
+                Registrar ajuste
+              </button>
+
+              <button
+                type="button"
+                onClick={() => abrirLancamento("ESCRITORIO")}
+                className="flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 font-semibold text-white"
+              >
+                <Plus size={18} />
+                Registrar pagamento
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      <div className="bg-white rounded-3xl p-5 md:p-8 shadow-sm border border-slate-100 max-w-5xl mb-8">
+      <div className="mb-8 max-w-5xl rounded-3xl border border-slate-100 bg-white p-5 shadow-sm md:p-8">
         <textarea
           value={textoExtrato}
           readOnly
-          className="w-full h-72 md:h-96 rounded-2xl border border-slate-200 p-5 outline-none bg-slate-50"
+          className="h-72 w-full rounded-2xl border border-slate-200 bg-slate-50 p-5 outline-none md:h-96"
         />
 
         <button
-          onClick={copiarExtrato}
+          type="button"
+          onClick={() => void copiarExtrato()}
           disabled={!textoExtrato}
-          className="w-full md:w-auto h-12 px-6 mt-5 rounded-xl bg-slate-900 text-white flex items-center justify-center gap-2 disabled:opacity-40"
+          className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-6 text-white disabled:opacity-40 md:w-auto"
         >
           <Copy size={18} />
           Copiar extrato
         </button>
       </div>
 
-      {motoboySelecionado && (
-        <div className="bg-white rounded-3xl p-5 md:p-8 shadow-sm border border-slate-100 max-w-5xl">
-          <h2 className="text-2xl font-bold mb-5">Histórico financeiro</h2>
+      {motoboyAtual && (
+        <div className="max-w-5xl rounded-3xl border border-slate-100 bg-white p-5 shadow-sm md:p-8">
+          <h2 className="mb-5 text-2xl font-bold text-slate-900">Histórico financeiro</h2>
 
-         {historicoFinanceiro.length === 0 ? (
+          {historicoFinanceiro.length === 0 ? (
             <p className="text-slate-500">Nenhum movimento financeiro registrado.</p>
           ) : (
             <div className="space-y-3">
               {historicoFinanceiro.map((movimento: any) => (
                 <div
-  key={movimento.id}
-  className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-slate-50 rounded-2xl p-4"
->
-  <div>
-    <strong>{movimento.titulo}</strong>
+                  key={movimento.id}
+                  className="flex flex-col gap-3 rounded-2xl bg-slate-50 p-4 md:flex-row md:items-center md:justify-between"
+                >
+                  <div>
+                    <strong className="text-slate-900">{movimento.titulo}</strong>
 
-    <p className="text-sm text-slate-500">
-      {formatarData(movimento.data)}
-    </p>
+                    <p className="mt-1 text-sm text-slate-500">{formatarData(movimento.data)}</p>
 
-    <p className="text-sm text-slate-500">
-      {movimento.descricao}
-    </p>
-  </div>
+                    <p className="text-sm text-slate-500">{movimento.descricao}</p>
+                  </div>
 
-  <div className="flex items-center gap-3">
-  <strong className="text-emerald-700">
-    R$ {formatarValor(Number(movimento.valor || 0))}
-  </strong>
+                  <div className="flex items-center gap-3">
+                    <strong className={movimento.valor >= 0 ? "text-emerald-700" : "text-red-600"}>
+                      R$ {formatarValor(movimento.valor)}
+                    </strong>
 
- {String(movimento.id).startsWith("tele-") ? (
-  <button
-    onClick={async () => {
-      const confirmar = confirm("Desconsiderar este recebimento antigo?");
-      if (!confirmar) return;
-
-      const teleId = String(movimento.id).replace("tele-", "");
-
-      const resposta = await fetch("/api/teles/recebimento", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          id: teleId,
-          recebimento: "pendente",
-          valor: 0,
-        }),
-      });
-
-      if (!resposta.ok) {
-        alert("Erro ao desconsiderar recebimento.");
-        return;
-      }
-
-      await recarregarDados();
-      alert("Recebimento desconsiderado.");
-    }}
-    className="w-9 h-9 rounded-xl bg-orange-50 text-orange-600 hover:bg-orange-100 flex items-center justify-center"
-    title="Desconsiderar recebimento antigo"
-  >
-    <Trash2 size={16} />
-  </button>
-) : (
-  <button
-    onClick={() => excluirMovimento(movimento.id)}
-      className="w-9 h-9 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 flex items-center justify-center"
-      title="Excluir recebimento"
-    >
-      <Trash2 size={16} />
-    </button>
-  )}
-</div>
-</div>
+                    {!movimento.automatico && (
+                      <button
+                        type="button"
+                        onClick={() => void excluirMovimento(movimento.id)}
+                        disabled={excluindoId === movimento.id}
+                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-50 text-red-600 disabled:opacity-50"
+                        title="Excluir lançamento"
+                      >
+                        {excluindoId === movimento.id ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                          <Trash2 size={16} />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                </div>
               ))}
             </div>
           )}
@@ -488,82 +542,97 @@ dataReferenciaFim,
       )}
 
       {modalAberto && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-xl">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-2xl font-bold">Registrar pagamento</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 bg-slate-50 px-5 py-5 md:px-6">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-600">
+                  Financeiro do motoboy
+                </p>
+
+                <h2 className="mt-1 text-2xl font-bold text-slate-900">
+                  {tipoLancamento === "ESCRITORIO" ? "Registrar pagamento" : "Registrar ajuste"}
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-500">{motoboyAtual?.nome}</p>
+              </div>
 
               <button
-                onClick={() => setModalAberto(false)}
-                className="w-10 h-10 rounded-xl border border-slate-200 flex items-center justify-center"
+                type="button"
+                onClick={fecharModal}
+                disabled={salvando}
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 disabled:opacity-50"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <p className="text-slate-500 mb-5">
-              Saldo atual:{" "}
-              <strong className={saldo > 0 ? "text-orange-600" : "text-emerald-700"}>
-                R$ {formatarValor(saldo)}
-              </strong>
-            </p>
+            <div className="space-y-5 p-5 md:p-6">
+              {erroModal && (
+                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {erroModal}
+                </div>
+              )}
 
-            <div>
-              <label className="text-sm font-medium text-slate-600">
-                Valor pago
-              </label>
-              <input
-                value={valorPagamento}
-                onChange={(e) => setValorPagamento(e.target.value)}
-                placeholder="0,00"
-                className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
-              />
+              <div>
+                <label className="text-sm font-medium text-slate-600">Valor</label>
+
+                <input
+                  value={valorLancamento}
+                  onChange={(evento) => {
+                    setValorLancamento(evento.target.value);
+                    setErroModal("");
+                  }}
+                  placeholder={tipoLancamento === "AJUSTE" ? "Use negativo para desconto" : "0,00"}
+                  className="mt-2 h-12 w-full rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-slate-600">Observação</label>
+
+                <input
+                  value={descricaoLancamento}
+                  onChange={(evento) => setDescricaoLancamento(evento.target.value)}
+                  className="mt-2 h-12 w-full rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FiltroData
+                  label="Referente de"
+                  value={dataReferenciaInicio}
+                  onChange={setDataReferenciaInicio}
+                />
+
+                <FiltroData
+                  label="Referente até"
+                  value={dataReferenciaFim}
+                  onChange={setDataReferenciaFim}
+                />
+              </div>
             </div>
 
-            <div className="mt-4">
-              <label className="text-sm font-medium text-slate-600">
-                Observação
-              </label>
-<div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-  <div>
-    <label className="text-sm font-medium text-slate-600">
-      Referente de
-    </label>
-    <input
-      type="date"
-      value={dataReferenciaInicio}
-      onChange={(e) => setDataReferenciaInicio(e.target.value)}
-      className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
-    />
-  </div>
+            <div className="flex flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end md:px-6">
+              <button
+                type="button"
+                onClick={fecharModal}
+                disabled={salvando}
+                className="h-12 rounded-xl border border-slate-200 bg-white px-6 font-medium text-slate-700 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
 
-  <div>
-    <label className="text-sm font-medium text-slate-600">
-      Referente até
-    </label>
-    <input
-      type="date"
-      value={dataReferenciaFim}
-      onChange={(e) => setDataReferenciaFim(e.target.value)}
-      className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
-    />
-  </div>
-</div>
-
-              <input
-                value={descricaoPagamento}
-                onChange={(e) => setDescricaoPagamento(e.target.value)}
-                className="w-full mt-2 h-12 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
-              />
+              <button
+                type="button"
+                onClick={() => void registrarLancamento()}
+                disabled={salvando}
+                className="flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 font-semibold text-white disabled:opacity-60"
+              >
+                {salvando && <Loader2 size={17} className="animate-spin" />}
+                {salvando ? "Salvando..." : "Confirmar"}
+              </button>
             </div>
-
-            <button
-              onClick={registrarPagamento}
-              disabled={salvando}
-              className="w-full h-12 rounded-xl bg-emerald-600 text-white font-semibold mt-6 disabled:opacity-50"
-            >
-              {salvando ? "Salvando..." : "Confirmar pagamento"}
-            </button>
           </div>
         </div>
       )}
@@ -571,14 +640,54 @@ dataReferenciaFim,
   );
 }
 
-function Card({ titulo, valor, icon }: any) {
+function FiltroData({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
   return (
-    <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-      <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mb-5">
+    <div>
+      <label className="text-sm font-medium text-slate-600">{label}</label>
+
+      <input
+        type="date"
+        value={value}
+        onChange={(evento) => onChange(evento.target.value)}
+        className="mt-2 h-12 w-full rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
+      />
+    </div>
+  );
+}
+
+function Card({
+  titulo,
+  valor,
+  icon,
+  alerta = false,
+}: {
+  titulo: string;
+  valor: string;
+  icon: React.ReactNode;
+  alerta?: boolean;
+}) {
+  return (
+    <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+      <div
+        className={`mb-4 flex h-12 w-12 items-center justify-center rounded-2xl ${
+          alerta ? "bg-orange-100 text-orange-700" : "bg-emerald-100 text-emerald-700"
+        }`}
+      >
         {icon}
       </div>
+
       <p className="text-sm text-slate-500">{titulo}</p>
-      <h2 className="text-2xl font-bold mt-2">{valor}</h2>
+      <h2 className={`mt-2 text-2xl font-bold ${alerta ? "text-orange-600" : "text-slate-900"}`}>
+        {valor}
+      </h2>
     </div>
   );
 }

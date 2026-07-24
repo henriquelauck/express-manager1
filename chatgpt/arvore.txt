@@ -3,12 +3,26 @@
 |   \---settings.json
 +---app
 |   +---api
+|   |   +---atendimentos
+|   |   |   \---conversas
+|   |   |       +---[id]
+|   |   |       |   +---intepretar
+|   |   |       |   |   \---route.ts
+|   |   |       |   \---route.ts
+|   |   |       \---route.ts
 |   |   +---auth
 |   |   |   +---login
 |   |   |   |   \---route.ts
 |   |   |   +---logout
 |   |   |   |   \---route.ts
 |   |   |   \---me
+|   |   |       \---route.ts
+|   |   +---central-atendimento
+|   |   |   \---conversas
+|   |   |       +---[id]
+|   |   |       |   +---mensagens
+|   |   |       |   |   \---route.ts
+|   |   |       |   \---route.ts
 |   |   |       \---route.ts
 |   |   +---clientes
 |   |   |   \---route.ts
@@ -23,17 +37,21 @@
 |   |   +---fechamentos-financeiros
 |   |   |   \---route.ts
 |   |   +---ia
+|   |   |   +---aprendizado
+|   |   |   |   +---configuracao
+|   |   |   |   |   \---route.ts
+|   |   |   |   \---exemplos
+|   |   |   |       +---[id]
+|   |   |   |       |   \---route.ts
+|   |   |   |       \---route.ts
+|   |   |   +---conhecimentos
+|   |   |   |   +---[id]
+|   |   |   |   |   \---route.ts
+|   |   |   |   \---route.ts
 |   |   |   +---encerrar-atendimento
 |   |   |   |   \---route.ts
-|   |   |   +---interpretar-pedido
-|   |   |   |   \---route.ts
-|   |   |   \---motor-operacional
-|   |   |       +---regras
-|   |   |       |   +---default.ts
-|   |   |       |   \---petexame.ts
-|   |   |       +---aplicarRegrasOperacionais.ts
-|   |   |       +---selecionarRegra.ts
-|   |   |       \---tipos.ts
+|   |   |   \---interpretar-pedido
+|   |   |       \---route.ts
 |   |   +---importacoes
 |   |   |   \---planilha
 |   |   |       +---confirmar
@@ -57,10 +75,15 @@
 |   |   |   +---[id]
 |   |   |   |   \---route.ts
 |   |   |   \---route.ts
-|   |   \---teles
-|   |       +---recebimento
-|   |       |   \---route.ts
-|   |       \---route.ts
+|   |   +---teles
+|   |   |   +---recebimento
+|   |   |   |   \---route.ts
+|   |   |   \---route.ts
+|   |   \---whatsapp
+|   |       \---webhook
+|   |           \---route.ts
+|   +---central-atendimento
+|   |   \---page.tsx
 |   +---clientes
 |   |   \---page.tsx
 |   +---configuracoes
@@ -77,6 +100,10 @@
 |   |   |   \---page.tsx
 |   |   \---page.tsx
 |   +---laboratorio-ia
+|   |   +---aprendizado
+|   |   |   \---page.tsx
+|   |   +---conhecimentos
+|   |   |   \---page.tsx
 |   |   \---page.tsx
 |   +---login
 |   |   \---page.tsx
@@ -103,6 +130,10 @@
 |   |   +---FinanceiroMotoboys.tsx
 |   |   +---RecebimentosFinanceiro.tsx
 |   |   \---ResumoFinanceiro.tsx
+|   +---ia
+|   |   +---CardAprendizado.tsx
+|   |   +---CardConhecimento.tsx
+|   |   \---PainelCorrecaoAprendizado.tsx
 |   +---maps
 |   |   +---AutoCompleteEndereco.tsx
 |   |   +---googleMapsLoader.ts
@@ -142,6 +173,9 @@
 |   |   +---agente
 |   |   |   +---criarTeleDoAtendimento.ts
 |   |   |   \---executarEtapa.ts
+|   |   +---aprendizado
+|   |   |   +---buscarMemoriaIA.ts
+|   |   |   \---registrarExemploAtendimento.ts
 |   |   +---atendimento
 |   |   |   +---repositorio
 |   |   |   |   \---atendimentoRepository.ts
@@ -151,6 +185,7 @@
 |   |   |   |   \---mesclarParadas.ts
 |   |   |   +---decidirFluxoMensagem.ts
 |   |   |   +---definirEstadoAtendimento.ts
+|   |   |   +---detectarDadosComplementares.ts
 |   |   |   +---gerarPlanoOperacional.ts
 |   |   |   +---gerarRespostaAtendimento.ts
 |   |   |   +---interpretarRespostaContextual.ts
@@ -163,6 +198,19 @@
 |   |   +---gestor
 |   |   +---historico
 |   |   |   \---resolverLocalRecorrente.ts
+|   |   +---motor-operacional
+|   |   |   +---conhecimentos
+|   |   |   |   +---aplicarConhecimentosOperacionais.ts
+|   |   |   |   +---buscarConhecimentosAtivos.ts
+|   |   |   |   \---tiposConhecimentoOperacional.ts
+|   |   |   +---regras
+|   |   |   |   +---default.ts
+|   |   |   |   \---petexame.ts
+|   |   |   +---aplicarRegrasOperacionais.ts
+|   |   |   +---selecionarRegra.ts
+|   |   |   \---tipos.ts
+|   |   +---normalizacao
+|   |   |   \---normalizarMensagem.ts
 |   |   +---pipeline
 |   |   |   \---normalizarEntrada.ts
 |   |   +---gerarDecisoes.ts
@@ -196,6 +244,8 @@
 |   |   +---promptSistema.ts
 |   |   +---schema.ts
 |   |   \---types.ts
+|   +---centralAtendimento
+|   |   \---criarTeleViaIA.ts
 |   +---generated
 |   +---google-maps
 |   |   \---calcularRota.ts
@@ -224,6 +274,14 @@
 |   |   |   \---migration.sql
 |   |   +---20260713100000_adicionar_importacao_planilhas
 |   |   |   \---migration.sql
+|   |   +---20260716040000_reconcile_atendimento_ia
+|   |   |   \---migration.sql
+|   |   +---20260716050000_adicionar_modo_aprendizado_ia
+|   |   |   \---migration.sql
+|   |   +---20260716060000_adicionar_conhecimento_ia
+|   |   |   \---migration.sql
+|   |   +---20260716180000_adicionar_central_atendimento
+|   |   |   \---migration.sql
 |   |   \---migration_lock.toml
 |   \---schema.prisma
 +---public
@@ -250,8 +308,9 @@
 +---.prettierignore
 +---.prettierrc
 +---AGENTS.md
-+---arvore.txt
 +---CLAUDE.md
++---corrigir-checksum-migration.sql
++---drift-atendimento-ia.sql
 +---eslint.config.mjs
 +---excluirMovimento(movimento.id)}
 +---next.config.ts
@@ -261,4 +320,8 @@
 +---postcss.config.mjs
 +---prisma.config.ts
 +---README.md
-\---tsconfig.json
++---tsconfig.json
++---webhook_evolution.txt
++---webhook_whatsapp.txt
++---whatsapp_integracao.txt
+\---whatsapp_real.txt

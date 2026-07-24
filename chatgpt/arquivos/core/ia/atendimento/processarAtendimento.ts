@@ -1,5 +1,7 @@
 import { resolverLocalRecorrente } from "@/core/ia/historico/resolverLocalRecorrente";
+import { aplicarRegrasOperacionais } from "@/core/ia/motor-operacional/aplicarRegrasOperacionais";
 import { prisma } from "@/lib/prisma";
+import { detectarDadosComplementaresPendentes } from "./detectarDadosComplementares";
 import { interpretarRespostaContextual } from "./interpretarRespostaContextual";
 import {
   adicionarMensagemAtendimento,
@@ -280,7 +282,11 @@ function definirEstadoAtendimento(atendimento: Atendimento): {
     };
   }
 
-  if (operacao.rota.calculada && !operacao.orcamentoConfirmado) {
+  if (
+    operacao.rota.calculada &&
+    operacao.estrategia.exigeConfirmacaoOrcamento &&
+    !operacao.orcamentoConfirmado
+  ) {
     return {
       status: "AGUARDANDO_CLIENTE",
 
@@ -298,6 +304,44 @@ function definirEstadoAtendimento(atendimento: Atendimento): {
         precisaHumano: false,
       },
     };
+  }
+
+  /*
+   * Os dados complementares são solicitados somente depois
+   * que o cliente confirmar o orçamento.
+   *
+   * Assim, primeiro apresentamos o preço e só depois pedimos
+   * as informações necessárias para confirmar a entrega.
+   */
+  if (operacao.orcamentoConfirmado && !operacao.teleCriada) {
+    const pendenciasComplementares = detectarDadosComplementaresPendentes(operacao.paradas);
+
+    if (pendenciasComplementares.length > 0) {
+      const primeiraPendencia = pendenciasComplementares[0];
+
+      const nomeLocal =
+        primeiraPendencia.parada.cliente ??
+        primeiraPendencia.parada.endereco ??
+        `parada ${primeiraPendencia.indiceParada + 1}`;
+
+      return {
+        status: "AGUARDANDO_CLIENTE",
+
+        estado: {
+          etapa: "AGUARDANDO_DADOS_COMPLEMENTARES",
+
+          aguardando: "DADOS_COMPLEMENTARES",
+
+          ultimaAcao: "O orçamento foi confirmado pelo cliente.",
+
+          proximaAcao: "Solicitar somente os dados complementares que ainda estão faltando.",
+
+          motivo: `A parada "${nomeLocal}" ainda possui dados necessários para confirmar a entrega.`,
+
+          precisaHumano: false,
+        },
+      };
+    }
   }
 
   if (operacao.orcamentoConfirmado && !operacao.teleCriada) {
@@ -456,20 +500,6 @@ async function enriquecerParadasComCadastro(atendimento: Atendimento): Promise<A
     })
   );
 
-  const coletaExistente = novasParadas.find((parada) => parada.tipo === "COLETA");
-
-  const entregaExistente = novasParadas.find((parada) => parada.tipo === "ENTREGA");
-
-  let paradasFinais = novasParadas;
-
-  const nomeSolicitanteNormalizado = String(solicitante || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .toUpperCase();
-
-  const solicitanteEhPetexame = nomeSolicitanteNormalizado === "PETEXAME";
-
   const resultadoSolicitante = solicitante
     ? resolverClienteContextual({
         texto: solicitante,
@@ -477,104 +507,32 @@ async function enriquecerParadasComCadastro(atendimento: Atendimento): Promise<A
       })
     : null;
 
-  const clienteSolicitante = resultadoSolicitante?.cliente ?? null;
+  const clienteSolicitanteBanco = resultadoSolicitante?.cliente ?? null;
 
   const enderecoSolicitante =
-    clienteSolicitante?.endereco1 ?? clienteSolicitante?.endereco2 ?? null;
+    clienteSolicitanteBanco?.endereco1 ?? clienteSolicitanteBanco?.endereco2 ?? null;
 
-  /*
-   * Regra específica da PETEXAME:
-   *
-   * Quando a PETEXAME envia somente um local/endereço,
-   * significa que o motoboy deve coletar nesse local
-   * e entregar na PETEXAME.
-   *
-   * Exemplo:
-   * "SOS ANIMAL
-   * Rua..."
-   *
-   * Resultado:
-   * 1. COLETA — SOS ANIMAL
-   * 2. ENTREGA — PETEXAME
-   */
-  if (
-    solicitanteEhPetexame &&
-    novasParadas.length === 1 &&
-    !coletaExistente &&
-    entregaExistente &&
-    resultadoSolicitante?.encontrado &&
-    clienteSolicitante &&
-    enderecoSolicitante
-  ) {
-    const coletaExterna: ParadaAtendimento = {
-      ...entregaExistente,
+  const resultadoMotor = await aplicarRegrasOperacionais({
+    mensagemOriginal: novasParadas
+      .map((parada) => parada.textoOriginal ?? parada.cliente ?? "")
+      .filter(Boolean)
+      .join("\n"),
 
-      tipo: "COLETA",
+    solicitante,
 
-      textoOriginal: entregaExistente.textoOriginal,
+    clienteSolicitante:
+      resultadoSolicitante?.encontrado && clienteSolicitanteBanco && enderecoSolicitante
+        ? {
+            nome: clienteSolicitanteBanco.nome,
 
-      origem: entregaExistente.origem ?? "CONTEXTO_OPERACIONAL",
+            endereco: enderecoSolicitante,
 
-      confirmada: true,
-    };
+            telefone: clienteSolicitanteBanco.telefone ?? null,
+          }
+        : null,
 
-    const entregaPetexame: ParadaAtendimento = {
-      tipo: "ENTREGA",
-
-      textoOriginal: "Entrega final inferida automaticamente na PETEXAME.",
-
-      cliente: clienteSolicitante.nome,
-
-      endereco: enderecoSolicitante,
-
-      telefone: clienteSolicitante.telefone ?? null,
-
-      confianca: 1,
-
-      origem: "CONTEXTO_OPERACIONAL",
-
-      confirmada: true,
-    };
-
-    paradasFinais = [coletaExterna, entregaPetexame];
-  }
-
-  /*
-   * Regra geral para os demais solicitantes:
-   *
-   * Quando existe somente uma entrega, a coleta é
-   * inferida automaticamente no próprio solicitante.
-   */
-  if (
-    !solicitanteEhPetexame &&
-    solicitante &&
-    novasParadas.length === 1 &&
-    !coletaExistente &&
-    entregaExistente &&
-    resultadoSolicitante?.encontrado &&
-    clienteSolicitante &&
-    enderecoSolicitante
-  ) {
-    const coletaInferida: ParadaAtendimento = {
-      tipo: "COLETA",
-
-      textoOriginal: "Coleta inferida automaticamente no solicitante.",
-
-      cliente: clienteSolicitante.nome,
-
-      endereco: enderecoSolicitante,
-
-      telefone: clienteSolicitante.telefone ?? null,
-
-      confianca: 1,
-
-      origem: "CONTEXTO_OPERACIONAL",
-
-      confirmada: true,
-    };
-
-    paradasFinais = [coletaInferida, ...novasParadas];
-  }
+    paradas: novasParadas,
+  });
 
   return {
     ...atendimento,
@@ -582,7 +540,11 @@ async function enriquecerParadasComCadastro(atendimento: Atendimento): Promise<A
     operacao: {
       ...atendimento.operacao,
 
-      paradas: paradasFinais,
+      paradas: resultadoMotor.paradas,
+
+      temRetorno: resultadoMotor.temRetorno,
+
+      estrategia: resultadoMotor.estrategia,
     },
   };
 }
@@ -668,6 +630,37 @@ export async function processarAtendimento({
   }
 
   atendimentoAtualizado = await enriquecerParadasComCadastro(atendimentoAtualizado);
+
+  /*
+   * Quando a regra operacional dispensa confirmação de orçamento,
+   * uma rota já calculada é considerada automaticamente autorizada.
+   *
+   * Isso evita que o atendimento volte para
+   * AGUARDANDO_CONFIRMACAO_ORCAMENTO ao ser reprocessado.
+   */
+  if (
+    atendimentoAtualizado.operacao.rota.calculada &&
+    !atendimentoAtualizado.operacao.estrategia.exigeConfirmacaoOrcamento &&
+    !atendimentoAtualizado.operacao.orcamentoConfirmado
+  ) {
+    atendimentoAtualizado = {
+      ...atendimentoAtualizado,
+
+      operacao: {
+        ...atendimentoAtualizado.operacao,
+
+        orcamentoConfirmado: true,
+
+        rota: {
+          ...atendimentoAtualizado.operacao.rota,
+
+          valorConfirmado:
+            atendimentoAtualizado.operacao.rota.valorConfirmado ??
+            atendimentoAtualizado.operacao.rota.valorSugerido,
+        },
+      },
+    };
+  }
 
   const estadoResolvido = definirEstadoAtendimento(atendimentoAtualizado);
 

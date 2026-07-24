@@ -12,33 +12,6 @@ export function normalizarTelefone(telefone: string) {
   return `55${numeros}`;
 }
 
-function gerarLinkRotaGoogleMaps(tele: Tele) {
-  const enderecos = tele.paradas
-    .map((parada) => parada.endereco?.trim())
-    .filter((endereco): endereco is string => Boolean(endereco));
-
-  if (enderecos.length < 2) {
-    return "";
-  }
-
-  const origem = enderecos[0];
-  const destino = enderecos[enderecos.length - 1];
-  const paradasIntermediarias = enderecos.slice(1, -1);
-
-  const parametros = new URLSearchParams({
-    api: "1",
-    origin: origem,
-    destination: destino,
-    travelmode: "driving",
-  });
-
-  if (paradasIntermediarias.length > 0) {
-    parametros.set("waypoints", paradasIntermediarias.join("|"));
-  }
-
-  return `https://www.google.com/maps/dir/?${parametros.toString()}`;
-}
-
 export function gerarTextoOrcamento(tele: Tele) {
   let texto = `Olá!
 
@@ -87,12 +60,6 @@ ${parada.endereco}
 
 `;
 
-    if (parada.contato) {
-      texto += `Contato: ${parada.contato}
-
-`;
-    }
-
     if (parada.observacao) {
       texto += `Obs: ${parada.observacao}
 
@@ -104,16 +71,9 @@ ${parada.endereco}
 `;
   });
 
-  texto += `Valor da tele: R$ ${tele.total.toFixed(2).replace(".", ",")}`;
-
-  const linkRota = gerarLinkRotaGoogleMaps(tele);
-
-  if (linkRota) {
-    texto += `
-
-🗺️ Abrir rota no Google Maps:
-${linkRota}`;
-  }
+  texto += `Valor da tele: R$ ${tele.total
+    .toFixed(2)
+    .replace(".", ",")}`;
 
   return texto;
 }

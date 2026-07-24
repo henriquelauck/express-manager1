@@ -28,6 +28,7 @@ import {
   FileText,
   Loader2,
   MapPinned,
+  ReceiptText,
   Route,
   Send,
 } from "lucide-react";
@@ -68,6 +69,32 @@ type DadosNovaTeleIA = {
   }[];
 };
 
+type FormaCobrancaTele = "na_hora" | "semanal";
+
+function formaCobrancaClienteParaTele(forma: string | undefined): FormaCobrancaTele {
+  const mapa: Record<string, FormaCobrancaTele> = {
+    NA_HORA: "na_hora",
+    SEMANAL: "semanal",
+    QUINZENAL: "semanal",
+    MENSAL: "semanal",
+    na_hora: "na_hora",
+    semanal: "semanal",
+    quinzenal: "semanal",
+    mensal: "semanal",
+  };
+
+  return mapa[forma || "SEMANAL"] || "semanal";
+}
+
+function formatarFormaCobranca(forma: FormaCobrancaTele) {
+  const mapa: Record<FormaCobrancaTele, string> = {
+    na_hora: "Cobrar na hora",
+    semanal: "Fechamento semanal",
+  };
+
+  return mapa[forma];
+}
+
 export default function NovaTelePage() {
   const router = useRouter();
   const { clientes, teles, recarregarDados } = useExpressManager();
@@ -75,6 +102,7 @@ export default function NovaTelePage() {
   const [dataTele, setDataTele] = useState(new Date().toISOString().split("T")[0]);
   const [valorBase, setValorBase] = useState("14,00");
   const [observacaoGeral, setObservacaoGeral] = useState("");
+  const [formaCobranca, setFormaCobranca] = useState<FormaCobrancaTele>("semanal");
   const [salvando, setSalvando] = useState(false);
   const [calculandoRota, setCalculandoRota] = useState(false);
   const [rotaCalculada, setRotaCalculada] = useState<ResultadoRotaCalculada | null>(null);
@@ -131,6 +159,11 @@ export default function NovaTelePage() {
 
   function alterarSolicitante(novoSolicitante: string) {
     setSolicitante(novoSolicitante);
+
+    const clienteSelecionado = clientes.find((cliente) => cliente.nome === novoSolicitante);
+
+    setFormaCobranca(formaCobrancaClienteParaTele(clienteSelecionado?.formaCobranca));
+
     invalidarRotaCalculada();
   }
 
@@ -254,6 +287,7 @@ export default function NovaTelePage() {
       dataTele,
       valorBase,
       observacaoGeral,
+      formaCobranca,
       paradas,
       distanciaKm: rotaSelecionada?.distanciaKm ?? null,
       tempoMinutos: rotaSelecionada?.duracaoMin ?? null,
@@ -323,6 +357,31 @@ export default function NovaTelePage() {
             onChange={(e) => setDataTele(e.target.value)}
             className="w-full mt-2 h-14 rounded-xl border border-slate-200 px-4 outline-none focus:border-emerald-500"
           />
+        </div>
+
+        <div className="mb-8 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+              <ReceiptText size={19} />
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <label className="text-sm font-semibold text-slate-800">Forma de cobrança</label>
+
+              <select
+                value={formaCobranca}
+                onChange={(event) => setFormaCobranca(event.target.value as FormaCobrancaTele)}
+                className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+              >
+                <option value="na_hora">Cobrar na hora</option>
+                <option value="semanal">Fechamento semanal</option>
+              </select>
+
+              <p className="mt-2 text-xs leading-5 text-slate-500">
+                Carregada automaticamente do cadastro do cliente e ajustável nesta tele.
+              </p>
+            </div>
+          </div>
         </div>
 
         <h2 className="text-2xl font-bold mb-4">Rota</h2>
@@ -558,6 +617,11 @@ export default function NovaTelePage() {
                 {dataTele
                   ? new Date(`${dataTele}T12:00:00`).toLocaleDateString("pt-BR")
                   : "Não informada"}
+              </p>
+
+              <p>
+                <strong className="text-slate-900">Cobrança:</strong>{" "}
+                {formatarFormaCobranca(formaCobranca)}
               </p>
 
               <p>

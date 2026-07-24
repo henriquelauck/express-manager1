@@ -12,10 +12,159 @@ type ContextoInterpretacao = {
     score: number;
     confiavel: boolean;
   }[];
+
+  historico?: {
+    autor: string;
+    direcao: string;
+    horario: string;
+    conteudo: string;
+  }[];
+
+  memoria?: {
+    solicitante?: string | null;
+
+    exemplos: {
+      mensagemCliente: string;
+      respostaHumana: string | null;
+      interpretacaoIA: unknown;
+      sugestaoIA: unknown;
+      operacaoFinal: unknown;
+      corrigido: boolean;
+      aprovado: boolean;
+      observacaoHumana: string | null;
+      relevancia: number;
+    }[];
+  } | null;
 };
 
-export async function interpretarPedido(mensagem: string, _contexto: ContextoInterpretacao) {
+function converterParaTextoSeguro(valor: unknown) {
+  if (valor === null || valor === undefined) {
+    return null;
+  }
+
+  try {
+    return JSON.stringify(valor, null, 2);
+  } catch {
+    return String(valor);
+  }
+}
+
+function montarHistoricoConversa(contexto: ContextoInterpretacao) {
+  const historico = contexto.historico ?? [];
+
+  if (historico.length === 0) {
+    return null;
+  }
+
+  const mensagensFormatadas = historico.map((mensagem, index) => {
+    const identificacao = [
+      mensagem.horario ? `[${mensagem.horario}]` : null,
+      mensagem.autor || "DESCONHECIDO",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    return `${index + 1}. ${identificacao}:
+${mensagem.conteudo}`;
+  });
+
+  return `
+HISTÓRICO ESTRUTURADO DA CONVERSA:
+
+As mensagens abaixo estão em ordem cronológica.
+
+Analise a conversa como um atendimento completo.
+
+Não interprete cada mensagem isoladamente.
+
+Uma mensagem pode complementar, corrigir ou substituir informações
+enviadas anteriormente.
+
+${mensagensFormatadas.join("\n\n")}
+`;
+}
+
+function montarContextoMemoria(contexto: ContextoInterpretacao) {
+  const exemplos = contexto.memoria?.exemplos ?? [];
+
+  if (exemplos.length === 0) {
+    return `
+MEMÓRIA DE ATENDIMENTOS ANTERIORES:
+
+Nenhum atendimento anterior relevante foi encontrado.
+
+Interprete a mensagem normalmente, sem inventar comportamentos,
+locais, clientes, endereços ou decisões anteriores.
+`;
+  }
+
+  const exemplosFormatados = exemplos.map((exemplo, index) => {
+    const interpretacaoAnterior = converterParaTextoSeguro(exemplo.interpretacaoIA);
+
+    const operacaoFinal = converterParaTextoSeguro(exemplo.operacaoFinal);
+
+    return `
+EXEMPLO ${index + 1}
+
+Relevância aproximada:
+${exemplo.relevancia}
+
+Mensagem recebida:
+${exemplo.mensagemCliente}
+
+Resposta real do Henrique:
+${exemplo.respostaHumana ?? "Não registrada"}
+
+Interpretação anterior:
+${interpretacaoAnterior ?? "Não registrada"}
+
+Operação final:
+${operacaoFinal ?? "Não registrada"}
+
+Foi corrigido pelo Henrique:
+${exemplo.corrigido ? "Sim" : "Não"}
+
+Foi aprovado:
+${exemplo.aprovado ? "Sim" : "Não"}
+
+Observação do Henrique:
+${exemplo.observacaoHumana ?? "Nenhuma"}
+`;
+  });
+
+  return `
+MEMÓRIA DE ATENDIMENTOS ANTERIORES:
+
+Solicitante atual:
+${contexto.memoria?.solicitante ?? "Não identificado"}
+
+Os exemplos abaixo são atendimentos anteriores do Express Manager.
+
+Use-os como referência para entender:
+
+- como Henrique interpretou mensagens parecidas;
+- quais correções ele realizou;
+- qual foi a operação final;
+- como situações semelhantes costumam ser tratadas.
+
+Priorize exemplos corrigidos ou aprovados.
+
+Não copie cegamente um exemplo.
+
+Não invente informações que não estejam na mensagem atual ou que não
+possam ser justificadas claramente pelo contexto anterior.
+
+${exemplosFormatados.join("\n")}
+`;
+}
+
+export async function interpretarPedido(mensagem: string, contexto: ContextoInterpretacao) {
   const mensagemNormalizada = normalizarMensagem(mensagem);
+
+  const contextoMemoria = montarContextoMemoria(contexto);
+
+  const historicoConversa = montarHistoricoConversa(contexto);
+
   const resposta = await openai.responses.parse({
     model: "gpt-5.6",
 
@@ -24,6 +173,36 @@ export async function interpretarPedido(mensagem: string, _contexto: ContextoInt
         role: "system",
 
         content: `${PROMPT_SISTEMA}
+
+Você está interpretando um atendimento do Express Manager.
+
+O atendimento pode conter somente uma mensagem ou um histórico completo
+de conversa.
+
+Quando existir um histórico estruturado:
+
+- leia todas as mensagens em ordem cronológica;
+- entenda o pedido pelo conjunto completo da conversa;
+- considere que mensagens posteriores podem complementar informações anteriores;
+- considere que mensagens posteriores podem corrigir informações anteriores;
+- não trate cada mensagem como um pedido separado;
+- gere uma única interpretação consolidada do atendimento.
+
+Você pode receber exemplos de atendimentos anteriores realizados ou
+corrigidos por Henrique.
+
+Esses exemplos servem como memória operacional.
+
+Quando houver exemplos relevantes:
+
+- observe como Henrique resolveu situações parecidas;
+- dê prioridade às correções humanas;
+- considere a operação final registrada;
+- preserve o padrão de interpretação usado por Henrique;
+- não repita erros anteriores da IA.
+
+A memória nunca autoriza inventar coleta, entrega, endereço, retorno,
+cliente ou outra informação que não esteja sustentada pela conversa.
 
 REGRAS OBRIGATÓRIAS PARA O CAMPO "texto":
 
@@ -104,6 +283,10 @@ Não identifique clientes cadastrados.
 Não resolva endereços.
 Não aplique regras específicas da PETEXAME.
 Somente interprete as ações e os locais mencionados.
+
+${historicoConversa ?? ""}
+
+${contextoMemoria}
 `,
       },
       {
@@ -120,9 +303,20 @@ ${mensagemNormalizada.contextoParaIA}
 
 INSTRUÇÃO:
 
-Interprete a mensagem original usando a estrutura identificada apenas
-como auxílio. Preserve no campo "texto" o nome do local informado pelo
-usuário. Não coloque o endereço no campo "texto".
+Quando houver histórico estruturado, interprete o atendimento completo
+usando todas as mensagens em ordem cronológica.
+
+Quando não houver histórico estruturado, interprete apenas a mensagem
+original.
+
+Use a estrutura identificada e a memória anterior apenas como auxílio.
+
+Preserve no campo "texto" o nome do local informado pelo usuário.
+
+Não coloque o endereço no campo "texto".
+
+Quando existir uma correção anterior claramente aplicável, siga o padrão
+corrigido por Henrique.
 `,
       },
     ],

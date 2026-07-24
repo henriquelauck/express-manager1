@@ -1,11 +1,14 @@
 import type { Parada } from "@/types/Parada";
 import type { Tele } from "@/types/Tele";
 
+export type FormaCobrancaTele = "na_hora" | "semanal";
+
 export type CriarTeleInput = {
   solicitante: string;
   dataTele: string;
   valorBase: string;
   observacaoGeral: string;
+  formaCobranca: FormaCobrancaTele;
   paradas: Parada[];
 
   distanciaKm?: number | null;
