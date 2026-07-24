@@ -193,11 +193,20 @@ model Motoboy {
   userId String? @unique
   user   User?   @relation(fields: [userId], references: [id])
 
+  online                  Boolean   @default(false)
+  latitude                Float?
+  longitude               Float?
+  precisaoLocalizacao     Float?
+  onlineDesde             DateTime?
+  localizacaoAtualizadaEm DateTime?
+
   teles      Tele[]
   movimentos MovimentoFinanceiroMotoboy[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([online, localizacaoAtualizadaEm])
 }
 
 model Tele {

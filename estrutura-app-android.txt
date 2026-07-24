@@ -1,0 +1,275 @@
+====================================================================================================
+ARQUIVO: package.json
+====================================================================================================
+
+{
+  "name": "express-manager",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --webpack",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "lint": "eslint",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
+    "bcryptjs": "^3.0.3",
+    "lucide-react": "^1.22.0",
+    "next": "16.2.9",
+    "openai": "^6.46.0",
+    "pg": "^8.22.0",
+    "prisma": "^7.8.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20",
+    "@types/pg": "^8.20.0",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.9",
+    "eslint-config-prettier": "10.1.8",
+    "prettier": "3.9.5",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
+
+
+====================================================================================================
+ARQUIVO: next.config.ts
+====================================================================================================
+
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  allowedDevOrigins: ["192.168.2.112"],
+};
+
+export default nextConfig;
+
+
+====================================================================================================
+ARQUIVO: next.config.js
+====================================================================================================
+
+ARQUIVO N√O ENCONTRADO
+
+
+====================================================================================================
+ARQUIVO: middleware.ts
+====================================================================================================
+
+ARQUIVO N√O ENCONTRADO
+
+
+====================================================================================================
+ARQUIVO: proxy.ts
+====================================================================================================
+
+ARQUIVO N√O ENCONTRADO
+
+
+====================================================================================================
+ARQUIVO: app/layout.tsx
+====================================================================================================
+
+import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import AppProtegido from "@/components/AppProtegido";
+import "./globals.css";
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+export const metadata: Metadata = {
+  title: "Express Manager",
+  description: "Sistema de gest√£o de entregas",
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html
+      lang="pt-BR"
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+    >
+      <body>
+        <AppProtegido>{children}</AppProtegido>
+      </body>
+    </html>
+  );
+}
+
+
+====================================================================================================
+ARQUIVO: app/login/page.tsx
+====================================================================================================
+
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+
+export default function LoginPage() {
+  const router = useRouter();
+
+  const [email, setEmail] = useState("");
+  const [senha, setSenha] = useState("");
+  const [erro, setErro] = useState("");
+  const [carregando, setCarregando] = useState(false);
+
+  async function entrar() {
+    setErro("");
+    setCarregando(true);
+
+    try {
+      const resposta = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, senha }),
+      });
+
+      const dados = await resposta.json();
+
+      if (!resposta.ok) {
+        setErro(dados.erro || "Erro ao entrar.");
+        return;
+      }
+
+      if (dados.usuario.role === "MOTOBOY") {
+        router.push("/motoboy");
+      } else {
+        router.push("/");
+      }
+    } catch {
+      setErro("Erro ao conectar com o servidor.");
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-[#f7f8fb] flex items-center justify-center p-6">
+      <div className="bg-white w-full max-w-md rounded-3xl p-8 shadow-sm border">
+        <h1 className="text-3xl font-bold mb-2">Express Manager</h1>
+        <p className="text-slate-500 mb-8">Entre para acessar o sistema.</p>
+
+        <input
+  type="email"
+  value={email}
+  autoComplete="off"
+  onChange={(e) => setEmail(e.target.value)}
+  className="w-full h-12 border rounded-xl px-4 mb-4"
+  placeholder="E-mail"
+/>
+
+<input
+  type="password"
+  value={senha}
+  autoComplete="off"
+  onChange={(e) => setSenha(e.target.value)}
+  className="w-full h-12 border rounded-xl px-4"
+  placeholder="Senha"
+/>
+
+        {erro && <p className="text-red-600 text-sm mt-4">{erro}</p>}
+
+        <button
+          onClick={entrar}
+          disabled={carregando}
+          className="w-full mt-6 h-14 rounded-2xl bg-emerald-600 text-white font-semibold disabled:opacity-50"
+        >
+          {carregando ? "Entrando..." : "Entrar"}
+        </button>
+      </div>
+    </main>
+  );
+}
+
+
+====================================================================================================
+ARQUIVO: app/api/auth/login/route.ts
+====================================================================================================
+
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import bcrypt from "bcryptjs";
+
+export async function POST(request: Request) {
+  const body = await request.json();
+
+  const usuario = await prisma.user.findUnique({
+    where: {
+      email: body.email,
+    },
+    include: {
+      motoboy: true,
+    },
+  });
+
+  if (!usuario || !usuario.senhaHash) {
+    return NextResponse.json(
+      { erro: "E-mail ou senha inv√°lidos." },
+      { status: 401 }
+    );
+  }
+
+  const senhaValida = await bcrypt.compare(body.senha, usuario.senhaHash);
+
+  if (!senhaValida) {
+    return NextResponse.json(
+      { erro: "E-mail ou senha inv√°lidos." },
+      { status: 401 }
+    );
+  }
+
+  const resposta = NextResponse.json({
+    ok: true,
+    usuario: {
+      id: usuario.id,
+      nome: usuario.nome,
+      email: usuario.email,
+      role: usuario.role,
+      motoboyId: usuario.motoboy?.id || null,
+    },
+  });
+
+  resposta.cookies.set("express_user_id", usuario.id, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 7,
+  });
+
+  resposta.cookies.set("express_user_role", usuario.role, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 7,
+  });
+
+  return resposta;
+}
+
+

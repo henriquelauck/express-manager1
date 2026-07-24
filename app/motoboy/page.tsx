@@ -8,6 +8,7 @@ import {
   CircleDollarSign,
   Clock3,
   Loader2,
+  LocateFixed,
   LogOut,
   MapPin,
   PackageCheck,
@@ -16,9 +17,11 @@ import {
   Target,
   Trophy,
   WalletCards,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const META_TROCA_OLEO = 1500;
 const FUSO_BRASIL = "America/Sao_Paulo";
@@ -41,6 +44,15 @@ type Parada = {
   observacao?: string | null;
 };
 
+type PresencaMotoboy = {
+  online: boolean;
+  latitude?: number | null;
+  longitude?: number | null;
+  precisao?: number | null;
+  onlineDesde?: string | null;
+  localizacaoAtualizadaEm?: string | null;
+};
+
 type Tele = {
   id: string;
   solicitante?: string | null;
@@ -61,6 +73,18 @@ export default function MotoboyPage() {
   const [atualizando, setAtualizando] = useState(false);
   const [teleAtualizando, setTeleAtualizando] = useState<string | null>(null);
   const [erro, setErro] = useState("");
+  const [erroLocalizacao, setErroLocalizacao] = useState("");
+  const [online, setOnline] = useState(false);
+  const [alterandoPresenca, setAlterandoPresenca] = useState(false);
+  const [precisaoLocalizacao, setPrecisaoLocalizacao] = useState<number | null>(null);
+  const [localizacaoAtualizadaEm, setLocalizacaoAtualizadaEm] = useState<string | null>(null);
+
+  const watchIdRef = useRef<number | null>(null);
+  const ultimaPosicaoRef = useRef<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+  const ultimoEnvioEmRef = useRef(0);
 
   async function carregarDados(mostrarAtualizacao = false) {
     if (mostrarAtualizacao) {
@@ -120,10 +144,205 @@ export default function MotoboyPage() {
 
   useEffect(() => {
     void carregarDados();
+    void carregarPresenca();
+
+    return () => {
+      pararMonitoramentoLocal();
+    };
   }, []);
+
+  async function carregarPresenca() {
+    try {
+      const resposta = await fetch("/api/motoboys/minha-localizacao", {
+        cache: "no-store",
+      });
+
+      if (!resposta.ok) return;
+
+      const dados = await resposta.json();
+      const presenca = dados?.motoboy as PresencaMotoboy | undefined;
+
+      if (!presenca) return;
+
+      setOnline(Boolean(presenca.online));
+      setPrecisaoLocalizacao(typeof presenca.precisao === "number" ? presenca.precisao : null);
+      setLocalizacaoAtualizadaEm(presenca.localizacaoAtualizadaEm || null);
+
+      if (presenca.online) {
+        iniciarWatchPosition();
+      }
+    } catch (erroPresenca) {
+      console.error("Erro ao consultar presença do motoboy:", erroPresenca);
+    }
+  }
+
+  function pararMonitoramentoLocal() {
+    if (watchIdRef.current !== null && typeof navigator !== "undefined" && navigator.geolocation) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+  }
+
+  async function enviarLocalizacao(acao: "ONLINE" | "ATUALIZAR", posicao: GeolocationPosition) {
+    const resposta = await fetch("/api/motoboys/minha-localizacao", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        acao,
+        latitude: posicao.coords.latitude,
+        longitude: posicao.coords.longitude,
+        precisao: posicao.coords.accuracy,
+      }),
+    });
+
+    if (!resposta.ok) {
+      let mensagem = "Não foi possível enviar sua localização.";
+
+      try {
+        const dadosErro = await resposta.json();
+        mensagem = dadosErro?.erro || mensagem;
+      } catch {}
+
+      throw new Error(mensagem);
+    }
+
+    const dados = await resposta.json();
+
+    setOnline(true);
+    setPrecisaoLocalizacao(posicao.coords.accuracy);
+    setLocalizacaoAtualizadaEm(dados?.motoboy?.localizacaoAtualizadaEm || new Date().toISOString());
+
+    ultimaPosicaoRef.current = {
+      latitude: posicao.coords.latitude,
+      longitude: posicao.coords.longitude,
+    };
+    ultimoEnvioEmRef.current = Date.now();
+  }
+
+  function iniciarWatchPosition() {
+    if (typeof navigator === "undefined" || !navigator.geolocation || watchIdRef.current !== null) {
+      return;
+    }
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (posicao) => {
+        const agora = Date.now();
+        const ultima = ultimaPosicaoRef.current;
+        const distancia = ultima
+          ? distanciaEmMetros(
+              ultima.latitude,
+              ultima.longitude,
+              posicao.coords.latitude,
+              posicao.coords.longitude
+            )
+          : Number.POSITIVE_INFINITY;
+
+        const passouTempo = agora - ultimoEnvioEmRef.current >= 15000;
+        const moveuDistancia = distancia >= 25;
+
+        if (!passouTempo && !moveuDistancia) return;
+
+        void enviarLocalizacao("ATUALIZAR", posicao).catch((erroEnvio) => {
+          setErroLocalizacao(
+            erroEnvio instanceof Error
+              ? erroEnvio.message
+              : "Não foi possível atualizar sua localização."
+          );
+        });
+      },
+      (erroGps) => {
+        setErroLocalizacao(mensagemErroGeolocalizacao(erroGps));
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 10000,
+        timeout: 20000,
+      }
+    );
+  }
+
+  async function ficarOnline() {
+    if (alterandoPresenca || online) return;
+
+    setAlterandoPresenca(true);
+    setErroLocalizacao("");
+
+    try {
+      if (typeof navigator === "undefined" || !navigator.geolocation) {
+        throw new Error("Este aparelho não oferece suporte à localização.");
+      }
+
+      const posicao = await obterPosicaoAtual();
+
+      await enviarLocalizacao("ONLINE", posicao);
+      iniciarWatchPosition();
+    } catch (erroOnline) {
+      setErroLocalizacao(
+        erroOnline instanceof Error ? erroOnline.message : "Não foi possível ficar online."
+      );
+    } finally {
+      setAlterandoPresenca(false);
+    }
+  }
+
+  async function ficarOffline() {
+    if (alterandoPresenca || !online) return;
+
+    setAlterandoPresenca(true);
+    setErroLocalizacao("");
+
+    try {
+      const resposta = await fetch("/api/motoboys/minha-localizacao", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          acao: "OFFLINE",
+        }),
+      });
+
+      if (!resposta.ok) {
+        let mensagem = "Não foi possível ficar offline.";
+
+        try {
+          const dadosErro = await resposta.json();
+          mensagem = dadosErro?.erro || mensagem;
+        } catch {}
+
+        throw new Error(mensagem);
+      }
+
+      pararMonitoramentoLocal();
+      setOnline(false);
+      setPrecisaoLocalizacao(null);
+    } catch (erroOffline) {
+      setErroLocalizacao(
+        erroOffline instanceof Error ? erroOffline.message : "Não foi possível ficar offline."
+      );
+    } finally {
+      setAlterandoPresenca(false);
+    }
+  }
 
   async function sair() {
     try {
+      if (online) {
+        await fetch("/api/motoboys/minha-localizacao", {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            acao: "OFFLINE",
+          }),
+        });
+      }
+
+      pararMonitoramentoLocal();
+
       await fetch("/api/auth/logout", {
         method: "POST",
       });
@@ -313,6 +532,93 @@ export default function MotoboyPage() {
             </div>
           </div>
         </header>
+
+        <section
+          className={`mt-5 overflow-hidden rounded-3xl border p-5 shadow-sm sm:p-6 ${
+            online ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"
+          }`}
+        >
+          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-start gap-4">
+              <div
+                className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${
+                  online ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500"
+                }`}
+              >
+                {online ? <Wifi size={23} /> : <WifiOff size={23} />}
+              </div>
+
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-xl font-bold text-slate-900">
+                    {online ? "Você está online" : "Você está offline"}
+                  </h2>
+
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                      online ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {online ? "Disponível" : "Indisponível"}
+                  </span>
+                </div>
+
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                  {online
+                    ? "Sua posição está sendo compartilhada enquanto este painel permanecer aberto."
+                    : "Fique online para que o gestor veja sua posição e possa despachar as teles mais próximas."}
+                </p>
+
+                {online && (
+                  <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-500">
+                    <span className="flex items-center gap-1.5">
+                      <LocateFixed size={14} />
+                      {localizacaoAtualizadaEm
+                        ? `Atualizada ${formatarTempoLocalizacao(localizacaoAtualizadaEm)}`
+                        : "Aguardando localização"}
+                    </span>
+
+                    {precisaoLocalizacao !== null && (
+                      <span>Precisão aproximada: {Math.round(precisaoLocalizacao)} m</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void (online ? ficarOffline() : ficarOnline())}
+              disabled={alterandoPresenca}
+              className={`flex h-12 w-full items-center justify-center gap-2 rounded-xl px-6 font-semibold text-white transition disabled:cursor-wait disabled:opacity-60 md:w-auto ${
+                online ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"
+              }`}
+            >
+              {alterandoPresenca ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  Aguarde...
+                </>
+              ) : online ? (
+                <>
+                  <WifiOff size={18} />
+                  Ficar offline
+                </>
+              ) : (
+                <>
+                  <Wifi size={18} />
+                  Ficar online
+                </>
+              )}
+            </button>
+          </div>
+
+          {erroLocalizacao && (
+            <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {erroLocalizacao}
+            </div>
+          )}
+        </section>
 
         {erro && (
           <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -894,4 +1200,75 @@ function classeStatus(status: string) {
   };
 
   return mapa[status] || "bg-slate-100 text-slate-700";
+}
+
+function obterPosicaoAtual() {
+  return new Promise<GeolocationPosition>((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(
+      resolve,
+      (erro) => {
+        reject(new Error(mensagemErroGeolocalizacao(erro)));
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 5000,
+        timeout: 20000,
+      }
+    );
+  });
+}
+
+function mensagemErroGeolocalizacao(erro: GeolocationPositionError) {
+  if (erro.code === erro.PERMISSION_DENIED) {
+    return "Permissão de localização negada. Libere a localização nas configurações do navegador.";
+  }
+
+  if (erro.code === erro.POSITION_UNAVAILABLE) {
+    return "O celular não conseguiu determinar sua localização.";
+  }
+
+  if (erro.code === erro.TIMEOUT) {
+    return "A localização demorou para responder. Tente novamente em um local aberto.";
+  }
+
+  return "Não foi possível acessar a localização do celular.";
+}
+
+function distanciaEmMetros(
+  latitude1: number,
+  longitude1: number,
+  latitude2: number,
+  longitude2: number
+) {
+  const raioTerra = 6371000;
+  const paraRadianos = (valor: number) => (valor * Math.PI) / 180;
+
+  const deltaLatitude = paraRadianos(latitude2 - latitude1);
+  const deltaLongitude = paraRadianos(longitude2 - longitude1);
+
+  const a =
+    Math.sin(deltaLatitude / 2) ** 2 +
+    Math.cos(paraRadianos(latitude1)) *
+      Math.cos(paraRadianos(latitude2)) *
+      Math.sin(deltaLongitude / 2) ** 2;
+
+  return 2 * raioTerra * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function formatarTempoLocalizacao(data: string) {
+  const segundos = Math.max(0, Math.floor((Date.now() - new Date(data).getTime()) / 1000));
+
+  if (segundos < 10) return "agora";
+  if (segundos < 60) return `há ${segundos} segundos`;
+
+  const minutos = Math.floor(segundos / 60);
+
+  if (minutos === 1) return "há 1 minuto";
+  if (minutos < 60) return `há ${minutos} minutos`;
+
+  return new Date(data).toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: FUSO_BRASIL,
+  });
 }

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Express Manager</string>
+    <string name="title_activity_main">Express Manager</string>
+    <string name="package_name">com.lauckdastele.expressmanager</string>
+    <string name="custom_url_scheme">com.lauckdastele.expressmanager</string>
+</resources>
