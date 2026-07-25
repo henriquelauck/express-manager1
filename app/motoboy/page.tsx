@@ -64,7 +64,13 @@ type LocalizacaoNativaPlugin = {
   parar(): Promise<ResultadoLocalizacaoNativa>;
 };
 
+type CredenciaisNativasPlugin = {
+  removerToken(): Promise<{ removido: boolean }>;
+};
+
 const LocalizacaoNativa = registerPlugin<LocalizacaoNativaPlugin>("LocalizacaoNativa");
+
+const CredenciaisNativas = registerPlugin<CredenciaisNativasPlugin>("CredenciaisNativas");
 
 function executandoNoAppAndroid() {
   return (
@@ -364,30 +370,51 @@ export default function MotoboyPage() {
   }
 
   async function sair() {
+    const acessoAndroid = executandoNoAppAndroid();
+
     try {
-      if (executandoNoAppAndroid()) {
+      if (acessoAndroid) {
         try {
           await LocalizacaoNativa.parar();
-        } catch {}
+        } catch (erroServico) {
+          console.error("Não foi possível parar o serviço nativo:", erroServico);
+        }
       }
 
       if (online) {
-        await fetch("/api/motoboys/minha-localizacao", {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            acao: "OFFLINE",
-          }),
-        });
+        try {
+          await fetch("/api/motoboys/minha-localizacao", {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              acao: "OFFLINE",
+            }),
+          });
+        } catch (erroOffline) {
+          console.error("Não foi possível marcar o motoboy offline:", erroOffline);
+        }
       }
 
       pararMonitoramentoLocal();
 
       await fetch("/api/auth/logout", {
         method: "POST",
+        headers: acessoAndroid
+          ? {
+              "x-express-app": "android",
+            }
+          : undefined,
       });
+
+      if (acessoAndroid) {
+        try {
+          await CredenciaisNativas.removerToken();
+        } catch (erroToken) {
+          console.error("Não foi possível remover o token do aparelho:", erroToken);
+        }
+      }
     } finally {
       window.location.href = "/login";
     }
