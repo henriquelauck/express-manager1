@@ -1,18 +1,12 @@
 import { prisma } from "@/lib/prisma";
+import type { TipoMovimentoFinanceiro } from "@prisma/client";
 import { NextResponse } from "next/server";
 
-type TipoMovimento = "CLIENTE" | "ESCRITORIO" | "AJUSTE";
-
-type MovimentoBody = {
-  motoboyId?: string;
-  tipo?: string;
-  clienteNome?: string | null;
+type RecebimentoBody = {
+  id?: string;
+  recebimento?: string;
   valor?: number | string;
-  descricao?: string;
-  teleId?: string | null;
-  fechamentoId?: string | null;
-  dataReferenciaInicio?: string | null;
-  dataReferenciaFim?: string | null;
+  motoboy?: string | null;
 };
 
 function converterValor(valor: unknown) {
@@ -20,178 +14,232 @@ function converterValor(valor: unknown) {
   return Number.isFinite(numero) ? numero : 0;
 }
 
-function dataOuNull(data: unknown) {
-  const valor = String(data || "").trim();
+function normalizarRecebimento(valor: unknown) {
+  const recebimento = String(valor || "")
+    .trim()
+    .toLowerCase();
 
-  if (!valor) return null;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) return null;
-
-  return new Date(`${valor}T12:00:00-03:00`);
-}
-
-function normalizarTipo(valor: unknown): TipoMovimento | null {
-  const tipo = String(valor || "").trim().toUpperCase();
-
-  if (
-    tipo === "CLIENTE" ||
-    tipo === "ESCRITORIO" ||
-    tipo === "AJUSTE"
-  ) {
-    return tipo;
+  if (recebimento === "pendente" || recebimento === "escritorio" || recebimento === "motoboy") {
+    return recebimento;
   }
 
   return null;
+}
+
+function recebimentoParaBanco(recebimento: string) {
+  const mapa = {
+    pendente: "PENDENTE",
+    escritorio: "ESCRITORIO",
+    motoboy: "MOTOBOY",
+  } as const;
+
+  return mapa[recebimento as keyof typeof mapa] || "PENDENTE";
 }
 
 function respostaErro(mensagem: string, status: number) {
   return NextResponse.json({ erro: mensagem }, { status });
 }
 
-export async function GET() {
-  try {
-    const movimentos =
-      await prisma.movimentoFinanceiroMotoboy.findMany({
-        include: {
-          motoboy: true,
-        },
-        orderBy: {
-          createdAt: "desc",
+async function sincronizarMovimentoMotoboy({
+  tx,
+  teleId,
+  solicitante,
+  recebimento,
+  valorRecebido,
+  motoboyRecebedor,
+}: {
+  tx: any;
+  teleId: string;
+  solicitante: string;
+  recebimento: string;
+  valorRecebido: number;
+  motoboyRecebedor: string | null;
+}) {
+  const tipoMovimento: TipoMovimentoFinanceiro = "CLIENTE";
+
+  const movimentosExistentes = await tx.movimentoFinanceiroMotoboy.findMany({
+    where: {
+      teleId,
+      tipo: tipoMovimento,
+    },
+    orderBy: {
+      createdAt: "asc",
+    },
+  });
+
+  const deveTerMovimento =
+    recebimento === "motoboy" && valorRecebido > 0.009 && Boolean(motoboyRecebedor);
+
+  if (!deveTerMovimento) {
+    if (movimentosExistentes.length > 0) {
+      await tx.movimentoFinanceiroMotoboy.deleteMany({
+        where: {
+          teleId,
+          tipo: tipoMovimento,
         },
       });
+    }
 
-    return NextResponse.json(
-      movimentos.map((movimento) => ({
-        id: movimento.id,
-        clienteNome: movimento.clienteNome,
-        motoboyId: movimento.motoboyId,
-        motoboy: movimento.motoboy.nome,
-        tipo: movimento.tipo,
-        valor: Number(movimento.valor || 0),
-        descricao: movimento.descricao,
-        teleId: movimento.teleId,
-        fechamentoId: movimento.fechamentoId,
-        dataReferenciaInicio:
-          movimento.dataReferenciaInicio,
-        dataReferenciaFim: movimento.dataReferenciaFim,
-        criadoEm: movimento.createdAt,
-      }))
-    );
-  } catch (erro) {
-    console.error("Erro ao buscar movimentos:", erro);
+    return;
+  }
 
-    return respostaErro(
-      "Não foi possível carregar os movimentos financeiros.",
-      500
-    );
+  const motoboy = await tx.motoboy.findFirst({
+    where: {
+      nome: motoboyRecebedor!,
+    },
+    select: {
+      id: true,
+      nome: true,
+    },
+  });
+
+  if (!motoboy) {
+    throw new Error("O motoboy selecionado não foi encontrado.");
+  }
+
+  const dadosMovimento = {
+    motoboyId: motoboy.id,
+    tipo: tipoMovimento,
+    clienteNome: solicitante || null,
+    valor: valorRecebido,
+    descricao: `Recebimento da tele de ${solicitante}`,
+    teleId,
+    fechamentoId: null,
+  };
+
+  if (movimentosExistentes.length === 0) {
+    await tx.movimentoFinanceiroMotoboy.create({
+      data: dadosMovimento,
+    });
+
+    return;
+  }
+
+  const movimentoPrincipal = movimentosExistentes[0];
+
+  await tx.movimentoFinanceiroMotoboy.update({
+    where: {
+      id: movimentoPrincipal.id,
+    },
+    data: dadosMovimento,
+  });
+
+  if (movimentosExistentes.length > 1) {
+    await tx.movimentoFinanceiroMotoboy.deleteMany({
+      where: {
+        teleId,
+        tipo: tipoMovimento,
+        id: {
+          not: movimentoPrincipal.id,
+        },
+      },
+    });
   }
 }
 
-export async function POST(request: Request) {
+export async function PUT(request: Request) {
   try {
-    const body = (await request.json()) as MovimentoBody;
+    const body = (await request.json()) as RecebimentoBody;
 
-    const motoboyId = String(body.motoboyId || "").trim();
-    const tipo = normalizarTipo(body.tipo);
-    const valor = converterValor(body.valor);
-    const descricao = String(body.descricao || "").trim();
-    const dataInicio = dataOuNull(body.dataReferenciaInicio);
-    const dataFim = dataOuNull(body.dataReferenciaFim);
+    const teleId = String(body.id || "").trim();
+    const recebimentoInformado = normalizarRecebimento(body.recebimento);
 
-    if (!motoboyId || !tipo) {
-      return respostaErro(
-        "Motoboy e tipo são obrigatórios.",
-        400
-      );
+    if (!teleId) {
+      return respostaErro("Tele não informada.", 400);
     }
 
-    if (tipo === "CLIENTE") {
-      return respostaErro(
-        "Movimentos de clientes são gerados automaticamente pelas teles e fechamentos.",
-        400
-      );
+    if (!recebimentoInformado) {
+      return respostaErro("Situação do recebimento inválida.", 400);
     }
 
-    if (valor === 0) {
-      return respostaErro(
-        "Informe um valor diferente de zero.",
-        400
-      );
-    }
-
-    if (tipo === "ESCRITORIO" && valor < 0) {
-      return respostaErro(
-        "Pagamentos do escritório não podem ter valor negativo.",
-        400
-      );
-    }
-
-    if (
-      dataInicio &&
-      dataFim &&
-      dataInicio.getTime() > dataFim.getTime()
-    ) {
-      return respostaErro(
-        "A data inicial não pode ser posterior à data final.",
-        400
-      );
-    }
-
-    const motoboy = await prisma.motoboy.findUnique({
+    const teleAtual = await prisma.tele.findUnique({
       where: {
-        id: motoboyId,
+        id: teleId,
       },
       select: {
         id: true,
-        nome: true,
+        solicitante: true,
+        total: true,
       },
     });
 
-    if (!motoboy) {
-      return respostaErro("Motoboy não encontrado.", 404);
+    if (!teleAtual) {
+      return respostaErro("Tele não encontrada.", 404);
     }
 
-    const movimento =
-      await prisma.movimentoFinanceiroMotoboy.create({
+    const total = Number(teleAtual.total || 0);
+    const valorInformado = recebimentoInformado === "pendente" ? 0 : converterValor(body.valor);
+
+    if (valorInformado < 0) {
+      return respostaErro("O valor recebido não pode ser negativo.", 400);
+    }
+
+    if (valorInformado > total + 0.009) {
+      return respostaErro("O valor recebido não pode ser maior que o total da tele.", 400);
+    }
+
+    const possuiRecebimento = valorInformado > 0.009;
+
+    const recebimento = possuiRecebimento ? recebimentoInformado : "pendente";
+
+    const motoboyRecebedor =
+      recebimento === "motoboy" ? String(body.motoboy || "").trim() || null : null;
+
+    if (recebimento === "motoboy" && !motoboyRecebedor) {
+      return respostaErro("Selecione o motoboy que recebeu.", 400);
+    }
+
+    const teleAtualizada = await prisma.$transaction(async (tx) => {
+      const tele = await tx.tele.update({
+        where: {
+          id: teleId,
+        },
         data: {
-          motoboyId,
-          tipo,
-          clienteNome: null,
-          valor,
-          descricao:
-            descricao ||
-            (tipo === "ESCRITORIO"
-              ? "Pagamento do escritório"
-              : "Ajuste financeiro"),
-          teleId: null,
-          fechamentoId: null,
-          dataReferenciaInicio: dataInicio,
-          dataReferenciaFim: dataFim,
+          recebimento: recebimentoParaBanco(recebimento),
+          valorRecebido: valorInformado,
+          dataRecebimento: possuiRecebimento ? new Date() : null,
+          motoboyRecebedor,
+        },
+        include: {
+          paradas: {
+            orderBy: {
+              ordem: "asc",
+            },
+          },
+          motoboy: true,
+          cliente: true,
         },
       });
 
-    return NextResponse.json(
-      {
-        id: movimento.id,
-        motoboyId: movimento.motoboyId,
-        motoboy: motoboy.nome,
-        tipo: movimento.tipo,
-        clienteNome: movimento.clienteNome,
-        valor: Number(movimento.valor || 0),
-        descricao: movimento.descricao,
-        teleId: movimento.teleId,
-        fechamentoId: movimento.fechamentoId,
-        dataReferenciaInicio:
-          movimento.dataReferenciaInicio,
-        dataReferenciaFim: movimento.dataReferenciaFim,
-        criadoEm: movimento.createdAt,
+      await sincronizarMovimentoMotoboy({
+        tx,
+        teleId: tele.id,
+        solicitante: tele.solicitante,
+        recebimento,
+        valorRecebido: valorInformado,
+        motoboyRecebedor,
+      });
+
+      return tele;
+    });
+
+    return NextResponse.json({
+      ok: true,
+      tele: {
+        id: teleAtualizada.id,
+        recebimento: recebimento,
+        valorRecebido: Number(teleAtualizada.valorRecebido || 0),
+        dataRecebimento: teleAtualizada.dataRecebimento,
+        motoboyRecebedor: teleAtualizada.motoboyRecebedor,
+        recebido:
+          Number(teleAtualizada.valorRecebido || 0) >= Number(teleAtualizada.total || 0) - 0.009,
       },
-      { status: 201 }
-    );
+    });
   } catch (erro) {
-    console.error("Erro ao criar movimento:", erro);
+    console.error("Erro ao atualizar recebimento da tele:", erro);
 
     return respostaErro(
-      "Não foi possível registrar o movimento financeiro.",
+      erro instanceof Error ? erro.message : "Não foi possível atualizar o recebimento.",
       500
     );
   }
