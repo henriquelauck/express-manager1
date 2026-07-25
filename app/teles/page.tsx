@@ -56,7 +56,7 @@ type Parada = {
 
 const statusOptions: StatusTele[] = [
   "Aguardando cliente",
-  "Aguardando motoboy disponível",
+  "Aguardando motoboy dispon\u00edvel",
   "Aguardando coleta",
   "Em rota",
   "Entregue",
@@ -255,7 +255,7 @@ export default function TelesPage() {
     return salvarTeleNoBanco({
       ...tele,
       motoboy,
-      status: motoboy ? "Aguardando coleta" : "Aguardando motoboy disponível",
+      status: motoboy ? "Aguardando coleta" : "Aguardando motoboy disponÃ­vel",
     });
   }
 
@@ -283,10 +283,10 @@ export default function TelesPage() {
   }
 
   function abrirPagamento(tele: Tele) {
-    const saldoPendente = saldoPendenteDaTele(tele);
+    const recebidoAtual = Number(tele.valorRecebido || 0);
 
     setTelePagamento(tele);
-    setValorPagamento(formatarValor(saldoPendente));
+    setValorPagamento(formatarValor(recebidoAtual));
     setRecebedorPagamento(tele.recebimento === "motoboy" ? "motoboy" : "escritorio");
     setMotoboyRecebedorPagamento(tele.motoboyRecebedor || tele.motoboy || "");
   }
@@ -300,60 +300,137 @@ export default function TelesPage() {
     setMotoboyRecebedorPagamento("");
   }
 
+  async function atualizarRecebimentoTele({
+    valorRecebido,
+    recebimento,
+    motoboyRecebedor,
+  }: {
+    valorRecebido: number;
+    recebimento: RecebedorPagamento | "pendente";
+    motoboyRecebedor: string | null;
+  }) {
+    if (!telePagamento) return null;
+
+    const resposta = await fetch("/api/teles", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id: telePagamento.id,
+        valorRecebido,
+        recebimento,
+        motoboyRecebedor,
+      }),
+    });
+
+    if (!resposta.ok) {
+      let mensagem = "Não foi possível atualizar o recebimento.";
+
+      try {
+        const dadosErro = await resposta.json();
+        mensagem = dadosErro?.erro || mensagem;
+      } catch {}
+
+      throw new Error(mensagem);
+    }
+
+    return resposta.json();
+  }
+
   async function registrarPagamento() {
     if (!telePagamento || salvandoPagamento) return;
 
-    const valorAgora = converterValor(valorPagamento);
-    const recebidoAnterior = Number(telePagamento.valorRecebido || 0);
-    const saldoAnterior = saldoPendenteDaTele(telePagamento);
+    const novoValorRecebido = converterValor(valorPagamento);
+    const total = Number(telePagamento.total || 0);
 
-    if (!Number.isFinite(valorAgora) || valorAgora <= 0) {
-      alert("Informe um valor recebido maior que zero.");
+    if (!Number.isFinite(novoValorRecebido) || novoValorRecebido < 0) {
+      alert("Informe um valor recebido válido.");
       return;
     }
 
-    if (valorAgora > saldoAnterior + 0.009) {
-      alert(`O valor recebido não pode ultrapassar o saldo de R$ ${formatarValor(saldoAnterior)}.`);
+    if (novoValorRecebido > total + 0.009) {
+      alert(`O total recebido não pode ultrapassar R$ ${formatarValor(total)}.`);
       return;
     }
 
-    if (recebedorPagamento === "motoboy" && !motoboyRecebedorPagamento) {
+    if (
+      novoValorRecebido > 0.009 &&
+      recebedorPagamento === "motoboy" &&
+      !motoboyRecebedorPagamento
+    ) {
       alert("Selecione o motoboy que recebeu o pagamento.");
       return;
     }
 
-    const novoValorRecebido = Math.min(
-      recebidoAnterior + valorAgora,
-      Number(telePagamento.total || 0)
-    );
-    const quitou = novoValorRecebido >= Number(telePagamento.total || 0) - 0.009;
-
-    const teleAtualizada: Tele = {
-      ...telePagamento,
-      recebimento: recebedorPagamento,
-      recebido: quitou,
-      valorRecebido: novoValorRecebido,
-      dataRecebimento: new Date().toISOString(),
-      motoboyRecebedor: recebedorPagamento === "motoboy" ? motoboyRecebedorPagamento : null,
-    };
-
     setSalvandoPagamento(true);
-    setTeles(teles.map((item: Tele) => (item.id === telePagamento.id ? teleAtualizada : item)));
 
-    const salvou = await salvarTeleNoBanco(teleAtualizada, false);
+    try {
+      const teleAtualizada = await atualizarRecebimentoTele({
+        valorRecebido: novoValorRecebido,
+        recebimento: novoValorRecebido > 0.009 ? recebedorPagamento : "pendente",
+        motoboyRecebedor:
+          novoValorRecebido > 0.009 && recebedorPagamento === "motoboy"
+            ? motoboyRecebedorPagamento
+            : null,
+      });
 
-    if (!salvou) {
-      setTeles(teles.map((item: Tele) => (item.id === telePagamento.id ? telePagamento : item)));
+      if (teleAtualizada) {
+        setTeles(
+          teles.map((item: Tele) => (item.id === teleAtualizada.id ? teleAtualizada : item))
+        );
+      }
+
+      await recarregarDados();
+      fecharPagamento();
+    } catch (erroPagamento) {
+      alert(
+        erroPagamento instanceof Error
+          ? erroPagamento.message
+          : "Não foi possível atualizar o recebimento."
+      );
+    } finally {
       setSalvandoPagamento(false);
+    }
+  }
+
+  async function estornarRecebimento() {
+    if (!telePagamento || salvandoPagamento || Number(telePagamento.valorRecebido || 0) <= 0.009) {
       return;
     }
 
-    await recarregarDados();
-    setSalvandoPagamento(false);
-    setTelePagamento(null);
-    setValorPagamento("");
-    setRecebedorPagamento("escritorio");
-    setMotoboyRecebedorPagamento("");
+    const confirmou = window.confirm(
+      "Remover este recebimento? A tele voltará para pendente e o movimento do motoboy será apagado do extrato."
+    );
+
+    if (!confirmou) return;
+
+    setSalvandoPagamento(true);
+
+    try {
+      const teleAtualizada = await atualizarRecebimentoTele({
+        valorRecebido: 0,
+        recebimento: "pendente",
+        motoboyRecebedor: null,
+      });
+
+      if (teleAtualizada) {
+        setTeles(
+          teles.map((item: Tele) => (item.id === teleAtualizada.id ? teleAtualizada : item))
+        );
+      }
+
+      await recarregarDados();
+      fecharPagamento();
+    } catch (erroEstorno) {
+      alert(
+        erroEstorno instanceof Error
+          ? erroEstorno.message
+          : "Não foi possível remover o recebimento."
+      );
+    } finally {
+      setSalvandoPagamento(false);
+    }
   }
 
   async function alterarSituacaoCobranca(id: string, situacao: SituacaoCobranca) {
@@ -447,13 +524,13 @@ export default function TelesPage() {
 
       if (!resposta.ok) {
         const erro = await resposta.text();
-        throw new Error(erro || "Não foi possível excluir a tele.");
+        throw new Error(erro || "NÃ£o foi possÃ­vel excluir a tele.");
       }
 
       await recarregarDados();
       setTeleParaExcluir(null);
     } catch (erro) {
-      setErroExclusao(erro instanceof Error ? erro.message : "Não foi possível excluir a tele.");
+      setErroExclusao(erro instanceof Error ? erro.message : "NÃ£o foi possÃ­vel excluir a tele.");
     } finally {
       setExcluindoTele(false);
     }
@@ -564,20 +641,20 @@ export default function TelesPage() {
     const avisoRetorno = !temRetorno
       ? `
 
-⚠️ Este orçamento é referente à entrega sem retorno. Caso seja necessário retorno ao local de origem, será acrescido o valor de R$ 5,00.`
+âš ï¸ Este orÃ§amento Ã© referente Ã  entrega sem retorno. Caso seja necessÃ¡rio retorno ao local de origem, serÃ¡ acrescido o valor de R$ 5,00.`
       : "";
 
-    const texto = `Olá!
+    const texto = `OlÃ¡!
 
-Segue orçamento da tele:
+Segue orÃ§amento da tele:
 
 ${gerarTextoParadas(tele, false)}
 
 Valor: R$ ${tele.valor}${avisoRetorno}
 
-⚠️ Em caso de cancelamento após a confirmação da tele, será cobrado o valor mínimo referente ao deslocamento do motoboy, no valor de R$ 15,00.
+âš ï¸ Em caso de cancelamento apÃ³s a confirmaÃ§Ã£o da tele, serÃ¡ cobrado o valor mÃ­nimo referente ao deslocamento do motoboy, no valor de R$ 15,00.
 
-Aguardamos sua confirmação.`;
+Aguardamos sua confirmaÃ§Ã£o.`;
 
     setMensagem(texto);
     setTelefoneDestino(normalizarTelefone(telefone));
@@ -613,7 +690,7 @@ Aguardamos sua confirmação.`;
       linkMaps = `https://www.google.com/maps/dir/?${params.toString()}`;
     }
 
-    const texto = `🚨 NOVA TELE
+    const texto = `ðŸš¨ NOVA TELE
 
 ${gerarTextoParadas(tele, true)}
 
@@ -621,7 +698,7 @@ Valor da tele: R$ ${tele.valor}${
       linkMaps
         ? `
 
-🗺️ Abrir rota:
+ðŸ—ºï¸ Abrir rota:
 ${linkMaps}`
         : ""
     }`;
@@ -633,7 +710,7 @@ ${linkMaps}`
 
   function enviarWhatsApp() {
     if (!telefoneDestino) {
-      alert("Telefone não encontrado. Verifique o cadastro do cliente ou motoboy.");
+      alert("Telefone nÃ£o encontrado. Verifique o cadastro do cliente ou motoboy.");
       return;
     }
 
@@ -646,7 +723,7 @@ ${linkMaps}`
       await navigator.clipboard.writeText(mensagem);
       alert("Mensagem copiada!");
     } catch {
-      alert("Não foi possível copiar a mensagem.");
+      alert("NÃ£o foi possÃ­vel copiar a mensagem.");
     }
   }
 
@@ -685,7 +762,7 @@ ${linkMaps}`
     <PageContainer>
       <div className="mb-8 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
         <PageHeader
-          titulo="Central de Operações"
+          titulo="Central de OperaÃ§Ãµes"
           descricao="Acompanhe, filtre e movimente todas as teles do dia."
         />
 
@@ -706,9 +783,9 @@ ${linkMaps}`
             </div>
 
             <div>
-              <h2 className="text-lg font-bold text-slate-900">Filtros da operação</h2>
+              <h2 className="text-lg font-bold text-slate-900">Filtros da operaÃ§Ã£o</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Mostrando as teles conforme o período e os filtros selecionados.
+                Mostrando as teles conforme o perÃ­odo e os filtros selecionados.
               </p>
             </div>
           </div>
@@ -728,7 +805,7 @@ ${linkMaps}`
           <div>
             <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
               <CalendarDays size={16} />
-              Data das operações
+              Data das operaÃ§Ãµes
             </label>
 
             <input
@@ -785,19 +862,19 @@ ${linkMaps}`
         <ResumoOperacao
           label="Teles filtradas"
           value={String(telesFiltradas.length)}
-          description="Operações exibidas no quadro"
+          description="OperaÃ§Ãµes exibidas no quadro"
         />
 
         <ResumoOperacao
           label="Valor das teles"
           value={`R$ ${formatarValor(totalFiltrado)}`}
-          description="Total bruto das operações"
+          description="Total bruto das operaÃ§Ãµes"
         />
 
         <ResumoOperacao
           label="Sem motoboy"
           value={String(telesSemMotoboy)}
-          description="Precisam de atribuição"
+          description="Precisam de atribuiÃ§Ã£o"
           alerta={telesSemMotoboy > 0}
         />
 
@@ -813,7 +890,7 @@ ${linkMaps}`
         <div className="mb-6 rounded-3xl border border-slate-100 bg-white p-8 text-center shadow-sm">
           <h2 className="text-xl font-bold text-slate-900">Nenhuma tele cadastrada</h2>
           <p className="mt-2 text-slate-500">
-            Cadastre uma nova tele para ela aparecer na Central de Operações.
+            Cadastre uma nova tele para ela aparecer na Central de OperaÃ§Ãµes.
           </p>
         </div>
       )}
@@ -822,7 +899,7 @@ ${linkMaps}`
         <div className="mb-6 rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center">
           <h2 className="text-xl font-bold text-slate-900">Nenhuma tele encontrada</h2>
           <p className="mt-2 text-slate-500">
-            Não existem operações correspondentes à data e aos filtros escolhidos.
+            NÃ£o existem operaÃ§Ãµes correspondentes Ã data e aos filtros escolhidos.
           </p>
 
           <button
@@ -900,7 +977,7 @@ ${linkMaps}`
                 <div className="space-y-4">
                   {telesDoStatus.length === 0 && (
                     <div className="rounded-2xl border border-dashed border-white/70 bg-white/50 px-4 py-8 text-center text-sm text-slate-500">
-                      Arraste uma tele para esta coluna ou aguarde novas operações.
+                      Arraste uma tele para esta coluna ou aguarde novas operaÃ§Ãµes.
                     </div>
                   )}
 
@@ -985,9 +1062,9 @@ ${linkMaps}`
           <div className="w-full max-w-lg rounded-3xl bg-white p-5 shadow-xl md:p-7">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-2xl font-bold text-slate-900">Registrar pagamento</h2>
+                <h2 className="text-2xl font-bold text-slate-900">Editar recebimento</h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Informe o valor recebido e quem ficou com o dinheiro.
+                  Informe o total já recebido e quem ficou com o dinheiro.
                 </p>
               </div>
 
@@ -1015,7 +1092,7 @@ ${linkMaps}`
             </div>
 
             <div className="mt-6">
-              <label className="text-sm font-medium text-slate-600">Valor recebido agora</label>
+              <label className="text-sm font-medium text-slate-600">Total recebido até agora</label>
               <input
                 value={valorPagamento}
                 onChange={(event) => setValorPagamento(event.target.value)}
@@ -1024,7 +1101,7 @@ ${linkMaps}`
                 className="mt-2 h-14 w-full rounded-xl border border-slate-200 px-4 text-lg font-semibold outline-none focus:border-emerald-500"
               />
               <p className="mt-2 text-xs text-slate-500">
-                O restante continuará pendente para o próximo fechamento.
+                Você pode aumentar ou reduzir esse valor para corrigir o lançamento.
               </p>
             </div>
 
@@ -1076,6 +1153,18 @@ ${linkMaps}`
               </div>
             )}
 
+            {Number(telePagamento.valorRecebido || 0) > 0.009 && (
+              <button
+                type="button"
+                onClick={() => void estornarRecebimento()}
+                disabled={salvandoPagamento}
+                className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
+              >
+                <Trash2 size={17} />
+                Remover recebimento
+              </button>
+            )}
+
             <div className="mt-7 grid grid-cols-2 gap-3">
               <button
                 type="button"
@@ -1092,7 +1181,7 @@ ${linkMaps}`
                 disabled={salvandoPagamento}
                 className="h-13 rounded-xl bg-emerald-600 font-semibold text-white disabled:opacity-60"
               >
-                {salvandoPagamento ? "Salvando..." : "Registrar pagamento"}
+                {salvandoPagamento ? "Salvando..." : "Salvar recebimento"}
               </button>
             </div>
           </div>
@@ -1117,7 +1206,7 @@ ${linkMaps}`
                   Excluir esta tele?
                 </h2>
                 <p className="mt-1 text-sm leading-6 text-slate-600">
-                  Esta ação remove definitivamente a operação e não poderá ser desfeita.
+                  Esta aÃ§Ã£o remove definitivamente a operaÃ§Ã£o e nÃ£o poderÃ¡ ser desfeita.
                 </p>
               </div>
 
@@ -1126,7 +1215,7 @@ ${linkMaps}`
                 onClick={cancelarExclusao}
                 disabled={excluindoTele}
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-white disabled:cursor-wait disabled:opacity-50"
-                aria-label="Fechar confirmação"
+                aria-label="Fechar confirmaÃ§Ã£o"
               >
                 <X size={18} />
               </button>
@@ -1166,8 +1255,8 @@ ${linkMaps}`
               </div>
 
               <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
-                Confirme somente depois de verificar que esta não é uma tele válida ou necessária
-                para os fechamentos.
+                Confirme somente depois de verificar que esta nÃ£o Ã© uma tele vÃ¡lida ou
+                necessÃ¡ria para os fechamentos.
               </div>
 
               {erroExclusao && (
@@ -1216,11 +1305,11 @@ ${linkMaps}`
             <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-5 md:px-7">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-600">
-                  Central de Operações
+                  Central de OperaÃ§Ãµes
                 </p>
                 <h2 className="mt-1 text-2xl font-bold text-slate-900">Editar tele</h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Atualize a operação, as paradas e os dados de recebimento.
+                  Atualize a operaÃ§Ã£o, as paradas e os dados de recebimento.
                 </p>
               </div>
 
@@ -1228,7 +1317,7 @@ ${linkMaps}`
                 type="button"
                 onClick={() => setModalEdicaoAberto(false)}
                 className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
-                aria-label="Fechar edição"
+                aria-label="Fechar ediÃ§Ã£o"
               >
                 <X size={19} />
               </button>
@@ -1243,7 +1332,7 @@ ${linkMaps}`
                   <div>
                     <h3 className="font-bold text-slate-900">Dados operacionais</h3>
                     <p className="text-xs text-slate-500">
-                      Cliente, valor, responsável e etapa atual.
+                      Cliente, valor, responsÃ¡vel e etapa atual.
                     </p>
                   </div>
                 </div>
@@ -1273,7 +1362,7 @@ ${linkMaps}`
 
                   <div>
                     <label className="text-sm font-medium text-slate-600">
-                      Motoboy responsável
+                      Motoboy responsÃ¡vel
                     </label>
                     <select
                       value={teleEditando.motoboy || ""}
@@ -1290,7 +1379,9 @@ ${linkMaps}`
                   </div>
 
                   <div>
-                    <label className="text-sm font-medium text-slate-600">Status da operação</label>
+                    <label className="text-sm font-medium text-slate-600">
+                      Status da operaÃ§Ã£o
+                    </label>
                     <select
                       value={teleEditando.status}
                       onChange={(event) => atualizarTeleEditando("status", event.target.value)}
@@ -1315,7 +1406,7 @@ ${linkMaps}`
                     <div>
                       <h3 className="font-bold text-slate-900">Rota e paradas</h3>
                       <p className="text-xs text-slate-500">
-                        Confira os locais e informações de cada etapa.
+                        Confira os locais e informaÃ§Ãµes de cada etapa.
                       </p>
                     </div>
                   </div>
@@ -1340,7 +1431,7 @@ ${linkMaps}`
                           <div>
                             <p className="text-sm font-bold text-slate-900">Parada {index + 1}</p>
                             <p className="text-xs text-slate-500">
-                              {parada.tipo || "Tipo não informado"}
+                              {parada.tipo || "Tipo nÃ£o informado"}
                             </p>
                           </div>
                         </div>
@@ -1375,21 +1466,21 @@ ${linkMaps}`
                         />
 
                         <InputModal
-                          label="Endereço"
+                          label="EndereÃ§o"
                           value={parada.endereco || ""}
                           onChange={(value: string) =>
                             atualizarParadaEditando(index, "endereco", value)
                           }
-                          placeholder="Endereço completo"
+                          placeholder="EndereÃ§o completo"
                         />
 
                         <InputModal
-                          label="Observação"
+                          label="ObservaÃ§Ã£o"
                           value={parada.observacao || ""}
                           onChange={(value: string) =>
                             atualizarParadaEditando(index, "observacao", value)
                           }
-                          placeholder="Instruções desta parada"
+                          placeholder="InstruÃ§Ãµes desta parada"
                           className="md:col-span-2"
                         />
                       </div>
@@ -1406,14 +1497,14 @@ ${linkMaps}`
                   <div>
                     <h3 className="font-bold text-slate-900">Financeiro</h3>
                     <p className="text-xs text-slate-500">
-                      Defina cobrança, recebimento e responsável pelo valor.
+                      Defina cobranÃ§a, recebimento e responsÃ¡vel pelo valor.
                     </p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-5 p-5 md:grid-cols-2">
                   <div>
-                    <label className="text-sm font-medium text-slate-600">Forma de cobrança</label>
+                    <label className="text-sm font-medium text-slate-600">Forma de cobranÃ§a</label>
                     <select
                       value={teleEditando.formaCobranca || "na_hora"}
                       onChange={(event) =>
@@ -1430,7 +1521,7 @@ ${linkMaps}`
 
                   <div>
                     <label className="text-sm font-medium text-slate-600">
-                      Situação do recebimento
+                      SituaÃ§Ã£o do recebimento
                     </label>
                     <select
                       value={teleEditando.recebimento || "pendente"}
@@ -1453,7 +1544,7 @@ ${linkMaps}`
                       className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
                     >
                       <option value="pendente">Pagamento pendente</option>
-                      <option value="escritorio">Recebido no escritório</option>
+                      <option value="escritorio">Recebido no escritÃ³rio</option>
                       <option value="motoboy">Recebido pelo motoboy</option>
                     </select>
                   </div>
@@ -1489,8 +1580,8 @@ ${linkMaps}`
                   ) : (
                     <div className="flex min-h-20 items-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 text-sm text-slate-500">
                       {teleEditando.recebimento === "pendente"
-                        ? "O valor continuará pendente para o fechamento."
-                        : "O recebimento ficará registrado no escritório."}
+                        ? "O valor continuarÃ¡ pendente para o fechamento."
+                        : "O recebimento ficarÃ¡ registrado no escritÃ³rio."}
                     </div>
                   )}
                 </div>
@@ -1511,7 +1602,7 @@ ${linkMaps}`
                 onClick={() => void salvarEdicaoTele()}
                 className="flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 font-semibold text-white transition hover:bg-emerald-700"
               >
-                Salvar alterações
+                Salvar alteraÃ§Ãµes
               </button>
             </div>
           </div>
@@ -1550,44 +1641,44 @@ function ResumoOperacao({ label, value, description, alerta = false }: ResumoOpe
 }
 
 function resumoDaRota(paradas: Parada[]) {
-  if (!paradas.length) return "Rota não informada";
+  if (!paradas.length) return "Rota nÃ£o informada";
 
   const primeira = paradas[0];
   const ultima = paradas[paradas.length - 1];
 
   const origem =
-    primeira.cliente || primeira.nomeCliente || primeira.endereco || "Origem não informada";
+    primeira.cliente || primeira.nomeCliente || primeira.endereco || "Origem nÃ£o informada";
 
   if (paradas.length === 1) return origem;
 
   const destino =
-    ultima.cliente || ultima.nomeCliente || ultima.endereco || "Destino não informado";
+    ultima.cliente || ultima.nomeCliente || ultima.endereco || "Destino nÃ£o informado";
 
-  return `${origem} → ${destino}`;
+  return `${origem} â†’ ${destino}`;
 }
 
 function descricaoStatus(status: string) {
   if (status === "Aguardando cliente") {
-    return "Operações aguardando confirmação.";
+    return "OperaÃ§Ãµes aguardando confirmaÃ§Ã£o.";
   }
 
-  if (status === "Aguardando motoboy disponível") {
+  if (status === "Aguardando motoboy disponÃ­vel") {
     return "Teles ainda sem motoboy definido.";
   }
 
   if (status === "Aguardando coleta") {
-    return "Motoboy definido e aguardando início.";
+    return "Motoboy definido e aguardando inÃ­cio.";
   }
 
   if (status === "Em rota") {
-    return "Operações em andamento.";
+    return "OperaÃ§Ãµes em andamento.";
   }
 
   if (status === "Entregue") {
-    return "Entregas concluídas no período.";
+    return "Entregas concluÃ­das no perÃ­odo.";
   }
 
-  return "Operações desta etapa.";
+  return "OperaÃ§Ãµes desta etapa.";
 }
 
 function corIndicadorStatus(status: string) {
@@ -1595,7 +1686,7 @@ function corIndicadorStatus(status: string) {
     return "bg-slate-500";
   }
 
-  if (status === "Aguardando motoboy disponível") {
+  if (status === "Aguardando motoboy disponÃ­vel") {
     return "bg-orange-500";
   }
 
@@ -1647,7 +1738,7 @@ function StatusBadge({ status }: { status: string }) {
     classes = "bg-orange-100 text-orange-700";
   }
 
-  if (status === "Aguardando motoboy disponível") {
+  if (status === "Aguardando motoboy disponÃ­vel") {
     classes = "bg-blue-100 text-blue-700";
   }
 
@@ -1694,7 +1785,7 @@ function rotuloFormaCobranca(formaCobranca: string) {
 function rotuloRecebimento(recebimento: string) {
   const status = String(recebimento || "pendente").toLowerCase();
 
-  if (status === "escritorio") return "Recebido no escritório";
+  if (status === "escritorio") return "Recebido no escritÃ³rio";
   if (status === "motoboy") return "Recebido pelo motoboy";
 
   return "Pendente";
@@ -1759,11 +1850,11 @@ function TeleCard({
   const primeiraParada = paradas[0];
   const ultimaParada = paradas[paradas.length - 1];
 
-  const origem = primeiraParada?.cliente || primeiraParada?.nomeCliente || "Origem não informada";
+  const origem = primeiraParada?.cliente || primeiraParada?.nomeCliente || "Origem nÃ£o informada";
 
-  const destino = ultimaParada?.cliente || ultimaParada?.nomeCliente || "Destino não informado";
+  const destino = ultimaParada?.cliente || ultimaParada?.nomeCliente || "Destino nÃ£o informado";
 
-  const resumoRota = paradas.length > 1 && origem !== destino ? `${origem} → ${destino}` : origem;
+  const resumoRota = paradas.length > 1 && origem !== destino ? `${origem} â†’ ${destino}` : origem;
   const situacaoCobranca = descobrirSituacaoCobranca(tele);
 
   return (
@@ -1815,7 +1906,7 @@ function TeleCard({
             <Bike size={14} className="shrink-0 text-slate-400" />
 
             <span className={tele.motoboy ? "" : "font-medium text-orange-600"}>
-              {tele.motoboy || "Motoboy não definido"}
+              {tele.motoboy || "Motoboy nÃ£o definido"}
             </span>
           </div>
 
@@ -1826,13 +1917,13 @@ function TeleCard({
       {acaoSalvando && (
         <div className="flex items-center justify-center gap-2 border-b border-emerald-100 bg-emerald-50 px-4 py-2 text-xs font-medium text-emerald-700">
           <Loader2 size={14} className="animate-spin" />
-          Salvando alteração...
+          Salvando alteraÃ§Ã£o...
         </div>
       )}
 
       {expandido && (
         <>
-          {/* Cabeçalho detalhado */}
+          {/* CabeÃ§alho detalhado */}
           <div className="border-b border-slate-100 bg-white p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
@@ -1904,7 +1995,7 @@ function TeleCard({
                       </p>
 
                       <p className="truncate font-bold text-slate-900">
-                        {parada.cliente || parada.nomeCliente || "Local não informado"}
+                        {parada.cliente || parada.nomeCliente || "Local nÃ£o informado"}
                       </p>
                     </div>
                   </div>
@@ -1914,7 +2005,7 @@ function TeleCard({
                       <MapPin size={15} className="mt-0.5 shrink-0 text-slate-400" />
 
                       <span className="leading-5">
-                        {parada.endereco || "Endereço não informado"}
+                        {parada.endereco || "EndereÃ§o nÃ£o informado"}
                       </span>
                     </div>
 
@@ -1928,7 +2019,7 @@ function TeleCard({
 
                     {parada.observacao && (
                       <div className="mt-3 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                        <strong>Observação:</strong> {parada.observacao}
+                        <strong>ObservaÃ§Ã£o:</strong> {parada.observacao}
                       </div>
                     )}
                   </div>
@@ -1938,15 +2029,15 @@ function TeleCard({
 
             {tele.observacaoGeral && (
               <div className="mt-3 rounded-2xl border border-orange-100 bg-orange-50 p-3 text-sm text-orange-800">
-                <strong>Observação geral:</strong> {tele.observacaoGeral}
+                <strong>ObservaÃ§Ã£o geral:</strong> {tele.observacaoGeral}
               </div>
             )}
           </div>
 
-          {/* Operação */}
+          {/* OperaÃ§Ã£o */}
           <div className="border-t border-slate-100 p-4">
             <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">
-              Operação
+              OperaÃ§Ã£o
             </p>
 
             <div className="space-y-3">
@@ -2041,10 +2132,10 @@ function TeleCard({
             </div>
           </div>
 
-          {/* Cobrança rápida */}
+          {/* CobranÃ§a rÃ¡pida */}
           <div className="border-t border-slate-100 p-4">
             <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">
-              Situação de cobrança
+              SituaÃ§Ã£o de cobranÃ§a
             </p>
 
             <div className="grid grid-cols-1 gap-2">
@@ -2071,11 +2162,11 @@ function TeleCard({
                       : situacaoCobranca === "pago_parcial"
                         ? `Recebido R$ ${formatarValor(
                             Number(tele.valorRecebido || 0)
-                          )} • falta R$ ${formatarValor(saldoPendenteDaTele(tele))}`
+                          )} â€¢ falta R$ ${formatarValor(saldoPendenteDaTele(tele))}`
                         : "Informe valor e quem recebeu"}
                   </span>
                 </span>
-                <span className="text-lg">🟢</span>
+                <span className="text-lg">ðŸŸ¢</span>
               </button>
 
               <button
@@ -2094,9 +2185,11 @@ function TeleCard({
               >
                 <span>
                   <strong>Paga no fim da semana</strong>
-                  <span className="mt-0.5 block text-xs opacity-75">Cobrança semanal pendente</span>
+                  <span className="mt-0.5 block text-xs opacity-75">
+                    CobranÃ§a semanal pendente
+                  </span>
                 </span>
-                <span className="text-lg">🔵</span>
+                <span className="text-lg">ðŸ”µ</span>
               </button>
 
               <button
@@ -2119,7 +2212,7 @@ function TeleCard({
                     Pagamento pendente para cobrar agora
                   </span>
                 </span>
-                <span className="text-lg">🟡</span>
+                <span className="text-lg">ðŸŸ¡</span>
               </button>
             </div>
           </div>
@@ -2134,16 +2227,16 @@ function TeleCard({
               <div className="mb-4 flex items-center justify-between gap-3">
                 <strong className="text-sm">
                   {tele.recebimento === "escritorio"
-                    ? "🔵 Recebido no escritório"
+                    ? "ðŸ”µ Recebido no escritÃ³rio"
                     : tele.recebimento === "motoboy"
-                      ? "🟢 Recebido pelo motoboy"
-                      : "🟡 Pagamento pendente"}
+                      ? "ðŸŸ¢ Recebido pelo motoboy"
+                      : "ðŸŸ¡ Pagamento pendente"}
                 </strong>
               </div>
 
               <div className="space-y-2 text-sm">
                 <LinhaValor
-                  label="Forma de cobrança"
+                  label="Forma de cobranÃ§a"
                   valor={rotuloFormaCobranca(tele.formaCobranca)}
                 />
 
@@ -2153,10 +2246,10 @@ function TeleCard({
                   label="Recebedor"
                   valor={
                     tele.recebimento === "motoboy"
-                      ? tele.motoboyRecebedor || tele.motoboy || "—"
+                      ? tele.motoboyRecebedor || tele.motoboy || "â€”"
                       : tele.recebimento === "escritorio"
-                        ? "Escritório"
-                        : "—"
+                        ? "EscritÃ³rio"
+                        : "â€”"
                   }
                 />
 
@@ -2168,7 +2261,7 @@ function TeleCard({
             </div>
           </div>
 
-          {/* Ações */}
+          {/* AÃ§Ãµes */}
           <div className="border-t border-slate-100 p-4">
             <div className="grid grid-cols-2 gap-3">
               <button
@@ -2177,7 +2270,7 @@ function TeleCard({
                 className="flex h-11 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
               >
                 <MessageCircle size={16} />
-                Orçamento
+                OrÃ§amento
               </button>
 
               <button
@@ -2204,7 +2297,7 @@ function TeleCard({
 
             {tele.status === "Entregue" && (
               <div className="mt-3 rounded-xl bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-700">
-                Entrega concluída
+                Entrega concluÃ­da
               </div>
             )}
           </div>

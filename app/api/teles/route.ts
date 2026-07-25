@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 function statusParaBanco(status: string): StatusTeleBanco {
   const mapa: Record<string, StatusTeleBanco> = {
     "Aguardando cliente": "AGUARDANDO_CLIENTE",
-    "Aguardando motoboy disponível": "AGUARDANDO_MOTOBOY",
+    "Aguardando motoboy disponÃ­vel": "AGUARDANDO_MOTOBOY",
     "Aguardando coleta": "AGUARDANDO_COLETA",
     "Em rota": "EM_ROTA",
     Entregue: "ENTREGUE",
@@ -17,7 +17,7 @@ function statusParaBanco(status: string): StatusTeleBanco {
 function statusParaTela(status: string) {
   const mapa: Record<string, string> = {
     AGUARDANDO_CLIENTE: "Aguardando cliente",
-    AGUARDANDO_MOTOBOY: "Aguardando motoboy disponível",
+    AGUARDANDO_MOTOBOY: "Aguardando motoboy disponÃ­vel",
     AGUARDANDO_COLETA: "Aguardando coleta",
     EM_ROTA: "Em rota",
     ENTREGUE: "Entregue",
@@ -188,7 +188,7 @@ async function sincronizarRecebimentoMotoboy({
   });
 
   if (!motoboy) {
-    throw new Error("O motoboy recebedor não foi encontrado para gerar o extrato.");
+    throw new Error("O motoboy recebedor nÃ£o foi encontrado para gerar o extrato.");
   }
 
   const dadosMovimento = {
@@ -445,6 +445,110 @@ export async function PUT(request: Request) {
     return NextResponse.json(
       {
         erro: error.message || "Erro desconhecido ao atualizar tele",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+
+export async function PATCH(request: Request) {
+  try {
+    const body = await request.json();
+
+    if (!body?.id) {
+      return NextResponse.json(
+        { erro: "Tele não informada." },
+        { status: 400 }
+      );
+    }
+
+    const teleAtual = await prisma.tele.findUnique({
+      where: {
+        id: body.id,
+      },
+      select: {
+        id: true,
+        solicitante: true,
+        total: true,
+      },
+    });
+
+    if (!teleAtual) {
+      return NextResponse.json(
+        { erro: "Tele não encontrada." },
+        { status: 404 }
+      );
+    }
+
+    const total = Number(teleAtual.total || 0);
+    const valorRecebido = Math.max(
+      0,
+      Math.min(Number(body.valorRecebido || 0), total)
+    );
+
+    const possuiRecebimento = valorRecebido > 0.009;
+    const recebimentoTela = possuiRecebimento
+      ? body.recebimento || "escritorio"
+      : "pendente";
+
+    const motoboyRecebedor =
+      possuiRecebimento && recebimentoTela === "motoboy"
+        ? body.motoboyRecebedor || null
+        : null;
+
+    if (
+      possuiRecebimento &&
+      recebimentoTela === "motoboy" &&
+      !motoboyRecebedor
+    ) {
+      return NextResponse.json(
+        { erro: "Selecione o motoboy que recebeu o pagamento." },
+        { status: 400 }
+      );
+    }
+
+    const tele = await prisma.$transaction(async (tx) => {
+      const teleAtualizada = await tx.tele.update({
+        where: {
+          id: body.id,
+        },
+        data: {
+          recebimento: recebimentoParaBanco(recebimentoTela) as any,
+          valorRecebido,
+          dataRecebimento: possuiRecebimento ? new Date() : null,
+          motoboyRecebedor,
+        },
+        include: {
+          paradas: {
+            orderBy: {
+              ordem: "asc",
+            },
+          },
+          motoboy: true,
+          cliente: true,
+        },
+      });
+
+      await sincronizarRecebimentoMotoboy({
+        tx,
+        teleId: teleAtualizada.id,
+        solicitante: teleAtualizada.solicitante,
+        recebimento: recebimentoTela,
+        valorRecebido,
+        motoboyRecebedor,
+      });
+
+      return teleAtualizada;
+    });
+
+    return NextResponse.json(formatarTeleParaTela(tele));
+  } catch (error: any) {
+    return NextResponse.json(
+      {
+        erro:
+          error.message ||
+          "Não foi possível atualizar o recebimento da tele.",
       },
       { status: 500 }
     );
