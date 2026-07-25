@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { createHash, timingSafeEqual } from "crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
@@ -24,7 +25,62 @@ function coordenadasValidas(latitude: number, longitude: number) {
   );
 }
 
-async function obterMotoboyLogado() {
+function gerarHashToken(token: string) {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+function hashesIguais(hashA: string, hashB: string) {
+  try {
+    const bufferA = Buffer.from(hashA, "hex");
+    const bufferB = Buffer.from(hashB, "hex");
+
+    if (bufferA.length !== bufferB.length) {
+      return false;
+    }
+
+    return timingSafeEqual(bufferA, bufferB);
+  } catch {
+    return false;
+  }
+}
+
+async function obterMotoboyPorToken(request: Request) {
+  const autorizacao = request.headers.get("authorization") || "";
+  const [tipo, token] = autorizacao.trim().split(/\s+/, 2);
+
+  if (tipo?.toLowerCase() !== "bearer" || !token) {
+    return null;
+  }
+
+  const hashRecebido = gerarHashToken(token);
+
+  const motoboy = await prisma.motoboy.findFirst({
+    where: {
+      appTokenHash: hashRecebido,
+    },
+    select: {
+      id: true,
+      nome: true,
+      online: true,
+      latitude: true,
+      longitude: true,
+      precisaoLocalizacao: true,
+      onlineDesde: true,
+      localizacaoAtualizadaEm: true,
+      appTokenHash: true,
+    },
+  });
+
+  if (!motoboy || !motoboy.appTokenHash || !hashesIguais(hashRecebido, motoboy.appTokenHash)) {
+    return null;
+  }
+
+  const { appTokenHash: _appTokenHash, ...motoboySeguro } = motoboy;
+
+  return motoboySeguro;
+}
+
+async function obterMotoboyPorCookie() {
   const cookieStore = await cookies();
   const userId = cookieStore.get("express_user_id")?.value;
 
@@ -61,9 +117,19 @@ async function obterMotoboyLogado() {
   return usuario.motoboy;
 }
 
-export async function GET() {
+async function obterMotoboyAutenticado(request: Request) {
+  const porToken = await obterMotoboyPorToken(request);
+
+  if (porToken) {
+    return porToken;
+  }
+
+  return obterMotoboyPorCookie();
+}
+
+export async function GET(request: Request) {
   try {
-    const motoboy = await obterMotoboyLogado();
+    const motoboy = await obterMotoboyAutenticado(request);
 
     if (!motoboy) {
       return respostaErro("Acesso negado.", 403);
@@ -90,7 +156,7 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   try {
-    const motoboy = await obterMotoboyLogado();
+    const motoboy = await obterMotoboyAutenticado(request);
 
     if (!motoboy) {
       return respostaErro("Acesso negado.", 403);
