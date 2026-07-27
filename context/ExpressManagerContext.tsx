@@ -1,9 +1,9 @@
 "use client";
 
-import { Cliente } from "@/types/Cliente";
-import { Motoboy } from "@/types/Motoboy";
-import { Tele } from "@/types/Tele";
-import { createContext, useContext, useEffect, useState } from "react";
+import type { Cliente } from "@/types/Cliente";
+import type { Motoboy } from "@/types/Motoboy";
+import type { Tele } from "@/types/Tele";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 
 export type MovimentoFinanceiroMotoboy = {
   id: string;
@@ -23,15 +23,51 @@ type ExpressManagerContextType = {
   teles: Tele[];
   movimentosFinanceirosMotoboy: MovimentoFinanceiroMotoboy[];
 
-  setClientes: (clientes: Cliente[]) => void;
-  setMotoboys: (motoboys: Motoboy[]) => void;
-  setTeles: (teles: Tele[]) => void;
-  setMovimentosFinanceirosMotoboy: (movimentos: MovimentoFinanceiroMotoboy[]) => void;
+  setClientes: React.Dispatch<React.SetStateAction<Cliente[]>>;
+  setMotoboys: React.Dispatch<React.SetStateAction<Motoboy[]>>;
+  setTeles: React.Dispatch<React.SetStateAction<Tele[]>>;
+  setMovimentosFinanceirosMotoboy: React.Dispatch<
+    React.SetStateAction<MovimentoFinanceiroMotoboy[]>
+  >;
 
   recarregarDados: () => Promise<void>;
 };
 
 const ExpressManagerContext = createContext<ExpressManagerContextType | null>(null);
+
+async function buscarLista<T>(url: string, nome: string): Promise<T[]> {
+  try {
+    const resposta = await fetch(url, {
+      cache: "no-store",
+    });
+
+    if (!resposta.ok) {
+      let detalhe = "";
+
+      try {
+        const erro = await resposta.json();
+        detalhe = erro?.erro ? `: ${erro.erro}` : "";
+      } catch {}
+
+      console.error(`Erro ao carregar ${nome}. HTTP ${resposta.status}${detalhe}`);
+
+      return [];
+    }
+
+    const dados = await resposta.json();
+
+    if (!Array.isArray(dados)) {
+      console.error(`Resposta inválida ao carregar ${nome}: era esperada uma lista.`, dados);
+
+      return [];
+    }
+
+    return dados as T[];
+  } catch (erro) {
+    console.error(`Não foi possível carregar ${nome}:`, erro);
+    return [];
+  }
+}
 
 export function ExpressManagerProvider({ children }: { children: React.ReactNode }) {
   const [clientes, setClientes] = useState<Cliente[]>([]);
@@ -41,30 +77,26 @@ export function ExpressManagerProvider({ children }: { children: React.ReactNode
     MovimentoFinanceiroMotoboy[]
   >([]);
 
-  async function recarregarDados() {
-    const [respostaClientes, respostaMotoboys, respostaTeles, respostaMovimentos] =
-      await Promise.all([
-        fetch("/api/clientes"),
-        fetch("/api/motoboys"),
-        fetch("/api/teles"),
-        fetch("/api/movimentos-financeiros-motoboy"),
-      ]);
-
-    const clientesBanco = await respostaClientes.json();
-    const motoboysBanco = await respostaMotoboys.json();
-    const telesBanco = await respostaTeles.json();
-    const movimentosBanco = await respostaMovimentos.json();
+  const recarregarDados = useCallback(async () => {
+    const [clientesBanco, motoboysBanco, telesBanco, movimentosBanco] = await Promise.all([
+      buscarLista<Cliente>("/api/clientes", "clientes"),
+      buscarLista<Motoboy>("/api/motoboys", "motoboys"),
+      buscarLista<Tele>("/api/teles", "teles"),
+      buscarLista<MovimentoFinanceiroMotoboy>(
+        "/api/movimentos-financeiros-motoboy",
+        "movimentos financeiros dos motoboys"
+      ),
+    ]);
 
     setClientes(clientesBanco);
     setMotoboys(motoboysBanco);
     setTeles(telesBanco);
-    setMovimentosFinanceirosMotoboy(Array.isArray(movimentosBanco) ? movimentosBanco : []);
-  }
+    setMovimentosFinanceirosMotoboy(movimentosBanco);
+  }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void recarregarDados();
-  }, []);
+  }, [recarregarDados]);
 
   return (
     <ExpressManagerContext.Provider
