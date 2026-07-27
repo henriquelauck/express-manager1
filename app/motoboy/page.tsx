@@ -94,10 +94,24 @@ type EstadoMiniMapa = {
   resultado: ResultadoMiniMapa | null;
 };
 
+type EtapaMotoboyTele =
+  | "AGUARDANDO_INICIO_COLETA"
+  | "EM_ROTA_COLETA"
+  | "CHEGOU_NA_COLETA"
+  | "EM_ROTA_ENTREGA"
+  | "CHEGOU_NA_ENTREGA"
+  | "CONCLUIDA";
+
 type Tele = {
   id: string;
   solicitante?: string | null;
   status: string;
+  etapaMotoboy?: EtapaMotoboyTele | null;
+  rotaColetaIniciadaEm?: string | null;
+  chegouNaColetaEm?: string | null;
+  entregaIniciadaEm?: string | null;
+  chegouNaEntregaEm?: string | null;
+  concluidaPeloMotoboyEm?: string | null;
   statusAceite?: "NAO_ENVIADA" | "AGUARDANDO_ACEITE" | "ACEITA" | "RECUSADA";
   aguardandoAceite?: boolean;
   aceitaPeloMotoboy?: boolean;
@@ -745,20 +759,18 @@ export default function MotoboyPage() {
     );
   }
 
-  async function avancarStatus(tele: Tele) {
+  async function avancarEtapaMotoboy(tele: Tele, novaEtapa: EtapaMotoboyTele) {
     if (tele.statusAceite !== "ACEITA") {
       setErro("Aceite a tele antes de iniciar o serviço.");
       return;
     }
 
-    const proximo = proximoStatus(tele.status);
-
-    if (!proximo || teleAtualizando) return;
+    if (teleAtualizando) return;
 
     if (
-      proximo === "ENTREGUE" &&
+      novaEtapa === "CONCLUIDA" &&
       !window.confirm(
-        "Confirmar que esta entrega foi concluída? Depois disso, o status não poderá ser alterado pelo aplicativo."
+        "Confirmar que esta entrega foi concluída? Depois disso, ela será movida para as entregas concluídas."
       )
     ) {
       return;
@@ -775,12 +787,12 @@ export default function MotoboyPage() {
         },
         body: JSON.stringify({
           teleId: tele.id,
-          status: proximo,
+          etapaMotoboy: novaEtapa,
         }),
       });
 
       if (!resposta.ok) {
-        let mensagem = "Não foi possível atualizar o status da tele.";
+        let mensagem = "Não foi possível atualizar a etapa da tele.";
 
         try {
           const dadosErro = await resposta.json();
@@ -791,23 +803,39 @@ export default function MotoboyPage() {
       }
 
       const dados = await resposta.json();
-      const statusAtualizado = dados?.tele?.status || proximo;
+      const teleAtualizada = dados?.tele;
 
       setTeles((atuais) =>
         atuais.map((item) =>
           item.id === tele.id
             ? {
                 ...item,
-                status: statusAtualizado,
+                status: teleAtualizada?.status || item.status,
+                etapaMotoboy: teleAtualizada?.etapaMotoboy || novaEtapa,
+                rotaColetaIniciadaEm:
+                  teleAtualizada?.rotaColetaIniciadaEm ?? item.rotaColetaIniciadaEm,
+                chegouNaColetaEm: teleAtualizada?.chegouNaColetaEm ?? item.chegouNaColetaEm,
+                entregaIniciadaEm: teleAtualizada?.entregaIniciadaEm ?? item.entregaIniciadaEm,
+                chegouNaEntregaEm: teleAtualizada?.chegouNaEntregaEm ?? item.chegouNaEntregaEm,
+                concluidaPeloMotoboyEm:
+                  teleAtualizada?.concluidaPeloMotoboyEm ?? item.concluidaPeloMotoboyEm,
               }
             : item
         )
       );
+
+      if (novaEtapa === "EM_ROTA_COLETA") {
+        abrirRotaParaColeta(tele);
+      }
+
+      if (novaEtapa === "EM_ROTA_ENTREGA") {
+        abrirRotaParaEntrega(tele);
+      }
     } catch (erroAtualizacao) {
       setErro(
         erroAtualizacao instanceof Error
           ? erroAtualizacao.message
-          : "Não foi possível atualizar o status."
+          : "Não foi possível atualizar a etapa."
       );
     } finally {
       setTeleAtualizando(null);
@@ -1187,12 +1215,10 @@ export default function MotoboyPage() {
                   miniMapa={miniMapas[tele.id]}
                   atualizando={teleAtualizando === tele.id}
                   bloqueado={Boolean(teleAtualizando)}
-                  onAvancar={() => {}}
+                  onAvancarEtapa={() => {}}
                   onAceitar={() => void responderAceite(tele, "ACEITAR")}
                   onRecusar={() => void responderAceite(tele, "RECUSAR")}
                   onExpirarAceite={() => void expirarAceiteAutomaticamente(tele)}
-                  onIniciarRotaColeta={() => abrirRotaParaColeta(tele)}
-                  onIniciarRotaEntrega={() => abrirRotaParaEntrega(tele)}
                 />
               ))}
             </div>
@@ -1222,12 +1248,10 @@ export default function MotoboyPage() {
                   miniMapa={undefined}
                   atualizando={teleAtualizando === tele.id}
                   bloqueado={Boolean(teleAtualizando)}
-                  onAvancar={() => void avancarStatus(tele)}
+                  onAvancarEtapa={(etapa) => void avancarEtapaMotoboy(tele, etapa)}
                   onAceitar={() => {}}
                   onRecusar={() => {}}
                   onExpirarAceite={() => {}}
-                  onIniciarRotaColeta={() => abrirRotaParaColeta(tele)}
-                  onIniciarRotaEntrega={() => abrirRotaParaEntrega(tele)}
                 />
               ))}
             </div>
@@ -1259,12 +1283,10 @@ export default function MotoboyPage() {
                   concluida
                   atualizando={false}
                   bloqueado
-                  onAvancar={() => {}}
+                  onAvancarEtapa={() => {}}
                   onAceitar={() => {}}
                   onRecusar={() => {}}
                   onExpirarAceite={() => {}}
-                  onIniciarRotaColeta={() => {}}
-                  onIniciarRotaEntrega={() => {}}
                 />
               ))}
             </div>
@@ -1360,24 +1382,20 @@ function CardTele({
   concluida = false,
   atualizando,
   bloqueado,
-  onAvancar,
+  onAvancarEtapa,
   onAceitar,
   onRecusar,
   onExpirarAceite,
-  onIniciarRotaColeta,
-  onIniciarRotaEntrega,
 }: {
   tele: Tele;
   miniMapa?: EstadoMiniMapa;
   concluida?: boolean;
   atualizando: boolean;
   bloqueado: boolean;
-  onAvancar: () => void;
+  onAvancarEtapa: (etapa: EtapaMotoboyTele) => void;
   onAceitar: () => void;
   onRecusar: () => void;
   onExpirarAceite: () => void;
-  onIniciarRotaColeta: () => void;
-  onIniciarRotaEntrega: () => void;
 }) {
   const [agoraAceite, setAgoraAceite] = useState(() => Date.now());
   const expiracaoDisparadaRef = useRef(false);
@@ -1420,7 +1438,9 @@ function CardTele({
     ? [...tele.paradas].sort((a, b) => Number(a.ordem || 0) - Number(b.ordem || 0))
     : [];
 
-  const proximo = proximoStatus(tele.status);
+  const etapaAtual = tele.etapaMotoboy || "AGUARDANDO_INICIO_COLETA";
+
+  const acaoEtapa = obterAcaoEtapaMotoboy(etapaAtual);
   const observacao = tele.observacaoGeral || tele.observacao;
 
   return (
@@ -1602,56 +1622,47 @@ function CardTele({
           ) : (
             !concluida &&
             tele.statusAceite === "ACEITA" &&
-            proximo && (
-              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-                {tele.status === "AGUARDANDO_COLETA" && (
-                  <button
-                    type="button"
-                    onClick={onIniciarRotaColeta}
-                    disabled={bloqueado}
-                    className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-                  >
-                    <MapPin size={18} />
-                    Iniciar rota até a coleta
-                  </button>
-                )}
+            acaoEtapa && (
+              <div className="mt-5">
+                <div className="mb-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Etapa atual
+                  </p>
+                  <p className="mt-1 font-semibold text-slate-800">
+                    {rotuloEtapaMotoboy(etapaAtual)}
+                  </p>
+                </div>
 
-                {tele.status === "EM_ROTA" && (
-                  <button
-                    type="button"
-                    onClick={onIniciarRotaEntrega}
-                    disabled={bloqueado}
-                    className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-                  >
-                    <MapPin size={18} />
-                    Iniciar rota até a entrega
-                  </button>
-                )}
-
-                {tele.status !== "AGUARDANDO_COLETA" && (
-                  <button
-                    type="button"
-                    onClick={onAvancar}
-                    disabled={bloqueado}
-                    className={`flex h-12 w-full items-center justify-center gap-2 rounded-xl px-5 font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto ${
-                      proximo === "ENTREGUE"
-                        ? "bg-emerald-600 hover:bg-emerald-700"
+                <button
+                  type="button"
+                  onClick={() => onAvancarEtapa(acaoEtapa.proximaEtapa)}
+                  disabled={bloqueado}
+                  className={`flex h-12 w-full items-center justify-center gap-2 rounded-xl px-5 font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto ${
+                    acaoEtapa.proximaEtapa === "CONCLUIDA"
+                      ? "bg-emerald-600 hover:bg-emerald-700"
+                      : acaoEtapa.abreMapa
+                        ? "bg-blue-600 hover:bg-blue-700"
                         : "bg-slate-900 hover:bg-slate-800"
-                    }`}
-                  >
-                    {atualizando ? (
-                      <>
-                        <Loader2 size={18} className="animate-spin" />
-                        Atualizando...
-                      </>
-                    ) : (
-                      <>
-                        {iconeProximoStatus(proximo)}
-                        {textoBotaoStatus(proximo)}
-                      </>
-                    )}
-                  </button>
-                )}
+                  }`}
+                >
+                  {atualizando ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      Atualizando...
+                    </>
+                  ) : (
+                    <>
+                      {acaoEtapa.abreMapa ? (
+                        <MapPin size={18} />
+                      ) : acaoEtapa.proximaEtapa === "CONCLUIDA" ? (
+                        <CheckCircle2 size={18} />
+                      ) : (
+                        <Route size={18} />
+                      )}
+                      {acaoEtapa.texto}
+                    </>
+                  )}
+                </button>
               </div>
             )
           )}
@@ -1697,33 +1708,61 @@ function EstadoVazio({
   );
 }
 
-function proximoStatus(status: string): string | null {
-  const mapa: Record<string, string> = {
-    AGUARDANDO_CLIENTE: "AGUARDANDO_COLETA",
-    AGUARDANDO_MOTOBOY: "AGUARDANDO_COLETA",
-    AGUARDANDO_COLETA: "EM_ROTA",
-    EM_ROTA: "ENTREGUE",
+function obterAcaoEtapaMotoboy(etapa: EtapaMotoboyTele): {
+  texto: string;
+  proximaEtapa: EtapaMotoboyTele;
+  abreMapa: boolean;
+} | null {
+  const mapa: Record<
+    EtapaMotoboyTele,
+    {
+      texto: string;
+      proximaEtapa: EtapaMotoboyTele;
+      abreMapa: boolean;
+    } | null
+  > = {
+    AGUARDANDO_INICIO_COLETA: {
+      texto: "Iniciar rota até a coleta",
+      proximaEtapa: "EM_ROTA_COLETA",
+      abreMapa: true,
+    },
+    EM_ROTA_COLETA: {
+      texto: "Cheguei na coleta",
+      proximaEtapa: "CHEGOU_NA_COLETA",
+      abreMapa: false,
+    },
+    CHEGOU_NA_COLETA: {
+      texto: "Iniciar entrega",
+      proximaEtapa: "EM_ROTA_ENTREGA",
+      abreMapa: true,
+    },
+    EM_ROTA_ENTREGA: {
+      texto: "Cheguei na entrega",
+      proximaEtapa: "CHEGOU_NA_ENTREGA",
+      abreMapa: false,
+    },
+    CHEGOU_NA_ENTREGA: {
+      texto: "Entregue",
+      proximaEtapa: "CONCLUIDA",
+      abreMapa: false,
+    },
+    CONCLUIDA: null,
   };
 
-  return mapa[status] || null;
+  return mapa[etapa];
 }
 
-function textoBotaoStatus(status: string) {
-  const mapa: Record<string, string> = {
-    AGUARDANDO_COLETA: "Confirmar coleta realizada",
-    EM_ROTA: "Sair para entrega",
-    ENTREGUE: "Concluir entrega",
+function rotuloEtapaMotoboy(etapa: EtapaMotoboyTele) {
+  const mapa: Record<EtapaMotoboyTele, string> = {
+    AGUARDANDO_INICIO_COLETA: "Aguardando início da rota até a coleta",
+    EM_ROTA_COLETA: "Em deslocamento até a coleta",
+    CHEGOU_NA_COLETA: "No local da coleta",
+    EM_ROTA_ENTREGA: "Em deslocamento até a entrega",
+    CHEGOU_NA_ENTREGA: "No local da entrega",
+    CONCLUIDA: "Entrega concluída",
   };
 
-  return mapa[status] || "Atualizar status";
-}
-
-function iconeProximoStatus(status: string) {
-  if (status === "ENTREGUE") {
-    return <CheckCircle2 size={18} />;
-  }
-
-  return <Route size={18} />;
+  return mapa[etapa];
 }
 
 function calcularSegundosRestantesAceite(
