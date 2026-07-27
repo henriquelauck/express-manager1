@@ -1,9 +1,97 @@
 import { prisma } from "@/lib/prisma";
+import { createHash, timingSafeEqual } from "crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 function respostaErro(mensagem: string, status: number) {
   return NextResponse.json({ erro: mensagem }, { status });
+}
+
+function gerarHashToken(token: string) {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+function hashesIguais(hashA: string, hashB: string) {
+  try {
+    const bufferA = Buffer.from(hashA, "hex");
+    const bufferB = Buffer.from(hashB, "hex");
+
+    if (bufferA.length !== bufferB.length) {
+      return false;
+    }
+
+    return timingSafeEqual(bufferA, bufferB);
+  } catch {
+    return false;
+  }
+}
+
+async function obterMotoboyPorToken(request: Request) {
+  const autorizacao = request.headers.get("authorization") || "";
+  const [tipo, token] = autorizacao.trim().split(/\s+/, 2);
+
+  if (tipo?.toLowerCase() !== "bearer" || !token) {
+    return null;
+  }
+
+  const hashRecebido = gerarHashToken(token);
+
+  const motoboy = await prisma.motoboy.findFirst({
+    where: {
+      appTokenHash: hashRecebido,
+    },
+    select: {
+      id: true,
+      appTokenHash: true,
+    },
+  });
+
+  if (!motoboy || !motoboy.appTokenHash || !hashesIguais(hashRecebido, motoboy.appTokenHash)) {
+    return null;
+  }
+
+  return {
+    id: motoboy.id,
+  };
+}
+
+async function obterMotoboyPorCookie() {
+  const cookieStore = await cookies();
+  const userId = cookieStore.get("express_user_id")?.value;
+
+  if (!userId) {
+    return null;
+  }
+
+  const usuario = await prisma.user.findUnique({
+    where: {
+      id: userId,
+    },
+    select: {
+      role: true,
+      motoboy: {
+        select: {
+          id: true,
+        },
+      },
+    },
+  });
+
+  if (!usuario || usuario.role !== "MOTOBOY" || !usuario.motoboy) {
+    return null;
+  }
+
+  return usuario.motoboy;
+}
+
+async function obterMotoboyAutenticado(request: Request) {
+  const porToken = await obterMotoboyPorToken(request);
+
+  if (porToken) {
+    return porToken;
+  }
+
+  return obterMotoboyPorCookie();
 }
 
 function prioridadeStatusAceite(statusAceite: string) {
@@ -17,37 +105,17 @@ function prioridadeStatusAceite(statusAceite: string) {
   return prioridades[statusAceite] ?? 4;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const userId = cookieStore.get("express_user_id")?.value;
+    const motoboy = await obterMotoboyAutenticado(request);
 
-    if (!userId) {
-      return respostaErro("Não autenticado.", 401);
-    }
-
-    const usuario = await prisma.user.findUnique({
-      where: {
-        id: userId,
-      },
-      select: {
-        id: true,
-        role: true,
-        motoboy: {
-          select: {
-            id: true,
-          },
-        },
-      },
-    });
-
-    if (!usuario || usuario.role !== "MOTOBOY" || !usuario.motoboy) {
+    if (!motoboy) {
       return respostaErro("Acesso negado.", 403);
     }
 
     const teles = await prisma.tele.findMany({
       where: {
-        motoboyId: usuario.motoboy.id,
+        motoboyId: motoboy.id,
         statusAceite: {
           not: "RECUSADA",
         },

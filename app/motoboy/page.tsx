@@ -1408,28 +1408,30 @@ function CardTele({
                   </button>
                 )}
 
-                <button
-                  type="button"
-                  onClick={onAvancar}
-                  disabled={bloqueado}
-                  className={`flex h-12 w-full items-center justify-center gap-2 rounded-xl px-5 font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto ${
-                    proximo === "ENTREGUE"
-                      ? "bg-emerald-600 hover:bg-emerald-700"
-                      : "bg-slate-900 hover:bg-slate-800"
-                  }`}
-                >
-                  {atualizando ? (
-                    <>
-                      <Loader2 size={18} className="animate-spin" />
-                      Atualizando...
-                    </>
-                  ) : (
-                    <>
-                      {iconeProximoStatus(proximo)}
-                      {textoBotaoStatus(proximo)}
-                    </>
-                  )}
-                </button>
+                {tele.status !== "AGUARDANDO_COLETA" && (
+                  <button
+                    type="button"
+                    onClick={onAvancar}
+                    disabled={bloqueado}
+                    className={`flex h-12 w-full items-center justify-center gap-2 rounded-xl px-5 font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto ${
+                      proximo === "ENTREGUE"
+                        ? "bg-emerald-600 hover:bg-emerald-700"
+                        : "bg-slate-900 hover:bg-slate-800"
+                    }`}
+                  >
+                    {atualizando ? (
+                      <>
+                        <Loader2 size={18} className="animate-spin" />
+                        Atualizando...
+                      </>
+                    ) : (
+                      <>
+                        {iconeProximoStatus(proximo)}
+                        {textoBotaoStatus(proximo)}
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             )
           )}
@@ -1508,15 +1510,15 @@ function calcularSegundosRestantesAceite(
   atribuidaAoMotoboyEm: string | null | undefined,
   agora: number
 ) {
-  if (!atribuidaAoMotoboyEm) return 60;
+  if (!atribuidaAoMotoboyEm) return 300;
 
   const inicio = new Date(atribuidaAoMotoboyEm).getTime();
 
-  if (!Number.isFinite(inicio)) return 60;
+  if (!Number.isFinite(inicio)) return 300;
 
   const decorrido = Math.floor((agora - inicio) / 1000);
 
-  return Math.max(60 - decorrido, 0);
+  return Math.max(300 - decorrido, 0);
 }
 
 function formatarContagemAceite(segundos: number) {
