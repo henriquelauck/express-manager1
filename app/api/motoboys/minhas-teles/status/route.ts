@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/prisma";
-import type { StatusTele } from "@prisma/client";
+import type { EtapaMotoboyTele, StatusTele } from "@prisma/client";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 type BodyStatus = {
   teleId?: string;
   status?: string;
+  etapaMotoboy?: string;
 };
 
 const STATUS_PERMITIDOS: StatusTele[] = ["AGUARDANDO_COLETA", "EM_ROTA", "ENTREGUE"];
@@ -18,12 +19,91 @@ const PROXIMO_STATUS: Partial<Record<StatusTele, StatusTele[]>> = {
   ENTREGUE: [],
 };
 
+const ETAPAS_PERMITIDAS: EtapaMotoboyTele[] = [
+  "AGUARDANDO_INICIO_COLETA",
+  "EM_ROTA_COLETA",
+  "CHEGOU_NA_COLETA",
+  "EM_ROTA_ENTREGA",
+  "CHEGOU_NA_ENTREGA",
+  "CONCLUIDA",
+];
+
+const PROXIMA_ETAPA: Partial<Record<EtapaMotoboyTele, EtapaMotoboyTele[]>> = {
+  AGUARDANDO_INICIO_COLETA: ["EM_ROTA_COLETA"],
+  EM_ROTA_COLETA: ["CHEGOU_NA_COLETA"],
+  CHEGOU_NA_COLETA: ["EM_ROTA_ENTREGA"],
+  EM_ROTA_ENTREGA: ["CHEGOU_NA_ENTREGA"],
+  CHEGOU_NA_ENTREGA: ["CONCLUIDA"],
+  CONCLUIDA: [],
+};
+
 function respostaErro(mensagem: string, status: number) {
-  return NextResponse.json({ erro: mensagem }, { status });
+  return NextResponse.json(
+    {
+      erro: mensagem,
+    },
+    {
+      status,
+    }
+  );
 }
 
 function statusValido(status: string): status is StatusTele {
   return STATUS_PERMITIDOS.includes(status as StatusTele);
+}
+
+function etapaValida(etapa: string): etapa is EtapaMotoboyTele {
+  return ETAPAS_PERMITIDAS.includes(etapa as EtapaMotoboyTele);
+}
+
+function dadosDaEtapa(etapa: EtapaMotoboyTele): {
+  status?: StatusTele;
+  rotaColetaIniciadaEm?: Date;
+  chegouNaColetaEm?: Date;
+  entregaIniciadaEm?: Date;
+  chegouNaEntregaEm?: Date;
+  concluidaPeloMotoboyEm?: Date;
+} {
+  const agora = new Date();
+
+  if (etapa === "EM_ROTA_COLETA") {
+    return {
+      status: "AGUARDANDO_COLETA",
+      rotaColetaIniciadaEm: agora,
+    };
+  }
+
+  if (etapa === "CHEGOU_NA_COLETA") {
+    return {
+      status: "AGUARDANDO_COLETA",
+      chegouNaColetaEm: agora,
+    };
+  }
+
+  if (etapa === "EM_ROTA_ENTREGA") {
+    return {
+      status: "EM_ROTA",
+      entregaIniciadaEm: agora,
+    };
+  }
+
+  if (etapa === "CHEGOU_NA_ENTREGA") {
+    return {
+      status: "EM_ROTA",
+      chegouNaEntregaEm: agora,
+    };
+  }
+
+  if (etapa === "CONCLUIDA") {
+    return {
+      status: "ENTREGUE",
+      concluidaPeloMotoboyEm: agora,
+    };
+  }
+
+  return {
+    status: "AGUARDANDO_COLETA",
+  };
 }
 
 export async function PUT(request: Request) {
@@ -57,13 +137,14 @@ export async function PUT(request: Request) {
     const body = (await request.json()) as BodyStatus;
     const teleId = String(body.teleId || "").trim();
     const novoStatus = String(body.status || "").trim();
+    const novaEtapa = String(body.etapaMotoboy || "").trim();
 
-    if (!teleId || !novoStatus) {
-      return respostaErro("Informe a tele e o novo status.", 400);
+    if (!teleId) {
+      return respostaErro("Informe a tele.", 400);
     }
 
-    if (!statusValido(novoStatus)) {
-      return respostaErro("Status não permitido para o motoboy.", 400);
+    if (!novoStatus && !novaEtapa) {
+      return respostaErro("Informe o novo status ou a nova etapa.", 400);
     }
 
     const tele = await prisma.tele.findFirst({
@@ -74,6 +155,8 @@ export async function PUT(request: Request) {
       select: {
         id: true,
         status: true,
+        statusAceite: true,
+        etapaMotoboy: true,
         motoboyId: true,
       },
     });
@@ -82,12 +165,75 @@ export async function PUT(request: Request) {
       return respostaErro("Tele não encontrada ou não vinculada ao seu usuário.", 404);
     }
 
+    if (tele.statusAceite !== "ACEITA") {
+      return respostaErro("Aceite a tele antes de atualizar o andamento.", 409);
+    }
+
+    if (novaEtapa) {
+      if (!etapaValida(novaEtapa)) {
+        return respostaErro("Etapa não permitida para o motoboy.", 400);
+      }
+
+      const etapaAtual = tele.etapaMotoboy || "AGUARDANDO_INICIO_COLETA";
+
+      if (etapaAtual === novaEtapa) {
+        return NextResponse.json({
+          ok: true,
+          tele: {
+            id: tele.id,
+            status: tele.status,
+            etapaMotoboy: etapaAtual,
+          },
+        });
+      }
+
+      const etapasPermitidas = PROXIMA_ETAPA[etapaAtual] || [];
+
+      if (!etapasPermitidas.includes(novaEtapa)) {
+        return respostaErro("Essa alteração de etapa não é permitida.", 409);
+      }
+
+      const dadosEtapa = dadosDaEtapa(novaEtapa);
+
+      const teleAtualizada = await prisma.tele.update({
+        where: {
+          id: tele.id,
+        },
+        data: {
+          etapaMotoboy: novaEtapa,
+          ...dadosEtapa,
+        },
+        select: {
+          id: true,
+          status: true,
+          etapaMotoboy: true,
+          rotaColetaIniciadaEm: true,
+          chegouNaColetaEm: true,
+          entregaIniciadaEm: true,
+          chegouNaEntregaEm: true,
+          concluidaPeloMotoboyEm: true,
+          dataTele: true,
+          updatedAt: true,
+        },
+      });
+
+      return NextResponse.json({
+        ok: true,
+        tele: teleAtualizada,
+      });
+    }
+
+    if (!statusValido(novoStatus)) {
+      return respostaErro("Status não permitido para o motoboy.", 400);
+    }
+
     if (tele.status === novoStatus) {
       return NextResponse.json({
         ok: true,
         tele: {
           id: tele.id,
           status: tele.status,
+          etapaMotoboy: tele.etapaMotoboy,
         },
       });
     }
@@ -108,6 +254,7 @@ export async function PUT(request: Request) {
       select: {
         id: true,
         status: true,
+        etapaMotoboy: true,
         dataTele: true,
         updatedAt: true,
       },
@@ -118,8 +265,8 @@ export async function PUT(request: Request) {
       tele: teleAtualizada,
     });
   } catch (erro) {
-    console.error("Erro ao atualizar status pelo motoboy:", erro);
+    console.error("Erro ao atualizar andamento pelo motoboy:", erro);
 
-    return respostaErro("Não foi possível atualizar o status da tele.", 500);
+    return respostaErro("Não foi possível atualizar o andamento da tele.", 500);
   }
 }
