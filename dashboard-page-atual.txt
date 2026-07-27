@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import PageContainer from "@/components/ui/PageContainer";
 import PageHeader from "@/components/ui/PageHeader";
@@ -6,11 +6,9 @@ import { useExpressManager } from "@/context/ExpressManagerContext";
 import type { Tele } from "@/types/Tele";
 import {
   Bell,
-  Bike,
   Calendar,
   ChevronRight,
   CircleAlert,
-  ExternalLink,
   FileText,
   Fuel,
   Heart,
@@ -24,73 +22,10 @@ import {
   User,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
-
-type MotoboyOnline = {
-  id: string;
-  nome: string;
-  telefone?: string | null;
-  moto?: string | null;
-  placa?: string | null;
-  latitude?: number | null;
-  longitude?: number | null;
-  precisao?: number | null;
-  onlineDesde?: string | null;
-  localizacaoAtualizadaEm?: string | null;
-  segundosSemAtualizar?: number | null;
-  localizacaoRecente: boolean;
-  telesEmAndamento: number;
-};
+import type { ReactNode } from "react";
 
 export default function Dashboard() {
   const { teles, motoboys } = useExpressManager();
-  const [motoboysOnline, setMotoboysOnline] = useState<MotoboyOnline[]>([]);
-  const [carregandoMotoboysOnline, setCarregandoMotoboysOnline] = useState(true);
-  const [erroMotoboysOnline, setErroMotoboysOnline] = useState("");
-
-  useEffect(() => {
-    let ativo = true;
-
-    async function carregarMotoboysOnline() {
-      try {
-        const resposta = await fetch("/api/motoboys/online", {
-          cache: "no-store",
-        });
-
-        if (!resposta.ok) {
-          throw new Error("Não foi possível carregar os motoboys online.");
-        }
-
-        const dados = await resposta.json();
-
-        if (ativo) {
-          setMotoboysOnline(Array.isArray(dados) ? dados : []);
-          setErroMotoboysOnline("");
-        }
-      } catch (erro) {
-        if (ativo) {
-          setErroMotoboysOnline(
-            erro instanceof Error ? erro.message : "Não foi possível carregar os motoboys online."
-          );
-        }
-      } finally {
-        if (ativo) {
-          setCarregandoMotoboysOnline(false);
-        }
-      }
-    }
-
-    void carregarMotoboysOnline();
-
-    const intervalo = window.setInterval(() => {
-      void carregarMotoboysOnline();
-    }, 15000);
-
-    return () => {
-      ativo = false;
-      window.clearInterval(intervalo);
-    };
-  }, []);
 
   function converterValor(valor: string | number) {
     if (typeof valor === "number") {
@@ -213,8 +148,8 @@ export default function Dashboard() {
     <PageContainer>
       <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-5 mb-8">
         <PageHeader
-          titulo="Olá, Henrique! 👋"
-          descricao="Aqui está o resumo da sua operação hoje."
+          titulo="OlÃ¡, Henrique! ðŸ‘‹"
+          descricao="Aqui estÃ¡ o resumo da sua operaÃ§Ã£o hoje."
         />
 
         <div className="hidden md:flex items-center gap-5">
@@ -244,53 +179,25 @@ export default function Dashboard() {
           title="Teles hoje"
           value={`${telesHoje.length}`}
           icon={<Heart size={24} />}
-          description={`${telesEmAndamento.length} em andamento na operação`}
+          description={`${telesEmAndamento.length} em andamento na operaÃ§Ã£o`}
           tone="blue"
         />
 
         <Card
-          title="Motoboys online"
-          value={`${motoboysOnline.length}`}
+          title="Motoboys cadastrados"
+          value={`${motoboys.length}`}
           icon={<User size={24} />}
-          description={`${motoboys.length} cadastrados no sistema`}
+          description="Equipe disponÃ­vel no sistema"
           tone="orange"
         />
 
         <Card
-          title="Entregas no mês"
+          title="Entregas no mÃªs"
           value={`${entregasMes.length}`}
           icon={<Package size={24} />}
-          description="Teles concluídas neste mês"
+          description="Teles concluÃ­das neste mÃªs"
           tone="violet"
         />
-      </div>
-
-      <div className="mb-6">
-        <Panel title="Motoboys online" button="Atualização automática">
-          {carregandoMotoboysOnline ? (
-            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center text-sm text-slate-500">
-              Carregando posições dos motoboys...
-            </div>
-          ) : erroMotoboysOnline ? (
-            <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">
-              {erroMotoboysOnline}
-            </div>
-          ) : motoboysOnline.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center">
-              <Bike className="mx-auto text-slate-300" size={30} />
-              <p className="mt-3 font-medium text-slate-700">Nenhum motoboy online</p>
-              <p className="mt-1 text-sm text-slate-500">
-                Quando um motoboy ficar online pelo aplicativo, ele aparecerá aqui.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {motoboysOnline.map((motoboy) => (
-                <MotoboyOnlineCard key={motoboy.id} motoboy={motoboy} />
-              ))}
-            </div>
-          )}
-        </Panel>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
@@ -310,7 +217,7 @@ export default function Dashboard() {
               <Truck className="mx-auto text-slate-300" size={30} />
               <p className="mt-3 font-medium text-slate-700">Nenhuma tele em andamento</p>
               <p className="mt-1 text-sm text-slate-500">
-                As novas operações aparecerão aqui automaticamente.
+                As novas operaÃ§Ãµes aparecerÃ£o aqui automaticamente.
               </p>
             </div>
           )}
@@ -319,12 +226,12 @@ export default function Dashboard() {
             href="/teles"
             className="mt-5 flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-600 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
           >
-            Ver todas as operações
+            Ver todas as operaÃ§Ãµes
             <ChevronRight size={16} />
           </Link>
         </Panel>
 
-        <Panel title="Faturamento dos últimos 7 dias" button="7 dias">
+        <Panel title="Faturamento dos Ãºltimos 7 dias" button="7 dias">
           <div className="flex flex-col gap-5">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div>
@@ -333,13 +240,13 @@ export default function Dashboard() {
                   R$ {formatarValor(totalSeteDias)}
                 </h2>
                 <p className="mt-2 text-sm text-slate-500">
-                  Soma das teles registradas nos últimos sete dias.
+                  Soma das teles registradas nos Ãºltimos sete dias.
                 </p>
               </div>
 
               <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-left sm:text-right">
                 <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
-                  Média diária
+                  MÃ©dia diÃ¡ria
                 </p>
                 <p className="mt-1 text-lg font-bold text-emerald-800">
                   R$ {formatarValor(totalSeteDias / 7)}
@@ -397,7 +304,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <Panel title="Próximas coletas" button="Ver todas">
+        <Panel title="PrÃ³ximas coletas" button="Ver todas">
           <div className="space-y-3">
             {proximasColetas.map(({ tele, coleta }) => (
               <Collect
@@ -415,7 +322,7 @@ export default function Dashboard() {
             <EmptyPanel
               icon={<MapPin size={22} />}
               title="Nenhuma coleta pendente"
-              text="As próximas coletas aparecerão aqui."
+              text="As prÃ³ximas coletas aparecerÃ£o aqui."
             />
           )}
 
@@ -446,7 +353,7 @@ export default function Dashboard() {
             <EmptyPanel
               icon={<Trophy size={22} />}
               title="Ranking ainda vazio"
-              text="Os clientes com maior faturamento aparecerão aqui."
+              text="Os clientes com maior faturamento aparecerÃ£o aqui."
             />
           )}
         </Panel>
@@ -455,7 +362,7 @@ export default function Dashboard() {
           <div className="space-y-3">
             <Notice
               icon={<Calendar size={21} />}
-              title="Operação do dia"
+              title="OperaÃ§Ã£o do dia"
               text={`${telesHoje.length} ${
                 telesHoje.length === 1 ? "tele registrada" : "teles registradas"
               } hoje.`}
@@ -482,8 +389,8 @@ export default function Dashboard() {
                 telesAguardandoCliente > 0
                   ? `${telesAguardandoCliente} ${
                       telesAguardandoCliente === 1 ? "tele aguarda" : "teles aguardam"
-                    } confirmação.`
-                  : "Nenhuma confirmação de cliente pendente."
+                    } confirmaÃ§Ã£o.`
+                  : "Nenhuma confirmaÃ§Ã£o de cliente pendente."
               }
               tone={telesAguardandoCliente > 0 ? "blue" : "emerald"}
             />
@@ -506,114 +413,6 @@ export default function Dashboard() {
       </Link>
     </PageContainer>
   );
-}
-
-function MotoboyOnlineCard({ motoboy }: { motoboy: MotoboyOnline }) {
-  const temCoordenadas =
-    typeof motoboy.latitude === "number" && typeof motoboy.longitude === "number";
-
-  const linkMaps = temCoordenadas
-    ? `https://www.google.com/maps/search/?api=1&query=${motoboy.latitude},${motoboy.longitude}`
-    : "";
-
-  return (
-    <article className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-      <div className="flex items-start gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
-          <Bike size={21} />
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <strong className="truncate text-sm text-slate-900">{motoboy.nome}</strong>
-
-            <span
-              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                motoboy.localizacaoRecente
-                  ? "bg-emerald-100 text-emerald-700"
-                  : "bg-amber-100 text-amber-700"
-              }`}
-            >
-              {motoboy.localizacaoRecente ? "Localização recente" : "Localização atrasada"}
-            </span>
-          </div>
-
-          <p className="mt-1 text-xs text-slate-500">
-            {motoboy.moto || "Moto não informada"}
-            {motoboy.placa ? ` • ${motoboy.placa}` : ""}
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <div className="rounded-xl bg-slate-50 px-3 py-3">
-          <p className="text-[11px] font-medium text-slate-400">Última atualização</p>
-          <p className="mt-1 text-sm font-semibold text-slate-700">
-            {formatarAtualizacaoMotoboy(motoboy)}
-          </p>
-        </div>
-
-        <div className="rounded-xl bg-slate-50 px-3 py-3">
-          <p className="text-[11px] font-medium text-slate-400">Teles em andamento</p>
-          <p className="mt-1 text-sm font-semibold text-slate-700">{motoboy.telesEmAndamento}</p>
-        </div>
-      </div>
-
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
-        <span>
-          {typeof motoboy.precisao === "number"
-            ? `Precisão aproximada: ${Math.round(motoboy.precisao)} m`
-            : "Precisão não informada"}
-        </span>
-
-        {temCoordenadas ? (
-          <a
-            href={linkMaps}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 font-semibold text-emerald-700 hover:text-emerald-800"
-          >
-            Abrir no mapa
-            <ExternalLink size={14} />
-          </a>
-        ) : (
-          <span className="font-medium text-slate-400">Sem coordenadas</span>
-        )}
-      </div>
-    </article>
-  );
-}
-
-function formatarAtualizacaoMotoboy(motoboy: MotoboyOnline) {
-  const segundos = motoboy.segundosSemAtualizar;
-
-  if (segundos === null || segundos === undefined) {
-    return "Sem atualização";
-  }
-
-  if (segundos < 10) {
-    return "Agora";
-  }
-
-  if (segundos < 60) {
-    return `Há ${segundos}s`;
-  }
-
-  const minutos = Math.floor(segundos / 60);
-
-  if (minutos < 60) {
-    return `Há ${minutos} min`;
-  }
-
-  if (!motoboy.localizacaoAtualizadaEm) {
-    return "Sem atualização";
-  }
-
-  return new Date(motoboy.localizacaoAtualizadaEm).toLocaleTimeString("pt-BR", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "America/Sao_Paulo",
-  });
 }
 
 function CircleButton({ icon, alert }: any) {
@@ -724,7 +523,7 @@ const statusClasses: Record<StatusTone, string> = {
 
 function statusDaTele(status: string): StatusTone {
   if (status === "Aguardando cliente") return "orange";
-  if (status === "Aguardando motoboy disponível") return "blue";
+  if (status === "Aguardando motoboy disponÃ­vel") return "blue";
   if (status === "Em rota" || status === "Aguardando coleta") return "emerald";
   return "slate";
 }
@@ -738,7 +537,7 @@ function TeleEmAndamento({ tele, valor }: { tele: Tele; valor: string }) {
   const primeiraParada = tele.paradas[0];
   const ultimaParada = tele.paradas[tele.paradas.length - 1];
   const origem = primeiraParada?.cliente || tele.solicitante;
-  const destino = ultimaParada?.cliente || tele.nomeCliente || "Destino não informado";
+  const destino = ultimaParada?.cliente || tele.nomeCliente || "Destino nÃ£o informado";
   const motoboy = tele.motoboy || "Sem motoboy";
 
   return (
@@ -765,7 +564,7 @@ function TeleEmAndamento({ tele, valor }: { tele: Tele; valor: string }) {
             <div className="mt-2 flex min-w-0 items-center gap-2 text-sm text-slate-600">
               <MapPin className="shrink-0 text-slate-400" size={15} />
               <span className="truncate">{origem}</span>
-              <span className="shrink-0 text-slate-300">→</span>
+              <span className="shrink-0 text-slate-300">â†’</span>
               <span className="truncate">{destino}</span>
             </div>
           </div>
@@ -868,7 +667,7 @@ function Client({ position, name, quantity, value }: ClientProps) {
 
       <div className="text-right">
         <strong className="text-sm text-slate-900">{value}</strong>
-        {destaque && <p className="mt-0.5 text-[11px] font-semibold text-amber-600">1º lugar</p>}
+        {destaque && <p className="mt-0.5 text-[11px] font-semibold text-amber-600">1Âº lugar</p>}
       </div>
     </div>
   );

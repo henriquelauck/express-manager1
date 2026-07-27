@@ -121,7 +121,6 @@ export default function CardParada({
             <option value="Entrega e coleta">Entrega e coleta</option>
           </select>
         </div>
-
         <CampoTexto
           label="Nome do local ou cliente"
           icon={<User size={18} />}
