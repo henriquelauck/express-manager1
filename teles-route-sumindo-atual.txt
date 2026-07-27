@@ -1,11 +1,11 @@
-import { prisma } from "@/lib/prisma";
+﻿import { prisma } from "@/lib/prisma";
 import type { StatusTele as StatusTeleBanco, TipoMovimentoFinanceiro } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 function statusParaBanco(status: string): StatusTeleBanco {
   const mapa: Record<string, StatusTeleBanco> = {
     "Aguardando cliente": "AGUARDANDO_CLIENTE",
-    "Aguardando motoboy disponível": "AGUARDANDO_MOTOBOY",
+    "Aguardando motoboy disponÃ­vel": "AGUARDANDO_MOTOBOY",
     "Aguardando coleta": "AGUARDANDO_COLETA",
     "Em rota": "EM_ROTA",
     Entregue: "ENTREGUE",
@@ -17,7 +17,7 @@ function statusParaBanco(status: string): StatusTeleBanco {
 function statusParaTela(status: string) {
   const mapa: Record<string, string> = {
     AGUARDANDO_CLIENTE: "Aguardando cliente",
-    AGUARDANDO_MOTOBOY: "Aguardando motoboy disponível",
+    AGUARDANDO_MOTOBOY: "Aguardando motoboy disponÃ­vel",
     AGUARDANDO_COLETA: "Aguardando coleta",
     EM_ROTA: "Em rota",
     ENTREGUE: "Entregue",
@@ -194,7 +194,7 @@ async function sincronizarRecebimentoMotoboy({
   });
 
   if (!motoboy) {
-    throw new Error("O motoboy recebedor não foi encontrado para gerar o extrato.");
+    throw new Error("O motoboy recebedor nÃƒÆ’Ã‚Â£o foi encontrado para gerar o extrato.");
   }
 
   const dadosMovimento = {
@@ -401,7 +401,7 @@ export async function PUT(request: Request) {
     });
 
     if (!teleAtualAntesDaEdicao) {
-      return NextResponse.json({ erro: "Tele não encontrada." }, { status: 404 });
+      return NextResponse.json({ erro: "Tele nÃ£o encontrada." }, { status: 404 });
     }
 
     const haviaMotoboy = Boolean(teleAtualAntesDaEdicao.motoboyId);

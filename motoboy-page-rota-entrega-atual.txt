@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import {
@@ -308,7 +308,7 @@ export default function MotoboyPage() {
 
     try {
       if (typeof navigator === "undefined" || !navigator.geolocation) {
-        throw new Error("Este aparelho nÃ£o oferece suporte Ã  localizaÃ§Ã£o.");
+        throw new Error("Este aparelho nÃ£o oferece suporte Ã  localizaÃ§Ã£o.");
       }
 
       const posicao = await obterPosicaoAtual();
@@ -503,41 +503,6 @@ export default function MotoboyPage() {
 
     if (!endereco) {
       setErro("A parada de coleta nÃ£o possui endereÃ§o informado.");
-      return;
-    }
-
-    const destino = encodeURIComponent(endereco);
-
-    if (executandoNoAppAndroid()) {
-      window.location.href = `geo:0,0?q=${destino}`;
-      return;
-    }
-
-    window.open(
-      `https://www.google.com/maps/dir/?api=1&destination=${destino}&travelmode=driving`,
-      "_blank",
-      "noopener,noreferrer"
-    );
-  }
-
-  function abrirRotaParaEntrega(tele: Tele) {
-    const paradasOrdenadas = Array.isArray(tele.paradas)
-      ? [...tele.paradas].sort((a, b) => Number(a.ordem || 0) - Number(b.ordem || 0))
-      : [];
-
-    const paradaEntrega =
-      [...paradasOrdenadas]
-        .reverse()
-        .find((parada) =>
-          ["ENTREGA", "ENTREGA_E_COLETA", "TROCAR"].includes(
-            String(parada.tipo || "").toUpperCase()
-          )
-        ) || paradasOrdenadas[paradasOrdenadas.length - 1];
-
-    const endereco = String(paradaEntrega?.endereco || "").trim();
-
-    if (!endereco) {
-      setErro("A parada de entrega não possui endereço informado.");
       return;
     }
 
@@ -993,8 +958,7 @@ export default function MotoboyPage() {
                   onAvancar={() => {}}
                   onAceitar={() => void responderAceite(tele, "ACEITAR")}
                   onRecusar={() => void responderAceite(tele, "RECUSAR")}
-                  onIniciarRotaColeta={() => abrirRotaParaColeta(tele)}
-                  onIniciarRotaEntrega={() => abrirRotaParaEntrega(tele)}
+                  onIniciarRota={() => abrirRotaParaColeta(tele)}
                 />
               ))}
             </div>
@@ -1026,8 +990,7 @@ export default function MotoboyPage() {
                   onAvancar={() => void avancarStatus(tele)}
                   onAceitar={() => {}}
                   onRecusar={() => {}}
-                  onIniciarRotaColeta={() => abrirRotaParaColeta(tele)}
-                  onIniciarRotaEntrega={() => abrirRotaParaEntrega(tele)}
+                  onIniciarRota={() => abrirRotaParaColeta(tele)}
                 />
               ))}
             </div>
@@ -1061,8 +1024,7 @@ export default function MotoboyPage() {
                   onAvancar={() => {}}
                   onAceitar={() => {}}
                   onRecusar={() => {}}
-                  onIniciarRotaColeta={() => {}}
-                  onIniciarRotaEntrega={() => {}}
+                  onIniciarRota={() => {}}
                 />
               ))}
             </div>
@@ -1160,8 +1122,7 @@ function CardTele({
   onAvancar,
   onAceitar,
   onRecusar,
-  onIniciarRotaColeta,
-  onIniciarRotaEntrega,
+  onIniciarRota,
 }: {
   tele: Tele;
   concluida?: boolean;
@@ -1170,8 +1131,7 @@ function CardTele({
   onAvancar: () => void;
   onAceitar: () => void;
   onRecusar: () => void;
-  onIniciarRotaColeta: () => void;
-  onIniciarRotaEntrega: () => void;
+  onIniciarRota: () => void;
 }) {
   const paradas = Array.isArray(tele.paradas)
     ? [...tele.paradas].sort((a, b) => Number(a.ordem || 0) - Number(b.ordem || 0))
@@ -1306,24 +1266,12 @@ function CardTele({
                 {tele.status === "AGUARDANDO_COLETA" && (
                   <button
                     type="button"
-                    onClick={onIniciarRotaColeta}
+                    onClick={onIniciarRota}
                     disabled={bloqueado}
                     className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                   >
                     <MapPin size={18} />
                     Iniciar rota atÃ© a coleta
-                  </button>
-                )}
-
-                {tele.status === "EM_ROTA" && (
-                  <button
-                    type="button"
-                    onClick={onIniciarRotaEntrega}
-                    disabled={bloqueado}
-                    className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-                  >
-                    <MapPin size={18} />
-                    Iniciar rota atÃ© a entrega
                   </button>
                 )}
 
