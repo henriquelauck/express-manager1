@@ -148,11 +148,11 @@ export default function MotoboyPage() {
       }
 
       if (!usuarioRes.ok) {
-        throw new Error("NÃƒÂ£o foi possÃƒÂ­vel carregar seu usuÃƒÂ¡rio.");
+        throw new Error("Não foi possível carregar seu usuário.");
       }
 
       if (!telesRes.ok) {
-        let mensagem = "NÃƒÂ£o foi possÃƒÂ­vel carregar suas entregas.";
+        let mensagem = "Não foi possível carregar suas entregas.";
 
         try {
           const dadosErro = await telesRes.json();
@@ -171,7 +171,7 @@ export default function MotoboyPage() {
       setErro(
         erroCarregamento instanceof Error
           ? erroCarregamento.message
-          : "NÃƒÂ£o foi possÃƒÂ­vel carregar o painel."
+          : "Não foi possível carregar o painel."
       );
     } finally {
       setCarregando(false);
@@ -209,7 +209,7 @@ export default function MotoboyPage() {
         iniciarWatchPosition();
       }
     } catch (erroPresenca) {
-      console.error("Erro ao consultar presenÃƒÂ§a do motoboy:", erroPresenca);
+      console.error("Erro ao consultar presença do motoboy:", erroPresenca);
     }
   }
 
@@ -235,7 +235,7 @@ export default function MotoboyPage() {
     });
 
     if (!resposta.ok) {
-      let mensagem = "NÃƒÂ£o foi possÃƒÂ­vel enviar sua localizaÃƒÂ§ÃƒÂ£o.";
+      let mensagem = "Não foi possível enviar sua localização.";
 
       try {
         const dadosErro = await resposta.json();
@@ -285,7 +285,7 @@ export default function MotoboyPage() {
           setErroLocalizacao(
             erroEnvio instanceof Error
               ? erroEnvio.message
-              : "NÃƒÂ£o foi possÃƒÂ­vel atualizar sua localizaÃƒÂ§ÃƒÂ£o."
+              : "Não foi possível atualizar sua localização."
           );
         });
       },
@@ -308,7 +308,7 @@ export default function MotoboyPage() {
 
     try {
       if (typeof navigator === "undefined" || !navigator.geolocation) {
-        throw new Error("Este aparelho nÃƒÂ£o oferece suporte Ãƒ  localizaÃƒÂ§ÃƒÂ£o.");
+        throw new Error("Este aparelho não oferece suporte à localização.");
       }
 
       const posicao = await obterPosicaoAtual();
@@ -328,7 +328,7 @@ export default function MotoboyPage() {
       } catch {}
 
       setErroLocalizacao(
-        erroOnline instanceof Error ? erroOnline.message : "NÃƒÂ£o foi possÃƒÂ­vel ficar online."
+        erroOnline instanceof Error ? erroOnline.message : "Não foi possível ficar online."
       );
     } finally {
       setAlterandoPresenca(false);
@@ -357,7 +357,7 @@ export default function MotoboyPage() {
       });
 
       if (!resposta.ok) {
-        let mensagem = "NÃƒÂ£o foi possÃƒÂ­vel ficar offline.";
+        let mensagem = "Não foi possível ficar offline.";
 
         try {
           const dadosErro = await resposta.json();
@@ -372,7 +372,7 @@ export default function MotoboyPage() {
       setPrecisaoLocalizacao(null);
     } catch (erroOffline) {
       setErroLocalizacao(
-        erroOffline instanceof Error ? erroOffline.message : "NÃƒÂ£o foi possÃƒÂ­vel ficar offline."
+        erroOffline instanceof Error ? erroOffline.message : "Não foi possível ficar offline."
       );
     } finally {
       setAlterandoPresenca(false);
@@ -387,7 +387,7 @@ export default function MotoboyPage() {
         try {
           await LocalizacaoNativa.parar();
         } catch (erroServico) {
-          console.error("NÃƒÂ£o foi possÃƒÂ­vel parar o serviÃƒÂ§o nativo:", erroServico);
+          console.error("Não foi possível parar o serviço nativo:", erroServico);
         }
       }
 
@@ -403,7 +403,7 @@ export default function MotoboyPage() {
             }),
           });
         } catch (erroOffline) {
-          console.error("NÃƒÂ£o foi possÃƒÂ­vel marcar o motoboy offline:", erroOffline);
+          console.error("Não foi possível marcar o motoboy offline:", erroOffline);
         }
       }
 
@@ -422,11 +422,36 @@ export default function MotoboyPage() {
         try {
           await CredenciaisNativas.removerToken();
         } catch (erroToken) {
-          console.error("NÃƒÂ£o foi possÃƒÂ­vel remover o token do aparelho:", erroToken);
+          console.error("Não foi possível remover o token do aparelho:", erroToken);
         }
       }
     } finally {
       window.location.href = "/login";
+    }
+  }
+
+  async function expirarAceiteAutomaticamente(tele: Tele) {
+    if (teleAtualizando) return;
+
+    setTeleAtualizando(tele.id);
+
+    try {
+      await fetch("/api/motoboys/minhas-teles/aceite", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          teleId: tele.id,
+          acao: "RECUSAR",
+          motivo: "Prazo de aceite expirado",
+        }),
+      });
+    } catch (erroExpiracao) {
+      console.error("Não foi possível expirar a tele automaticamente:", erroExpiracao);
+    } finally {
+      await carregarDados(true);
+      setTeleAtualizando(null);
     }
   }
 
@@ -466,8 +491,8 @@ export default function MotoboyPage() {
       if (!resposta.ok) {
         let mensagem =
           acao === "ACEITAR"
-            ? "NÃƒÂ£o foi possÃƒÂ­vel aceitar a tele."
-            : "NÃƒÂ£o foi possÃƒÂ­vel recusar a tele.";
+            ? "Não foi possível aceitar a tele."
+            : "Não foi possível recusar a tele.";
 
         try {
           const dadosErro = await resposta.json();
@@ -482,7 +507,7 @@ export default function MotoboyPage() {
       setErro(
         erroAceite instanceof Error
           ? erroAceite.message
-          : "NÃƒÂ£o foi possÃƒÂ­vel registrar sua resposta."
+          : "Não foi possível registrar sua resposta."
       );
     } finally {
       setTeleAtualizando(null);
@@ -502,7 +527,7 @@ export default function MotoboyPage() {
     const endereco = String(paradaColeta?.endereco || "").trim();
 
     if (!endereco) {
-      setErro("A parada de coleta nÃƒÂ£o possui endereÃƒÂ§o informado.");
+      setErro("A parada de coleta não possui endereço informado.");
       return;
     }
 
@@ -537,7 +562,7 @@ export default function MotoboyPage() {
     const endereco = String(paradaEntrega?.endereco || "").trim();
 
     if (!endereco) {
-      setErro("A parada de entrega nÃ£o possui endereÃ§o informado.");
+      setErro("A parada de entrega não possui endereço informado.");
       return;
     }
 
@@ -557,7 +582,7 @@ export default function MotoboyPage() {
 
   async function avancarStatus(tele: Tele) {
     if (tele.statusAceite !== "ACEITA") {
-      setErro("Aceite a tele antes de iniciar o serviÃƒÂ§o.");
+      setErro("Aceite a tele antes de iniciar o serviço.");
       return;
     }
 
@@ -568,7 +593,7 @@ export default function MotoboyPage() {
     if (
       proximo === "ENTREGUE" &&
       !window.confirm(
-        "Confirmar que esta entrega foi concluÃƒÂ­da? Depois disso, o status nÃƒÂ£o poderÃƒÂ¡ ser alterado pelo aplicativo."
+        "Confirmar que esta entrega foi concluída? Depois disso, o status não poderá ser alterado pelo aplicativo."
       )
     ) {
       return;
@@ -590,7 +615,7 @@ export default function MotoboyPage() {
       });
 
       if (!resposta.ok) {
-        let mensagem = "NÃƒÂ£o foi possÃƒÂ­vel atualizar o status da tele.";
+        let mensagem = "Não foi possível atualizar o status da tele.";
 
         try {
           const dadosErro = await resposta.json();
@@ -617,7 +642,7 @@ export default function MotoboyPage() {
       setErro(
         erroAtualizacao instanceof Error
           ? erroAtualizacao.message
-          : "NÃƒÂ£o foi possÃƒÂ­vel atualizar o status."
+          : "Não foi possível atualizar o status."
       );
     } finally {
       setTeleAtualizando(null);
@@ -712,10 +737,10 @@ export default function MotoboyPage() {
                 </div>
 
                 <div>
-                  <p className="text-sm font-medium text-emerald-300">ÃƒÂrea do motoboy</p>
+                  <p className="text-sm font-medium text-emerald-300">Área do motoboy</p>
 
                   <h1 className="mt-1 text-2xl font-bold sm:text-3xl">
-                    OlÃƒÂ¡, {usuario?.nome || "Motoboy"}
+                    Olá, {usuario?.nome || "Motoboy"}
                   </h1>
 
                   <p className="mt-2 text-sm leading-6 text-slate-300">
@@ -774,7 +799,7 @@ export default function MotoboyPage() {
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-xl font-bold text-slate-900">
-                    {online ? "VocÃƒÂª estÃƒÂ¡ online" : "VocÃƒÂª estÃƒÂ¡ offline"}
+                    {online ? "Você está online" : "Você está offline"}
                   </h2>
 
                   <span
@@ -782,18 +807,18 @@ export default function MotoboyPage() {
                       online ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"
                     }`}
                   >
-                    {online ? "DisponÃƒÂ­vel" : "IndisponÃƒÂ­vel"}
+                    {online ? "Disponível" : "Indisponível"}
                   </span>
                 </div>
 
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
                   {online
                     ? executandoNoAppAndroid()
-                      ? "Sua localizaÃƒÂ§ÃƒÂ£o estÃƒÂ¡ sendo compartilhada pelo aplicativo Android, inclusive com o app minimizado."
+                      ? "Sua localização está sendo compartilhada pelo aplicativo Android, inclusive com o app minimizado."
                       : executandoNoAppAndroid()
-                        ? "Sua localizaÃƒÂ§ÃƒÂ£o estÃƒÂ¡ sendo compartilhada pelo aplicativo Android, inclusive com o app minimizado."
-                        : "Sua posiÃƒÂ§ÃƒÂ£o estÃƒÂ¡ sendo compartilhada enquanto este painel permanecer aberto."
-                    : "Fique online para que o gestor veja sua posiÃƒÂ§ÃƒÂ£o e possa despachar as teles mais prÃƒÂ³ximas."}
+                        ? "Sua localização está sendo compartilhada pelo aplicativo Android, inclusive com o app minimizado."
+                        : "Sua posição está sendo compartilhada enquanto este painel permanecer aberto."
+                    : "Fique online para que o gestor veja sua posição e possa despachar as teles mais próximas."}
                 </p>
 
                 {online && (
@@ -802,11 +827,11 @@ export default function MotoboyPage() {
                       <LocateFixed size={14} />
                       {localizacaoAtualizadaEm
                         ? `Atualizada ${formatarTempoLocalizacao(localizacaoAtualizadaEm)}`
-                        : "Aguardando localizaÃƒÂ§ÃƒÂ£o"}
+                        : "Aguardando localização"}
                     </span>
 
                     {precisaoLocalizacao !== null && (
-                      <span>PrecisÃƒÂ£o aproximada: {Math.round(precisaoLocalizacao)} m</span>
+                      <span>Precisão aproximada: {Math.round(precisaoLocalizacao)} m</span>
                     )}
                   </div>
                 )}
@@ -857,7 +882,7 @@ export default function MotoboyPage() {
           <CardResumo
             titulo="Entregas hoje"
             valor={String(telesHoje.length)}
-            subtitulo={`${entregasConcluidas.length} concluÃƒÂ­das`}
+            subtitulo={`${entregasConcluidas.length} concluídas`}
             icone={<PackageCheck size={21} />}
           />
 
@@ -877,7 +902,7 @@ export default function MotoboyPage() {
           />
 
           <CardResumo
-            titulo="Seu lÃƒÂ­quido"
+            titulo="Seu líquido"
             valor={formatarMoeda(liquidoHoje)}
             subtitulo="80% do bruto"
             icone={<WalletCards size={21} />}
@@ -913,7 +938,7 @@ export default function MotoboyPage() {
                   </p>
 
                   <h2 className="mt-1 text-xl font-bold sm:text-2xl">
-                    {ganhouTrocaOleo ? "Meta atingida" : "Troca de ÃƒÂ³leo"}
+                    {ganhouTrocaOleo ? "Meta atingida" : "Troca de óleo"}
                   </h2>
 
                   <p
@@ -922,7 +947,7 @@ export default function MotoboyPage() {
                     }`}
                   >
                     {ganhouTrocaOleo
-                      ? "VocÃƒÂª atingiu a meta de bruto da semana e garantiu uma troca de ÃƒÂ³leo grÃƒÂ¡tis."
+                      ? "Você atingiu a meta de bruto da semana e garantiu uma troca de óleo grátis."
                       : `Faltam ${formatarMoeda(faltaMeta)} para atingir a meta.`}
                   </p>
                 </div>
@@ -960,7 +985,7 @@ export default function MotoboyPage() {
 
             <div className="mt-3 flex items-center justify-between gap-4 text-sm">
               <span className={ganhouTrocaOleo ? "text-emerald-100" : "text-slate-500"}>
-                {Math.round(progressoMeta)}% concluÃƒÂ­do
+                {Math.round(progressoMeta)}% concluído
               </span>
 
               <span
@@ -993,6 +1018,7 @@ export default function MotoboyPage() {
                   onAvancar={() => {}}
                   onAceitar={() => void responderAceite(tele, "ACEITAR")}
                   onRecusar={() => void responderAceite(tele, "RECUSAR")}
+                  onExpirarAceite={() => void expirarAceiteAutomaticamente(tele)}
                   onIniciarRotaColeta={() => abrirRotaParaColeta(tele)}
                   onIniciarRotaEntrega={() => abrirRotaParaEntrega(tele)}
                 />
@@ -1004,7 +1030,7 @@ export default function MotoboyPage() {
         <section className="mt-8 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
           <CabecalhoSecao
             titulo="Entregas em andamento"
-            descricao="Atualize cada etapa conforme o serviÃƒÂ§o avanÃƒÂ§a."
+            descricao="Atualize cada etapa conforme o serviço avança."
             quantidade={entregasAndamento.length}
             icone={<Route size={21} />}
           />
@@ -1012,7 +1038,7 @@ export default function MotoboyPage() {
           {entregasAndamento.length === 0 ? (
             <EstadoVazio
               titulo="Nenhuma entrega em andamento"
-              descricao="Quando uma tele for atribuÃƒÂ­da para hoje, ela aparecerÃƒÂ¡ aqui."
+              descricao="Quando uma tele for atribuída para hoje, ela aparecerá aqui."
               icone={<Route size={26} />}
             />
           ) : (
@@ -1026,6 +1052,7 @@ export default function MotoboyPage() {
                   onAvancar={() => void avancarStatus(tele)}
                   onAceitar={() => {}}
                   onRecusar={() => {}}
+                  onExpirarAceite={() => {}}
                   onIniciarRotaColeta={() => abrirRotaParaColeta(tele)}
                   onIniciarRotaEntrega={() => abrirRotaParaEntrega(tele)}
                 />
@@ -1036,7 +1063,7 @@ export default function MotoboyPage() {
 
         <section className="mt-8 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
           <CabecalhoSecao
-            titulo="Entregas concluÃƒÂ­das"
+            titulo="Entregas concluídas"
             descricao="Teles finalizadas hoje."
             quantidade={entregasConcluidas.length}
             icone={<CheckCircle2 size={21} />}
@@ -1045,8 +1072,8 @@ export default function MotoboyPage() {
 
           {entregasConcluidas.length === 0 ? (
             <EstadoVazio
-              titulo="Nenhuma entrega concluÃƒÂ­da"
-              descricao="As teles finalizadas hoje aparecerÃƒÂ£o nesta lista."
+              titulo="Nenhuma entrega concluída"
+              descricao="As teles finalizadas hoje aparecerão nesta lista."
               icone={<CheckCircle2 size={26} />}
             />
           ) : (
@@ -1061,6 +1088,7 @@ export default function MotoboyPage() {
                   onAvancar={() => {}}
                   onAceitar={() => {}}
                   onRecusar={() => {}}
+                  onExpirarAceite={() => {}}
                   onIniciarRotaColeta={() => {}}
                   onIniciarRotaEntrega={() => {}}
                 />
@@ -1070,7 +1098,7 @@ export default function MotoboyPage() {
         </section>
 
         <footer className="py-8 text-center text-xs text-slate-400">
-          Express Manager Ã¢â‚¬Â¢ ÃƒÂrea do motoboy
+          Express Manager • Área do motoboy
         </footer>
       </div>
     </main>
@@ -1160,6 +1188,7 @@ function CardTele({
   onAvancar,
   onAceitar,
   onRecusar,
+  onExpirarAceite,
   onIniciarRotaColeta,
   onIniciarRotaEntrega,
 }: {
@@ -1170,10 +1199,12 @@ function CardTele({
   onAvancar: () => void;
   onAceitar: () => void;
   onRecusar: () => void;
+  onExpirarAceite: () => void;
   onIniciarRotaColeta: () => void;
   onIniciarRotaEntrega: () => void;
 }) {
   const [agoraAceite, setAgoraAceite] = useState(() => Date.now());
+  const expiracaoDisparadaRef = useRef(false);
 
   const estaAguardandoAceite =
     tele.statusAceite === "AGUARDANDO_ACEITE" || tele.aguardandoAceite === true;
@@ -1194,6 +1225,21 @@ function CardTele({
 
   const aceiteExpirado = segundosRestantesAceite === 0;
 
+  useEffect(() => {
+    if (!estaAguardandoAceite || !aceiteExpirado || expiracaoDisparadaRef.current) {
+      return;
+    }
+
+    expiracaoDisparadaRef.current = true;
+    onExpirarAceite();
+  }, [aceiteExpirado, estaAguardandoAceite, onExpirarAceite]);
+
+  useEffect(() => {
+    if (!estaAguardandoAceite) {
+      expiracaoDisparadaRef.current = false;
+    }
+  }, [estaAguardandoAceite]);
+
   const paradas = Array.isArray(tele.paradas)
     ? [...tele.paradas].sort((a, b) => Number(a.ordem || 0) - Number(b.ordem || 0))
     : [];
@@ -1207,7 +1253,7 @@ function CardTele({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <strong className="text-lg text-slate-900">
-              {tele.solicitante || "Solicitante nÃƒÂ£o informado"}
+              {tele.solicitante || "Solicitante não informado"}
             </strong>
 
             <span
@@ -1240,7 +1286,7 @@ function CardTele({
 
             {tele.statusAceite === "ACEITA" && typeof tele.posicaoNaFila === "number" && (
               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                {tele.posicaoNaFila}Ã‚Âª na fila
+                {tele.posicaoNaFila}ª na fila
               </span>
             )}
           </div>
@@ -1281,7 +1327,7 @@ function CardTele({
                     </p>
 
                     <p className="mt-1 break-words text-sm leading-6 text-slate-500">
-                      {parada.endereco || "EndereÃƒÂ§o nÃƒÂ£o informado"}
+                      {parada.endereco || "Endereço não informado"}
                     </p>
 
                     {parada.observacao && (
@@ -1299,7 +1345,7 @@ function CardTele({
 
           {observacao && (
             <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
-              <strong>ObservaÃƒÂ§ÃƒÂ£o:</strong> {observacao}
+              <strong>Observação:</strong> {observacao}
             </div>
           )}
 
@@ -1346,7 +1392,7 @@ function CardTele({
                     className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                   >
                     <MapPin size={18} />
-                    Iniciar rota atÃƒÂ© a coleta
+                    Iniciar rota até a coleta
                   </button>
                 )}
 
@@ -1358,7 +1404,7 @@ function CardTele({
                     className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                   >
                     <MapPin size={18} />
-                    Iniciar rota atÃƒÂ© a entrega
+                    Iniciar rota até a entrega
                   </button>
                 )}
 
@@ -1396,7 +1442,7 @@ function CardTele({
               {formatarMoeda(Number(tele.total || 0))}
             </strong>
             <p className="mt-1 text-sm font-semibold text-emerald-700">
-              LÃƒÂ­quido {formatarMoeda(Number(tele.total || 0) * 0.8)}
+              Líquido {formatarMoeda(Number(tele.total || 0) * 0.8)}
             </p>
           </div>
 
@@ -1568,7 +1614,7 @@ function ordenarTeles(a: Tele, b: Tele) {
 }
 
 function formatarData(data?: string | null) {
-  if (!data) return "Data nÃƒÂ£o informada";
+  if (!data) return "Data não informada";
 
   return new Date(data).toLocaleDateString("pt-BR", {
     timeZone: FUSO_BRASIL,
@@ -1635,18 +1681,18 @@ function obterPosicaoAtual() {
 
 function mensagemErroGeolocalizacao(erro: GeolocationPositionError) {
   if (erro.code === erro.PERMISSION_DENIED) {
-    return "PermissÃƒÂ£o de localizaÃƒÂ§ÃƒÂ£o negada. Libere a localizaÃƒÂ§ÃƒÂ£o nas configuraÃƒÂ§ÃƒÂµes do navegador.";
+    return "Permissão de localização negada. Libere a localização nas configurações do navegador.";
   }
 
   if (erro.code === erro.POSITION_UNAVAILABLE) {
-    return "O celular nÃƒÂ£o conseguiu determinar sua localizaÃƒÂ§ÃƒÂ£o.";
+    return "O celular não conseguiu determinar sua localização.";
   }
 
   if (erro.code === erro.TIMEOUT) {
-    return "A localizaÃƒÂ§ÃƒÂ£o demorou para responder. Tente novamente em um local aberto.";
+    return "A localização demorou para responder. Tente novamente em um local aberto.";
   }
 
-  return "NÃƒÂ£o foi possÃƒÂ­vel acessar a localizaÃƒÂ§ÃƒÂ£o do celular.";
+  return "Não foi possível acessar a localização do celular.";
 }
 
 function distanciaEmMetros(
@@ -1674,12 +1720,12 @@ function formatarTempoLocalizacao(data: string) {
   const segundos = Math.max(0, Math.floor((Date.now() - new Date(data).getTime()) / 1000));
 
   if (segundos < 10) return "agora";
-  if (segundos < 60) return `hÃƒÂ¡ ${segundos} segundos`;
+  if (segundos < 60) return `há ${segundos} segundos`;
 
   const minutos = Math.floor(segundos / 60);
 
-  if (minutos === 1) return "hÃƒÂ¡ 1 minuto";
-  if (minutos < 60) return `hÃƒÂ¡ ${minutos} minutos`;
+  if (minutos === 1) return "há 1 minuto";
+  if (minutos < 60) return `há ${minutos} minutos`;
 
   return new Date(data).toLocaleTimeString("pt-BR", {
     hour: "2-digit",

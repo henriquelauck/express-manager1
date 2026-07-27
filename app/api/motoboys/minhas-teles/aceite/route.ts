@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
+const PRAZO_ACEITE_MS = 60_000;
+
 type AcaoAceite = "ACEITAR" | "RECUSAR";
 
 type AceiteBody = {
@@ -20,7 +22,7 @@ export async function PUT(request: Request) {
     const userId = cookieStore.get("express_user_id")?.value;
 
     if (!userId) {
-      return respostaErro("Não autenticado.", 401);
+      return respostaErro("NÃ£o autenticado.", 401);
     }
 
     const usuario = await prisma.user.findUnique({
@@ -48,15 +50,15 @@ export async function PUT(request: Request) {
     const motivo = String(body.motivo || "").trim();
 
     if (!teleId) {
-      return respostaErro("Tele não informada.", 400);
+      return respostaErro("Tele nÃ£o informada.", 400);
     }
 
     if (acao !== "ACEITAR" && acao !== "RECUSAR") {
-      return respostaErro("Ação de aceite inválida.", 400);
+      return respostaErro("AÃ§Ã£o de aceite invÃ¡lida.", 400);
     }
 
     if (acao === "RECUSAR" && motivo.length > 300) {
-      return respostaErro("O motivo da recusa deve ter no máximo 300 caracteres.", 400);
+      return respostaErro("O motivo da recusa deve ter no mÃ¡ximo 300 caracteres.", 400);
     }
 
     const teleAtual = await prisma.tele.findUnique({
@@ -70,19 +72,20 @@ export async function PUT(request: Request) {
         status: true,
         statusAceite: true,
         ordemMotoboy: true,
+        atribuidaAoMotoboyEm: true,
       },
     });
 
     if (!teleAtual) {
-      return respostaErro("Tele não encontrada.", 404);
+      return respostaErro("Tele nÃ£o encontrada.", 404);
     }
 
     if (teleAtual.motoboyId !== usuario.motoboy.id) {
-      return respostaErro("Esta tele não está atribuída ao seu usuário.", 403);
+      return respostaErro("Esta tele nÃ£o estÃ¡ atribuÃ­da ao seu usuÃ¡rio.", 403);
     }
 
     if (teleAtual.status === "ENTREGUE") {
-      return respostaErro("Uma tele concluída não pode ser aceita ou recusada.", 409);
+      return respostaErro("Uma tele concluÃ­da nÃ£o pode ser aceita ou recusada.", 409);
     }
 
     if (
@@ -91,8 +94,40 @@ export async function PUT(request: Request) {
     ) {
       return respostaErro(
         teleAtual.statusAceite === "ACEITA"
-          ? "Esta tele já foi aceita."
-          : "Esta tele já foi recusada.",
+          ? "Esta tele jÃ¡ foi aceita."
+          : "Esta tele jÃ¡ foi recusada.",
+        409
+      );
+    }
+
+    const atribuidaEm = teleAtual.atribuidaAoMotoboyEm?.getTime() ?? 0;
+    const prazoExpirado =
+      teleAtual.statusAceite === "AGUARDANDO_ACEITE" &&
+      atribuidaEm > 0 &&
+      Date.now() - atribuidaEm >= PRAZO_ACEITE_MS;
+
+    if (prazoExpirado) {
+      await prisma.tele.updateMany({
+        where: {
+          id: teleId,
+          motoboyId: usuario.motoboy.id,
+          statusAceite: "AGUARDANDO_ACEITE",
+          atribuidaAoMotoboyEm: teleAtual.atribuidaAoMotoboyEm,
+        },
+        data: {
+          statusAceite: "RECUSADA",
+          ordemMotoboy: null,
+          aceitaPeloMotoboyEm: null,
+          recusadaPeloMotoboyEm: new Date(),
+          motivoRecusaMotoboy: "Prazo de aceite expirado",
+          motoboyId: null,
+          motoboyNome: "",
+          status: "AGUARDANDO_MOTOBOY",
+        },
+      });
+
+      return respostaErro(
+        "O prazo de 1 minuto para aceitar esta tele expirou. Ela voltou para a Central.",
         409
       );
     }
@@ -175,6 +210,6 @@ export async function PUT(request: Request) {
   } catch (erro) {
     console.error("Erro ao aceitar ou recusar tele:", erro);
 
-    return respostaErro("Não foi possível registrar sua resposta para a tele.", 500);
+    return respostaErro("NÃ£o foi possÃ­vel registrar sua resposta para a tele.", 500);
   }
 }
