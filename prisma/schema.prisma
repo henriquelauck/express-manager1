@@ -151,6 +151,13 @@ enum TipoMensagemAtendimento {
   SISTEMA
 }
 
+enum StatusAceiteTele {
+  NAO_ENVIADA
+  AGUARDANDO_ACEITE
+  ACEITA
+  RECUSADA
+}
+
 model User {
   id        String  @id @default(cuid())
   nome      String
@@ -225,6 +232,14 @@ model Tele {
 
   motoboyNome String?
 
+  statusAceite StatusAceiteTele @default(NAO_ENVIADA)
+  ordemMotoboy Int?
+
+  atribuidaAoMotoboyEm  DateTime?
+  aceitaPeloMotoboyEm   DateTime?
+  recusadaPeloMotoboyEm DateTime?
+  motivoRecusaMotoboy   String?
+
   status   StatusTele @default(AGUARDANDO_CLIENTE)
   tipoRota String
 
@@ -254,6 +269,9 @@ model Tele {
   dataTele  DateTime @default(now())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([motoboyId, statusAceite, ordemMotoboy])
+  @@index([statusAceite, atribuidaAoMotoboyEm])
 }
 
 model FechamentoFinanceiro {

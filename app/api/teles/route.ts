@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 function statusParaBanco(status: string): StatusTeleBanco {
   const mapa: Record<string, StatusTeleBanco> = {
     "Aguardando cliente": "AGUARDANDO_CLIENTE",
-    "Aguardando motoboy disponÃ­vel": "AGUARDANDO_MOTOBOY",
+    "Aguardando motoboy disponÃƒÂ­vel": "AGUARDANDO_MOTOBOY",
     "Aguardando coleta": "AGUARDANDO_COLETA",
     "Em rota": "EM_ROTA",
     Entregue: "ENTREGUE",
@@ -17,7 +17,7 @@ function statusParaBanco(status: string): StatusTeleBanco {
 function statusParaTela(status: string) {
   const mapa: Record<string, string> = {
     AGUARDANDO_CLIENTE: "Aguardando cliente",
-    AGUARDANDO_MOTOBOY: "Aguardando motoboy disponÃ­vel",
+    AGUARDANDO_MOTOBOY: "Aguardando motoboy disponÃƒÂ­vel",
     AGUARDANDO_COLETA: "Aguardando coleta",
     EM_ROTA: "Em rota",
     ENTREGUE: "Entregue",
@@ -93,6 +93,12 @@ function formatarTeleParaTela(tele: any) {
     solicitante: tele.solicitante,
     motoboyId: tele.motoboyId,
     motoboy: tele.motoboyNome || tele.motoboy?.nome || "",
+    statusAceite: tele.statusAceite,
+    ordemMotoboy: tele.ordemMotoboy,
+    atribuidaAoMotoboyEm: tele.atribuidaAoMotoboyEm,
+    aceitaPeloMotoboyEm: tele.aceitaPeloMotoboyEm,
+    recusadaPeloMotoboyEm: tele.recusadaPeloMotoboyEm,
+    motivoRecusaMotoboy: tele.motivoRecusaMotoboy,
     status: statusParaTela(tele.status),
     criadoEm: formatarData(tele.createdAt),
     dataOperacao: formatarData(tele.dataTele),
@@ -188,7 +194,7 @@ async function sincronizarRecebimentoMotoboy({
   });
 
   if (!motoboy) {
-    throw new Error("O motoboy recebedor nÃ£o foi encontrado para gerar o extrato.");
+    throw new Error("O motoboy recebedor nÃƒÂ£o foi encontrado para gerar o extrato.");
   }
 
   const dadosMovimento = {
@@ -279,7 +285,17 @@ export async function POST(request: Request) {
         dataTele: body.dataTele ? new Date(`${body.dataTele}T12:00:00`) : new Date(),
         motoboyId: motoboy?.id,
         motoboyNome: body.motoboy || "",
-        status: statusParaBanco(body.status || "Aguardando cliente"),
+
+        statusAceite: motoboy ? "AGUARDANDO_ACEITE" : "NAO_ENVIADA",
+        ordemMotoboy: null,
+        atribuidaAoMotoboyEm: motoboy ? new Date() : null,
+        aceitaPeloMotoboyEm: null,
+        recusadaPeloMotoboyEm: null,
+        motivoRecusaMotoboy: null,
+
+        status: motoboy
+          ? "AGUARDANDO_MOTOBOY"
+          : statusParaBanco(body.status || "Aguardando cliente"),
         tipoRota: body.tipoRota || "Entrega",
 
         valorBase: body.valorBase || 0,
@@ -369,6 +385,63 @@ export async function PUT(request: Request) {
     const motoboyRecebedor =
       possuiRecebimento && recebimentoTela === "motoboy" ? body.motoboyRecebedor || null : null;
 
+    const teleAtualAntesDaEdicao = await prisma.tele.findUnique({
+      where: {
+        id: body.id,
+      },
+      select: {
+        motoboyId: true,
+        statusAceite: true,
+        ordemMotoboy: true,
+        atribuidaAoMotoboyEm: true,
+        aceitaPeloMotoboyEm: true,
+        recusadaPeloMotoboyEm: true,
+        motivoRecusaMotoboy: true,
+      },
+    });
+
+    if (!teleAtualAntesDaEdicao) {
+      return NextResponse.json({ erro: "Tele não encontrada." }, { status: 404 });
+    }
+
+    const haviaMotoboy = Boolean(teleAtualAntesDaEdicao.motoboyId);
+    const possuiMotoboyAgora = Boolean(motoboy?.id);
+    const trocouMotoboy =
+      haviaMotoboy && possuiMotoboyAgora && teleAtualAntesDaEdicao.motoboyId !== motoboy?.id;
+    const atribuiuMotoboyAgora = !haviaMotoboy && possuiMotoboyAgora;
+    const removeuMotoboy = haviaMotoboy && !possuiMotoboyAgora;
+    const deveReiniciarAceite = trocouMotoboy || atribuiuMotoboyAgora;
+
+    const dadosAceite = removeuMotoboy
+      ? {
+          statusAceite: "NAO_ENVIADA" as const,
+          ordemMotoboy: null,
+          atribuidaAoMotoboyEm: null,
+          aceitaPeloMotoboyEm: null,
+          recusadaPeloMotoboyEm: null,
+          motivoRecusaMotoboy: null,
+        }
+      : deveReiniciarAceite
+        ? {
+            statusAceite: "AGUARDANDO_ACEITE" as const,
+            ordemMotoboy: null,
+            atribuidaAoMotoboyEm: new Date(),
+            aceitaPeloMotoboyEm: null,
+            recusadaPeloMotoboyEm: null,
+            motivoRecusaMotoboy: null,
+          }
+        : {
+            statusAceite: teleAtualAntesDaEdicao.statusAceite,
+            ordemMotoboy: teleAtualAntesDaEdicao.ordemMotoboy,
+            atribuidaAoMotoboyEm: teleAtualAntesDaEdicao.atribuidaAoMotoboyEm,
+            aceitaPeloMotoboyEm: teleAtualAntesDaEdicao.aceitaPeloMotoboyEm,
+            recusadaPeloMotoboyEm: teleAtualAntesDaEdicao.recusadaPeloMotoboyEm,
+            motivoRecusaMotoboy: teleAtualAntesDaEdicao.motivoRecusaMotoboy,
+          };
+
+    const statusAtualizado =
+      deveReiniciarAceite || removeuMotoboy ? "AGUARDANDO_MOTOBOY" : statusParaBanco(body.status);
+
     const tele = await prisma.$transaction(async (tx) => {
       await tx.teleParada.deleteMany({
         where: {
@@ -386,7 +459,10 @@ export async function PUT(request: Request) {
 
           motoboyId: motoboy?.id || null,
           motoboyNome: body.motoboy || "",
-          status: statusParaBanco(body.status),
+
+          ...dadosAceite,
+
+          status: statusAtualizado,
           tipoRota: body.tipoRota || "Entrega",
 
           valorBase: body.valorBase || Number(String(body.valor || "0").replace(",", ".")),
@@ -451,16 +527,12 @@ export async function PUT(request: Request) {
   }
 }
 
-
 export async function PATCH(request: Request) {
   try {
     const body = await request.json();
 
     if (!body?.id) {
-      return NextResponse.json(
-        { erro: "Tele não informada." },
-        { status: 400 }
-      );
+      return NextResponse.json({ erro: "Tele nÃ£o informada." }, { status: 400 });
     }
 
     const teleAtual = await prisma.tele.findUnique({
@@ -475,33 +547,19 @@ export async function PATCH(request: Request) {
     });
 
     if (!teleAtual) {
-      return NextResponse.json(
-        { erro: "Tele não encontrada." },
-        { status: 404 }
-      );
+      return NextResponse.json({ erro: "Tele nÃ£o encontrada." }, { status: 404 });
     }
 
     const total = Number(teleAtual.total || 0);
-    const valorRecebido = Math.max(
-      0,
-      Math.min(Number(body.valorRecebido || 0), total)
-    );
+    const valorRecebido = Math.max(0, Math.min(Number(body.valorRecebido || 0), total));
 
     const possuiRecebimento = valorRecebido > 0.009;
-    const recebimentoTela = possuiRecebimento
-      ? body.recebimento || "escritorio"
-      : "pendente";
+    const recebimentoTela = possuiRecebimento ? body.recebimento || "escritorio" : "pendente";
 
     const motoboyRecebedor =
-      possuiRecebimento && recebimentoTela === "motoboy"
-        ? body.motoboyRecebedor || null
-        : null;
+      possuiRecebimento && recebimentoTela === "motoboy" ? body.motoboyRecebedor || null : null;
 
-    if (
-      possuiRecebimento &&
-      recebimentoTela === "motoboy" &&
-      !motoboyRecebedor
-    ) {
+    if (possuiRecebimento && recebimentoTela === "motoboy" && !motoboyRecebedor) {
       return NextResponse.json(
         { erro: "Selecione o motoboy que recebeu o pagamento." },
         { status: 400 }
@@ -546,9 +604,7 @@ export async function PATCH(request: Request) {
   } catch (error: any) {
     return NextResponse.json(
       {
-        erro:
-          error.message ||
-          "Não foi possível atualizar o recebimento da tele.",
+        erro: error.message || "NÃ£o foi possÃ­vel atualizar o recebimento da tele.",
       },
       { status: 500 }
     );
