@@ -122,6 +122,8 @@ export default function MotoboyPage() {
     longitude: number;
   } | null>(null);
   const ultimoEnvioEmRef = useRef(0);
+  const atualizacaoAutomaticaEmAndamentoRef = useRef(false);
+  const teleAtualizandoRef = useRef<string | null>(null);
 
   async function carregarDados(mostrarAtualizacao = false) {
     if (mostrarAtualizacao) {
@@ -180,13 +182,58 @@ export default function MotoboyPage() {
   }
 
   useEffect(() => {
+    teleAtualizandoRef.current = teleAtualizando;
+  }, [teleAtualizando]);
+
+  useEffect(() => {
     void carregarDados();
     void carregarPresenca();
 
+    const intervaloAtualizacao = window.setInterval(() => {
+      void carregarTelesAutomaticamente();
+    }, 3000);
+
     return () => {
+      window.clearInterval(intervaloAtualizacao);
       pararMonitoramentoLocal();
     };
   }, []);
+
+  async function carregarTelesAutomaticamente() {
+    if (atualizacaoAutomaticaEmAndamentoRef.current || teleAtualizandoRef.current) {
+      return;
+    }
+
+    atualizacaoAutomaticaEmAndamentoRef.current = true;
+
+    try {
+      const resposta = await fetch("/api/motoboys/minhas-teles", {
+        cache: "no-store",
+      });
+
+      if (resposta.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
+
+      if (!resposta.ok) {
+        return;
+      }
+
+      const dados = await resposta.json();
+
+      if (Array.isArray(dados)) {
+        setTeles(dados);
+      }
+    } catch (erroAtualizacaoAutomatica) {
+      console.error(
+        "Não foi possível atualizar automaticamente as teles:",
+        erroAtualizacaoAutomatica
+      );
+    } finally {
+      atualizacaoAutomaticaEmAndamentoRef.current = false;
+    }
+  }
 
   async function carregarPresenca() {
     try {
