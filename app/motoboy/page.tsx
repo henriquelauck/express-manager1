@@ -63,6 +63,7 @@ type ResultadoLocalizacaoNativa = {
 type LocalizacaoNativaPlugin = {
   iniciar(): Promise<ResultadoLocalizacaoNativa>;
   parar(): Promise<ResultadoLocalizacaoNativa>;
+  pararSomAlerta(): Promise<{ parado: boolean }>;
 };
 
 type CredenciaisNativasPlugin = {
@@ -80,6 +81,18 @@ function executandoNoAppAndroid() {
     Capacitor.getPlatform() === "android"
   );
 }
+
+type ResultadoMiniMapa = {
+  distanciaKm: number;
+  duracaoMin: number;
+  polyline: string | null;
+};
+
+type EstadoMiniMapa = {
+  carregando: boolean;
+  erro: string | null;
+  resultado: ResultadoMiniMapa | null;
+};
 
 type Tele = {
   id: string;
@@ -115,6 +128,7 @@ export default function MotoboyPage() {
   const [alterandoPresenca, setAlterandoPresenca] = useState(false);
   const [precisaoLocalizacao, setPrecisaoLocalizacao] = useState<number | null>(null);
   const [localizacaoAtualizadaEm, setLocalizacaoAtualizadaEm] = useState<string | null>(null);
+  const [miniMapas, setMiniMapas] = useState<Record<string, EstadoMiniMapa>>({});
 
   const watchIdRef = useRef<number | null>(null);
   const ultimaPosicaoRef = useRef<{
@@ -124,6 +138,7 @@ export default function MotoboyPage() {
   const ultimoEnvioEmRef = useRef(0);
   const atualizacaoAutomaticaEmAndamentoRef = useRef(false);
   const teleAtualizandoRef = useRef<string | null>(null);
+  const miniMapasConsultadosRef = useRef<Set<string>>(new Set());
 
   async function carregarDados(mostrarAtualizacao = false) {
     if (mostrarAtualizacao) {
@@ -232,6 +247,101 @@ export default function MotoboyPage() {
       );
     } finally {
       atualizacaoAutomaticaEmAndamentoRef.current = false;
+    }
+  }
+
+  async function carregarMiniMapa(tele: Tele) {
+    if (miniMapasConsultadosRef.current.has(tele.id)) {
+      return;
+    }
+
+    const paradasValidas = Array.isArray(tele.paradas)
+      ? [...tele.paradas]
+          .sort((a, b) => Number(a.ordem || 0) - Number(b.ordem || 0))
+          .filter((parada) => String(parada.endereco || "").trim())
+      : [];
+
+    if (paradasValidas.length < 2) {
+      miniMapasConsultadosRef.current.add(tele.id);
+
+      setMiniMapas((atuais) => ({
+        ...atuais,
+        [tele.id]: {
+          carregando: false,
+          erro: "A rota precisa ter pelo menos dois endereços.",
+          resultado: null,
+        },
+      }));
+
+      return;
+    }
+
+    miniMapasConsultadosRef.current.add(tele.id);
+
+    setMiniMapas((atuais) => ({
+      ...atuais,
+      [tele.id]: {
+        carregando: true,
+        erro: null,
+        resultado: null,
+      },
+    }));
+
+    try {
+      const temRetorno = paradasValidas.some((parada) =>
+        ["TROCAR", "ENTREGA_E_COLETA"].includes(String(parada.tipo || "").toUpperCase())
+      );
+
+      const resposta = await fetch("/api/maps/calcular-rota", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          paradas: paradasValidas.map((parada) => ({
+            endereco: String(parada.endereco || "").trim(),
+          })),
+          temRetorno,
+        }),
+      });
+
+      if (!resposta.ok) {
+        let mensagem = "Não foi possível carregar a prévia da rota.";
+
+        try {
+          const dadosErro = await resposta.json();
+          mensagem = dadosErro?.erro || mensagem;
+        } catch {}
+
+        throw new Error(mensagem);
+      }
+
+      const dados = (await resposta.json()) as ResultadoMiniMapa;
+
+      setMiniMapas((atuais) => ({
+        ...atuais,
+        [tele.id]: {
+          carregando: false,
+          erro: null,
+          resultado: {
+            distanciaKm: Number(dados.distanciaKm || 0),
+            duracaoMin: Number(dados.duracaoMin || 0),
+            polyline: dados.polyline || null,
+          },
+        },
+      }));
+    } catch (erroMiniMapa) {
+      setMiniMapas((atuais) => ({
+        ...atuais,
+        [tele.id]: {
+          carregando: false,
+          erro:
+            erroMiniMapa instanceof Error
+              ? erroMiniMapa.message
+              : "Não foi possível carregar a prévia da rota.",
+          resultado: null,
+        },
+      }));
     }
   }
 
@@ -522,6 +632,14 @@ export default function MotoboyPage() {
     setTeleAtualizando(tele.id);
     setErro("");
 
+    if (executandoNoAppAndroid()) {
+      try {
+        await LocalizacaoNativa.pararSomAlerta();
+      } catch (erroSom) {
+        console.error("Não foi possível parar imediatamente o som do alerta:", erroSom);
+      }
+    }
+
     try {
       const resposta = await fetch("/api/motoboys/minhas-teles/aceite", {
         method: "PUT",
@@ -738,6 +856,12 @@ export default function MotoboyPage() {
         .sort(ordenarTelesPorFila),
     [teles]
   );
+
+  useEffect(() => {
+    for (const tele of telesAguardandoAceite) {
+      void carregarMiniMapa(tele);
+    }
+  }, [telesAguardandoAceite]);
 
   const entregasAndamento = useMemo(
     () =>
@@ -1060,6 +1184,7 @@ export default function MotoboyPage() {
                 <CardTele
                   key={tele.id}
                   tele={tele}
+                  miniMapa={miniMapas[tele.id]}
                   atualizando={teleAtualizando === tele.id}
                   bloqueado={Boolean(teleAtualizando)}
                   onAvancar={() => {}}
@@ -1094,6 +1219,7 @@ export default function MotoboyPage() {
                 <CardTele
                   key={tele.id}
                   tele={tele}
+                  miniMapa={undefined}
                   atualizando={teleAtualizando === tele.id}
                   bloqueado={Boolean(teleAtualizando)}
                   onAvancar={() => void avancarStatus(tele)}
@@ -1129,6 +1255,7 @@ export default function MotoboyPage() {
                 <CardTele
                   key={tele.id}
                   tele={tele}
+                  miniMapa={undefined}
                   concluida
                   atualizando={false}
                   bloqueado
@@ -1229,6 +1356,7 @@ function CabecalhoSecao({
 
 function CardTele({
   tele,
+  miniMapa,
   concluida = false,
   atualizando,
   bloqueado,
@@ -1240,6 +1368,7 @@ function CardTele({
   onIniciarRotaEntrega,
 }: {
   tele: Tele;
+  miniMapa?: EstadoMiniMapa;
   concluida?: boolean;
   atualizando: boolean;
   bloqueado: boolean;
@@ -1349,6 +1478,50 @@ function CardTele({
               {paradas.length} {paradas.length === 1 ? "parada" : "paradas"}
             </span>
           </div>
+
+          {estaAguardandoAceite && (
+            <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+              <div className="flex items-center justify-between gap-4 border-b border-slate-200 bg-white px-4 py-3">
+                <div>
+                  <p className="font-semibold text-slate-800">Prévia da rota</p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    Confira o trajeto antes de aceitar a tele.
+                  </p>
+                </div>
+
+                {miniMapa?.resultado && (
+                  <div className="shrink-0 text-right text-xs text-slate-500">
+                    <strong className="block text-sm text-slate-800">
+                      {miniMapa.resultado.distanciaKm.toFixed(1).replace(".", ",")} km
+                    </strong>
+                    <span>{miniMapa.resultado.duracaoMin} min</span>
+                  </div>
+                )}
+              </div>
+
+              {miniMapa?.carregando ? (
+                <div className="flex h-48 items-center justify-center gap-2 text-sm text-slate-500">
+                  <Loader2 size={18} className="animate-spin" />
+                  Calculando rota...
+                </div>
+              ) : miniMapa?.resultado?.polyline ? (
+                <img
+                  src={`/api/maps/imagem-rota?polyline=${encodeURIComponent(
+                    miniMapa.resultado.polyline
+                  )}`}
+                  alt="Prévia do trajeto da tele"
+                  className="h-48 w-full object-cover sm:h-56"
+                  loading="lazy"
+                />
+              ) : miniMapa?.erro ? (
+                <div className="px-4 py-5 text-sm text-amber-700">{miniMapa.erro}</div>
+              ) : (
+                <div className="flex h-48 items-center justify-center text-sm text-slate-500">
+                  Preparando prévia da rota...
+                </div>
+              )}
+            </div>
+          )}
 
           {paradas.length > 0 ? (
             <div className="mt-5 space-y-3">
