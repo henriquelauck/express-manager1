@@ -158,6 +158,15 @@ enum StatusAceiteTele {
   RECUSADA
 }
 
+enum EtapaMotoboyTele {
+  AGUARDANDO_INICIO_COLETA
+  EM_ROTA_COLETA
+  CHEGOU_NA_COLETA
+  EM_ROTA_ENTREGA
+  CHEGOU_NA_ENTREGA
+  CONCLUIDA
+}
+
 model User {
   id        String  @id @default(cuid())
   nome      String
@@ -240,8 +249,15 @@ model Tele {
   recusadaPeloMotoboyEm DateTime?
   motivoRecusaMotoboy   String?
 
-  status   StatusTele @default(AGUARDANDO_CLIENTE)
-  tipoRota String
+  status       StatusTele        @default(AGUARDANDO_CLIENTE)
+  etapaMotoboy EtapaMotoboyTele?
+  tipoRota     String
+
+  rotaColetaIniciadaEm   DateTime?
+  chegouNaColetaEm       DateTime?
+  entregaIniciadaEm      DateTime?
+  chegouNaEntregaEm      DateTime?
+  concluidaPeloMotoboyEm DateTime?
 
   valorBase Float @default(0)
   retorno   Float @default(0)
@@ -272,6 +288,7 @@ model Tele {
 
   @@index([motoboyId, statusAceite, ordemMotoboy])
   @@index([statusAceite, atribuidaAoMotoboyEm])
+  @@index([motoboyId, etapaMotoboy])
 }
 
 model FechamentoFinanceiro {
