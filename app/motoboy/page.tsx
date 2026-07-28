@@ -823,6 +823,14 @@ export default function MotoboyPage() {
             : item
         )
       );
+
+      if (novaEtapa === "EM_ROTA_COLETA") {
+        abrirRotaParaColeta(tele);
+      }
+
+      if (novaEtapa === "EM_ROTA_ENTREGA") {
+        abrirRotaParaEntrega(tele);
+      }
     } catch (erroAtualizacao) {
       setErro(
         erroAtualizacao instanceof Error
@@ -1211,8 +1219,6 @@ export default function MotoboyPage() {
                   onAceitar={() => void responderAceite(tele, "ACEITAR")}
                   onRecusar={() => void responderAceite(tele, "RECUSAR")}
                   onExpirarAceite={() => void expirarAceiteAutomaticamente(tele)}
-                  onAbrirMapaColeta={() => {}}
-                  onAbrirMapaEntrega={() => {}}
                 />
               ))}
             </div>
@@ -1246,8 +1252,6 @@ export default function MotoboyPage() {
                   onAceitar={() => {}}
                   onRecusar={() => {}}
                   onExpirarAceite={() => {}}
-                  onAbrirMapaColeta={() => abrirRotaParaColeta(tele)}
-                  onAbrirMapaEntrega={() => abrirRotaParaEntrega(tele)}
                 />
               ))}
             </div>
@@ -1283,8 +1287,6 @@ export default function MotoboyPage() {
                   onAceitar={() => {}}
                   onRecusar={() => {}}
                   onExpirarAceite={() => {}}
-                  onAbrirMapaColeta={() => {}}
-                  onAbrirMapaEntrega={() => {}}
                 />
               ))}
             </div>
@@ -1384,8 +1386,6 @@ function CardTele({
   onAceitar,
   onRecusar,
   onExpirarAceite,
-  onAbrirMapaColeta,
-  onAbrirMapaEntrega,
 }: {
   tele: Tele;
   miniMapa?: EstadoMiniMapa;
@@ -1396,8 +1396,6 @@ function CardTele({
   onAceitar: () => void;
   onRecusar: () => void;
   onExpirarAceite: () => void;
-  onAbrirMapaColeta: () => void;
-  onAbrirMapaEntrega: () => void;
 }) {
   const [agoraAceite, setAgoraAceite] = useState(() => Date.now());
   const expiracaoDisparadaRef = useRef(false);
@@ -1530,7 +1528,7 @@ function CardTele({
                 <img
                   src={`/api/maps/imagem-rota?polyline=${encodeURIComponent(
                     miniMapa.resultado.polyline
-                  )}`}
+                  )}&versao=mapa-real-2`}
                   alt="Prévia do trajeto da tele"
                   className="h-48 w-full object-cover sm:h-56"
                   loading="lazy"
@@ -1635,58 +1633,36 @@ function CardTele({
                   </p>
                 </div>
 
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <button
-                    type="button"
-                    onClick={() => onAvancarEtapa(acaoEtapa.proximaEtapa)}
-                    disabled={bloqueado}
-                    className={`flex h-12 w-full items-center justify-center gap-2 rounded-xl px-5 font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto ${
-                      acaoEtapa.proximaEtapa === "CONCLUIDA"
-                        ? "bg-emerald-600 hover:bg-emerald-700"
+                <button
+                  type="button"
+                  onClick={() => onAvancarEtapa(acaoEtapa.proximaEtapa)}
+                  disabled={bloqueado}
+                  className={`flex h-12 w-full items-center justify-center gap-2 rounded-xl px-5 font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto ${
+                    acaoEtapa.proximaEtapa === "CONCLUIDA"
+                      ? "bg-emerald-600 hover:bg-emerald-700"
+                      : acaoEtapa.abreMapa
+                        ? "bg-blue-600 hover:bg-blue-700"
                         : "bg-slate-900 hover:bg-slate-800"
-                    }`}
-                  >
-                    {atualizando ? (
-                      <>
-                        <Loader2 size={18} className="animate-spin" />
-                        Atualizando...
-                      </>
-                    ) : (
-                      <>
-                        {acaoEtapa.proximaEtapa === "CONCLUIDA" ? (
-                          <CheckCircle2 size={18} />
-                        ) : (
-                          <Route size={18} />
-                        )}
-                        {acaoEtapa.texto}
-                      </>
-                    )}
-                  </button>
-
-                  {etapaAtual === "EM_ROTA_COLETA" && (
-                    <button
-                      type="button"
-                      onClick={onAbrirMapaColeta}
-                      disabled={bloqueado}
-                      className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-                    >
-                      <MapPin size={18} />
-                      Abrir mapa da coleta
-                    </button>
+                  }`}
+                >
+                  {atualizando ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      Atualizando...
+                    </>
+                  ) : (
+                    <>
+                      {acaoEtapa.abreMapa ? (
+                        <MapPin size={18} />
+                      ) : acaoEtapa.proximaEtapa === "CONCLUIDA" ? (
+                        <CheckCircle2 size={18} />
+                      ) : (
+                        <Route size={18} />
+                      )}
+                      {acaoEtapa.texto}
+                    </>
                   )}
-
-                  {etapaAtual === "EM_ROTA_ENTREGA" && (
-                    <button
-                      type="button"
-                      onClick={onAbrirMapaEntrega}
-                      disabled={bloqueado}
-                      className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-                    >
-                      <MapPin size={18} />
-                      Abrir mapa da entrega
-                    </button>
-                  )}
-                </div>
+                </button>
               </div>
             )
           )}
@@ -1735,33 +1711,40 @@ function EstadoVazio({
 function obterAcaoEtapaMotoboy(etapa: EtapaMotoboyTele): {
   texto: string;
   proximaEtapa: EtapaMotoboyTele;
+  abreMapa: boolean;
 } | null {
   const mapa: Record<
     EtapaMotoboyTele,
     {
       texto: string;
       proximaEtapa: EtapaMotoboyTele;
+      abreMapa: boolean;
     } | null
   > = {
     AGUARDANDO_INICIO_COLETA: {
       texto: "Iniciar rota até a coleta",
       proximaEtapa: "EM_ROTA_COLETA",
+      abreMapa: true,
     },
     EM_ROTA_COLETA: {
       texto: "Cheguei na coleta",
       proximaEtapa: "CHEGOU_NA_COLETA",
+      abreMapa: false,
     },
     CHEGOU_NA_COLETA: {
       texto: "Iniciar entrega",
       proximaEtapa: "EM_ROTA_ENTREGA",
+      abreMapa: true,
     },
     EM_ROTA_ENTREGA: {
       texto: "Cheguei na entrega",
       proximaEtapa: "CHEGOU_NA_ENTREGA",
+      abreMapa: false,
     },
     CHEGOU_NA_ENTREGA: {
       texto: "Entregue",
       proximaEtapa: "CONCLUIDA",
+      abreMapa: false,
     },
     CONCLUIDA: null,
   };
