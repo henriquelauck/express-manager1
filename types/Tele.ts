@@ -11,6 +11,16 @@ export type FormaCobranca = "na_hora" | "semanal" | "quinzenal" | "mensal";
 
 export type StatusRecebimento = "pendente" | "escritorio" | "motoboy";
 
+export type StatusAceiteTele = "NAO_ENVIADA" | "AGUARDANDO_ACEITE" | "ACEITA" | "RECUSADA";
+
+export type EtapaMotoboyTele =
+  | "AGUARDANDO_INICIO_COLETA"
+  | "EM_ROTA_COLETA"
+  | "CHEGOU_NA_COLETA"
+  | "EM_ROTA_ENTREGA"
+  | "CHEGOU_NA_ENTREGA"
+  | "CONCLUIDA";
+
 export type Tele = {
   id: string;
 
@@ -20,6 +30,20 @@ export type Tele = {
   motoboy: string;
 
   status: StatusTele;
+
+  statusAceite?: StatusAceiteTele;
+  etapaMotoboy?: EtapaMotoboyTele | null;
+
+  atribuidaAoMotoboyEm?: string | null;
+  aceitaPeloMotoboyEm?: string | null;
+  recusadaPeloMotoboyEm?: string | null;
+  motivoRecusaMotoboy?: string | null;
+
+  rotaColetaIniciadaEm?: string | null;
+  chegouNaColetaEm?: string | null;
+  entregaIniciadaEm?: string | null;
+  chegouNaEntregaEm?: string | null;
+  concluidaPeloMotoboyEm?: string | null;
 
   criadoEm: string;
   dataTele: string;
