@@ -142,6 +142,7 @@ export default function TelesPage() {
   const [carregandoLocalizacoes, setCarregandoLocalizacoes] = useState(true);
   const [mapaMotoboysDisponivel, setMapaMotoboysDisponivel] = useState(true);
   const [motoboySelecionadoId, setMotoboySelecionadoId] = useState<string | null>(null);
+  const [statusSidebar, setStatusSidebar] = useState<StatusTele>("Aguardando coleta");
 
   const carregarTeles = useCallback(async () => {
     if (carregandoTelesRef.current) return;
@@ -362,10 +363,7 @@ export default function TelesPage() {
     setStatusSobrevoado(null);
   }
 
-  async function soltarTeleNaColuna(
-    event: React.DragEvent<HTMLDivElement>,
-    novoStatus: StatusTele
-  ) {
+  async function soltarTeleNaColuna(event: React.DragEvent<HTMLElement>, novoStatus: StatusTele) {
     event.preventDefault();
 
     const teleId = event.dataTransfer.getData("text/plain") || teleArrastandoId;
@@ -947,6 +945,15 @@ ${linkMaps}`
     setMotoboySelecionadoId((atual) => (atual === motoboy.id ? null : motoboy.id));
   }
 
+  const telesDaSidebar = telesFiltradas
+    .filter((tele: Tele) => tele.status === statusSidebar)
+    .sort((a: Tele, b: Tele) => {
+      const dataA = new Date(a.dataTele || 0).getTime();
+      const dataB = new Date(b.dataTele || 0).getTime();
+
+      return dataB - dataA;
+    });
+
   return (
     <PageContainer>
       <div className="mb-8 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
@@ -1075,61 +1082,61 @@ ${linkMaps}`
         />
       </div>
 
-      <section className="mb-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-4 border-b border-slate-100 bg-slate-50/70 px-5 py-5 md:flex-row md:items-center md:justify-between md:px-6">
-          <div className="flex items-start gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-100 text-blue-700">
-              <LocateFixed size={21} />
-            </div>
-
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-lg font-bold text-slate-900">Mapa dos motoboys</h2>
-
-                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-                  {motoboysComLocalizacaoRecente.length} com posição recente
-                </span>
+      <div className="grid min-h-[720px] grid-cols-1 gap-6 2xl:grid-cols-[minmax(0,1fr)_430px]">
+        <section className="min-w-0 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-4 border-b border-slate-100 bg-slate-50/70 px-5 py-5 md:flex-row md:items-center md:justify-between md:px-6">
+            <div className="flex items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-100 text-blue-700">
+                <LocateFixed size={21} />
               </div>
 
-              <p className="mt-1 text-sm text-slate-500">
-                {motoboySelecionado
-                  ? `Exibindo a rota atual de ${motoboySelecionado.nome}.`
-                  : "Clique em um motoboy da lista para visualizar a rota atual."}
-              </p>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-lg font-bold text-slate-900">Mapa dos motoboys</h2>
+
+                  <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                    {motoboysComLocalizacaoRecente.length} com posição recente
+                  </span>
+                </div>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  {motoboySelecionado
+                    ? `Exibindo a rota atual de ${motoboySelecionado.nome}.`
+                    : "Clique em um motoboy para visualizar a rota atual."}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row">
+              {motoboySelecionadoId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMotoboySelecionadoId(null);
+                    setMapaMotoboysDisponivel(true);
+                  }}
+                  className="flex h-10 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-medium text-blue-700 transition hover:bg-blue-100"
+                >
+                  <X size={16} />
+                  Ver todos
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => void carregarLocalizacoes()}
+                disabled={carregandoLocalizacoesRef.current}
+                className="flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+              >
+                <RotateCcw size={16} className={carregandoLocalizacoes ? "animate-spin" : ""} />
+                Atualizar posições
+              </button>
             </div>
           </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row">
-            {motoboySelecionadoId && (
-              <button
-                type="button"
-                onClick={() => {
-                  setMotoboySelecionadoId(null);
-                  setMapaMotoboysDisponivel(true);
-                }}
-                className="flex h-10 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-medium text-blue-700 transition hover:bg-blue-100"
-              >
-                <X size={16} />
-                Ver todos
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={() => void carregarLocalizacoes()}
-              disabled={carregandoLocalizacoesRef.current}
-              className="flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
-            >
-              <RotateCcw size={16} className={carregandoLocalizacoes ? "animate-spin" : ""} />
-              Atualizar posições
-            </button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-0 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="min-h-[360px] border-b border-slate-200 bg-slate-100 xl:border-b-0 xl:border-r">
+          <div className="min-h-[520px] bg-slate-100">
             {carregandoLocalizacoes ? (
-              <div className="flex min-h-[360px] items-center justify-center gap-3 text-sm text-slate-500">
+              <div className="flex min-h-[520px] items-center justify-center gap-3 text-sm text-slate-500">
                 <Loader2 size={20} className="animate-spin" />
                 Carregando posições...
               </div>
@@ -1141,11 +1148,11 @@ ${linkMaps}`
                     ? `Mapa com a rota atual de ${motoboySelecionado.nome}`
                     : "Mapa com a posição atual dos motoboys online"
                 }
-                className="h-[360px] w-full object-cover md:h-[440px]"
+                className="h-[520px] w-full object-cover lg:h-[620px] 2xl:h-[680px]"
                 onError={() => setMapaMotoboysDisponivel(false)}
               />
             ) : (
-              <div className="flex min-h-[360px] flex-col items-center justify-center px-6 text-center">
+              <div className="flex min-h-[520px] flex-col items-center justify-center px-6 text-center">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm">
                   <MapPin size={25} />
                 </div>
@@ -1160,7 +1167,7 @@ ${linkMaps}`
             )}
           </div>
 
-          <div className="max-h-[440px] overflow-y-auto p-4 md:p-5">
+          <div className="border-t border-slate-200 bg-white p-4 md:p-5">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h3 className="font-bold text-slate-900">Equipe em campo</h3>
@@ -1180,7 +1187,7 @@ ${linkMaps}`
               </div>
             )}
 
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               {localizacoesMotoboys.map((motoboy, indice) => {
                 const selecionado = motoboySelecionadoId === motoboy.id;
 
@@ -1190,7 +1197,7 @@ ${linkMaps}`
                     key={motoboy.id}
                     onClick={() => selecionarMotoboyNoMapa(motoboy)}
                     disabled={!motoboy.localizacaoRecente}
-                    className={`w-full rounded-2xl border p-4 text-left transition ${
+                    className={`rounded-2xl border p-4 text-left transition ${
                       selecionado
                         ? "border-blue-500 bg-blue-50 ring-4 ring-blue-100"
                         : motoboy.localizacaoRecente
@@ -1249,7 +1256,7 @@ ${linkMaps}`
                       </div>
 
                       <div className="rounded-xl bg-white/80 px-3 py-2">
-                        <span className="block text-slate-400">Teles em andamento</span>
+                        <span className="block text-slate-400">Em andamento</span>
                         <strong className="mt-1 block text-slate-700">
                           {motoboy.telesEmAndamento}
                         </strong>
@@ -1261,7 +1268,7 @@ ${linkMaps}`
                         <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                           Rota atual
                         </span>
-                        <strong className="mt-1 block text-sm text-slate-800">
+                        <strong className="mt-1 block truncate text-sm text-slate-800">
                           {motoboy.teleAtual.solicitante}
                         </strong>
                         <p className="mt-1 text-xs text-slate-500">
@@ -1270,165 +1277,147 @@ ${linkMaps}`
                         </p>
                       </div>
                     )}
-
-                    {motoboy.localizacaoRecente && (
-                      <p className="mt-3 text-xs font-medium text-blue-700">
-                        {selecionado
-                          ? "Rota exibida no mapa. Clique novamente para remover."
-                          : motoboy.teleAtual
-                            ? "Clique para visualizar a rota."
-                            : "Clique para destacar o motoboy no mapa."}
-                      </p>
-                    )}
-
-                    {typeof motoboy.precisao === "number" && (
-                      <p className="mt-2 text-xs text-slate-500">
-                        Precisão aproximada: {Math.round(motoboy.precisao)} m
-                      </p>
-                    )}
                   </button>
                 );
               })}
-
-              {!carregandoLocalizacoes && localizacoesMotoboys.length === 0 && (
-                <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
-                  Nenhum motoboy cadastrado foi retornado pela API.
-                </div>
-              )}
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {teles.length === 0 && (
-        <div className="mb-6 rounded-3xl border border-slate-100 bg-white p-8 text-center shadow-sm">
-          <h2 className="text-xl font-bold text-slate-900">Nenhuma tele cadastrada</h2>
-          <p className="mt-2 text-slate-500">
-            Cadastre uma nova tele para ela aparecer na Central de Operações.
-          </p>
-        </div>
-      )}
-
-      {teles.length > 0 && telesFiltradas.length === 0 && (
-        <div className="mb-6 rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center">
-          <h2 className="text-xl font-bold text-slate-900">Nenhuma tele encontrada</h2>
-          <p className="mt-2 text-slate-500">
-            Não existem operações correspondentes àdata e aos filtros escolhidos.
-          </p>
-
-          <button
-            type="button"
-            onClick={limparFiltros}
-            className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-          >
-            <RotateCcw size={16} />
-            Voltar para hoje
-          </button>
-        </div>
-      )}
-
-      <section className="w-full">
-        <div className="grid w-full grid-cols-1 items-start gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
-          {statusOptions.map((status) => {
-            const telesDoStatus = teles.filter(
-              (tele: Tele) =>
-                tele.status === status &&
-                ehDaDataSelecionada(tele) &&
-                ehDoMotoboySelecionado(tele) &&
-                ehDoClienteSelecionado(tele)
-            );
-
-            return (
-              <div
-                key={status}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  event.dataTransfer.dropEffect = "move";
-                  setStatusSobrevoado(status);
-                }}
-                onDragLeave={(event) => {
-                  if (!event.currentTarget.contains(event.relatedTarget as Node)) {
-                    setStatusSobrevoado(null);
-                  }
-                }}
-                onDrop={(event) => void soltarTeleNaColuna(event, status)}
-                className={`min-h-[560px] min-w-0 rounded-3xl border p-4 shadow-sm transition ${
-                  statusSobrevoado === status
-                    ? "scale-[1.01] ring-4 ring-emerald-300 ring-offset-2"
-                    : ""
-                } ${corColuna(status)}`}
-              >
-                <div className="sticky top-0 z-10 -mx-1 mb-5 overflow-hidden rounded-2xl border border-white/70 bg-white/90 shadow-sm backdrop-blur">
-                  <div className="flex items-start justify-between gap-3 px-4 py-4">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`h-2.5 w-2.5 shrink-0 rounded-full ${corIndicadorStatus(
-                            status
-                          )}`}
-                        />
-
-                        <h2 className="text-base font-bold leading-5 text-slate-900">{status}</h2>
-                      </div>
-
-                      <p className="mt-2 text-xs text-slate-500">{descricaoStatus(status)}</p>
-                    </div>
-
-                    <span className="flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full bg-slate-900 px-2 text-xs font-bold text-white">
-                      {telesDoStatus.length}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/80 px-4 py-3">
-                    <span className="text-xs font-medium text-slate-500">Valor da coluna</span>
-
-                    <strong className="text-sm text-slate-900">
-                      R$ {formatarValor(totalPorStatus(status))}
-                    </strong>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  {telesDoStatus.length === 0 && (
-                    <div className="rounded-2xl border border-dashed border-white/70 bg-white/50 px-4 py-8 text-center text-sm text-slate-500">
-                      Arraste uma tele para esta coluna ou aguarde novas operações.
-                    </div>
-                  )}
-
-                  {telesDoStatus.map((tele: Tele) => (
-                    <TeleCard
-                      key={tele.id}
-                      tele={tele}
-                      arrastando={teleArrastandoId === tele.id}
-                      onDragStart={(event: React.DragEvent<HTMLDivElement>) =>
-                        iniciarArraste(event, tele.id)
-                      }
-                      onDragEnd={encerrarArraste}
-                      motoboys={motoboys}
-                      alterarStatus={alterarStatus}
-                      alterarMotoboy={alterarMotoboy}
-                      alterarEspera={alterarEspera}
-                      alterarSituacaoCobranca={alterarSituacaoCobranca}
-                      descobrirSituacaoCobranca={descobrirSituacaoCobranca}
-                      abrirPagamento={abrirPagamento}
-                      saldoPendenteDaTele={saldoPendenteDaTele}
-                      solicitarExclusao={solicitarExclusao}
-                      editarTele={editarTele}
-                      concluirTele={concluirTele}
-                      gerarOrcamento={gerarOrcamento}
-                      gerarTeleMotoboy={gerarTeleMotoboy}
-                      getParadas={getParadas}
-                      valorEspera={valorEspera}
-                      formatarValor={formatarValor}
-                      converterValor={converterValor}
-                    />
-                  ))}
-                </div>
+        <aside className="min-w-0 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm 2xl:sticky 2xl:top-5 2xl:h-[calc(100vh-2.5rem)]">
+          <div className="border-b border-slate-200 bg-slate-950 px-5 py-5 text-white">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-300">
+                  Operação em tempo real
+                </p>
+                <h2 className="mt-1 text-xl font-bold">Central de Operações</h2>
+                <p className="mt-1 text-sm text-slate-300">
+                  {telesFiltradas.length} teles no período selecionado
+                </p>
               </div>
-            );
-          })}
-        </div>
-      </section>
+
+              <Link
+                href="/nova-tele"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-slate-950 transition hover:bg-emerald-400"
+                aria-label="Criar nova tele"
+              >
+                <Plus size={19} />
+              </Link>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <div className="rounded-xl bg-white/10 px-3 py-2">
+                <span className="block text-[11px] text-slate-300">Valor das teles</span>
+                <strong className="mt-1 block text-sm">R$ {formatarValor(totalFiltrado)}</strong>
+              </div>
+
+              <div className="rounded-xl bg-white/10 px-3 py-2">
+                <span className="block text-[11px] text-slate-300">Saldo pendente</span>
+                <strong className="mt-1 block text-sm text-orange-300">
+                  R$ {formatarValor(saldoPendenteFiltrado)}
+                </strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-b border-slate-200 bg-slate-50 p-3">
+            <div className="grid grid-cols-2 gap-2">
+              {statusOptions.map((status) => {
+                const quantidade = telesFiltradas.filter(
+                  (tele: Tele) => tele.status === status
+                ).length;
+
+                return (
+                  <button
+                    type="button"
+                    key={status}
+                    onClick={() => setStatusSidebar(status)}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = "move";
+                      setStatusSobrevoado(status);
+                    }}
+                    onDragLeave={() => setStatusSobrevoado(null)}
+                    onDrop={(event) => void soltarTeleNaColuna(event, status)}
+                    className={`flex min-h-12 items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left text-xs font-semibold transition ${
+                      statusSidebar === status
+                        ? "border-emerald-500 bg-emerald-50 text-emerald-800"
+                        : statusSobrevoado === status
+                          ? "border-blue-400 bg-blue-50 text-blue-800"
+                          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+                    } ${status === "Entregue" ? "col-span-2" : ""}`}
+                  >
+                    <span className="leading-4">{status}</span>
+                    <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-slate-900 px-1.5 text-[11px] text-white">
+                      {quantidade}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="border-b border-slate-200 px-4 py-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="font-bold text-slate-900">{statusSidebar}</h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  {telesDaSidebar.length} operações • R${" "}
+                  {formatarValor(totalPorStatus(statusSidebar))}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={limparFiltros}
+                disabled={!filtrosSecundariosAtivos}
+                className="flex h-9 items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-3 text-xs font-medium text-slate-600 disabled:opacity-40"
+              >
+                <RotateCcw size={14} />
+                Limpar
+              </button>
+            </div>
+          </div>
+
+          <div className="max-h-[calc(100vh-350px)] space-y-4 overflow-y-auto p-4">
+            {telesDaSidebar.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+                Nenhuma tele nesta etapa.
+              </div>
+            ) : (
+              telesDaSidebar.map((tele: Tele) => (
+                <TeleCard
+                  key={tele.id}
+                  tele={tele}
+                  arrastando={teleArrastandoId === tele.id}
+                  onDragStart={(event: React.DragEvent<HTMLDivElement>) =>
+                    iniciarArraste(event, tele.id)
+                  }
+                  onDragEnd={encerrarArraste}
+                  motoboys={motoboys}
+                  alterarStatus={alterarStatus}
+                  alterarMotoboy={alterarMotoboy}
+                  alterarEspera={alterarEspera}
+                  alterarSituacaoCobranca={alterarSituacaoCobranca}
+                  descobrirSituacaoCobranca={descobrirSituacaoCobranca}
+                  abrirPagamento={abrirPagamento}
+                  saldoPendenteDaTele={saldoPendenteDaTele}
+                  solicitarExclusao={solicitarExclusao}
+                  editarTele={editarTele}
+                  concluirTele={concluirTele}
+                  gerarOrcamento={gerarOrcamento}
+                  gerarTeleMotoboy={gerarTeleMotoboy}
+                  getParadas={getParadas}
+                  valorEspera={valorEspera}
+                  formatarValor={formatarValor}
+                  converterValor={converterValor}
+                />
+              ))
+            )}
+          </div>
+        </aside>
+      </div>
 
       {modalAberto && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
