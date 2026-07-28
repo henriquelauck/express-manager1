@@ -1,4 +1,5 @@
 "use client";
+import MapaMotoboysInterativo from "@/components/maps/MapaMotoboysInterativo";
 import PageContainer from "@/components/ui/PageContainer";
 import PageHeader from "@/components/ui/PageHeader";
 import { useExpressManager } from "@/context/ExpressManagerContext";
@@ -140,7 +141,6 @@ export default function TelesPage() {
   const [localizacoesMotoboys, setLocalizacoesMotoboys] = useState<MotoboyLocalizacao[]>([]);
   const [erroLocalizacoes, setErroLocalizacoes] = useState("");
   const [carregandoLocalizacoes, setCarregandoLocalizacoes] = useState(true);
-  const [mapaMotoboysDisponivel, setMapaMotoboysDisponivel] = useState(true);
   const [motoboySelecionadoId, setMotoboySelecionadoId] = useState<string | null>(null);
   const [statusSidebar, setStatusSidebar] = useState<StatusTele>("Aguardando coleta");
 
@@ -195,7 +195,6 @@ export default function TelesPage() {
 
       setLocalizacoesMotoboys(Array.isArray(dados) ? dados : []);
       setErroLocalizacoes("");
-      setMapaMotoboysDisponivel(true);
     } catch (erro) {
       console.error("Erro ao atualizar localizações dos motoboys.", erro);
       setErroLocalizacoes("Não foi possível atualizar as localizações.");
@@ -917,32 +916,22 @@ ${linkMaps}`
   const motoboySelecionado =
     localizacoesMotoboys.find((motoboy) => motoboy.id === motoboySelecionadoId) || null;
 
-  const assinaturaMapaMotoboys = [
-    motoboySelecionadoId || "todos",
-    ...motoboysComLocalizacaoRecente
-      .map((motoboy) =>
-        [
-          motoboy.id,
-          Number(motoboy.latitude || 0).toFixed(5),
-          Number(motoboy.longitude || 0).toFixed(5),
-        ].join(":")
-      )
-      .sort(),
-  ].join("|");
-
-  const urlMapaMotoboys = motoboySelecionadoId
-    ? `/api/maps/motoboys-online?motoboyId=${encodeURIComponent(
-        motoboySelecionadoId
-      )}&posicoes=${encodeURIComponent(assinaturaMapaMotoboys)}`
-    : `/api/maps/motoboys-online?posicoes=${encodeURIComponent(assinaturaMapaMotoboys)}`;
-
   function selecionarMotoboyNoMapa(motoboy: MotoboyLocalizacao) {
     if (!motoboy.localizacaoRecente) {
       return;
     }
 
-    setMapaMotoboysDisponivel(true);
     setMotoboySelecionadoId((atual) => (atual === motoboy.id ? null : motoboy.id));
+  }
+
+  function selecionarMotoboyPeloMapa(motoboyId: string) {
+    const motoboy = localizacoesMotoboys.find((item) => item.id === motoboyId);
+
+    if (!motoboy || !motoboy.localizacaoRecente) {
+      return;
+    }
+
+    selecionarMotoboyNoMapa(motoboy);
   }
 
   const telesDaSidebar = telesFiltradas
@@ -1113,7 +1102,6 @@ ${linkMaps}`
                   type="button"
                   onClick={() => {
                     setMotoboySelecionadoId(null);
-                    setMapaMotoboysDisponivel(true);
                   }}
                   className="flex h-10 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-medium text-blue-700 transition hover:bg-blue-100"
                 >
@@ -1140,16 +1128,12 @@ ${linkMaps}`
                 <Loader2 size={20} className="animate-spin" />
                 Carregando posições...
               </div>
-            ) : motoboysComLocalizacaoRecente.length > 0 && mapaMotoboysDisponivel ? (
-              <img
-                src={urlMapaMotoboys}
-                alt={
-                  motoboySelecionado
-                    ? `Mapa com a rota atual de ${motoboySelecionado.nome}`
-                    : "Mapa com a posição atual dos motoboys online"
-                }
-                className="h-[520px] w-full object-cover lg:h-[620px] 2xl:h-[680px]"
-                onError={() => setMapaMotoboysDisponivel(false)}
+            ) : motoboysComLocalizacaoRecente.length > 0 ? (
+              <MapaMotoboysInterativo
+                motoboys={motoboysComLocalizacaoRecente}
+                motoboySelecionadoId={motoboySelecionadoId}
+                onSelecionarMotoboy={selecionarMotoboyPeloMapa}
+                className="h-[520px] lg:h-[620px] 2xl:h-[680px]"
               />
             ) : (
               <div className="flex min-h-[520px] flex-col items-center justify-center px-6 text-center">
@@ -1166,7 +1150,6 @@ ${linkMaps}`
               </div>
             )}
           </div>
-
           <div className="border-t border-slate-200 bg-white p-4 md:p-5">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>

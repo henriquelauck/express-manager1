@@ -60,10 +60,20 @@ type ResultadoLocalizacaoNativa = {
   servicoEncontrado?: boolean;
 };
 
+type EstadoPermissoesLocalizacao = {
+  localizacaoDuranteUso: boolean;
+  localizacaoSegundoPlano: boolean;
+  notificacoes: boolean;
+  prontoParaFicarOnline: boolean;
+  precisaAbrirConfiguracoes: boolean;
+};
+
 type LocalizacaoNativaPlugin = {
   iniciar(): Promise<ResultadoLocalizacaoNativa>;
   parar(): Promise<ResultadoLocalizacaoNativa>;
   pararSomAlerta(): Promise<{ parado: boolean }>;
+  verificarPermissoes(): Promise<EstadoPermissoesLocalizacao>;
+  abrirConfiguracoesLocalizacao(): Promise<{ aberto: boolean }>;
 };
 
 type CredenciaisNativasPlugin = {
@@ -143,6 +153,10 @@ export default function MotoboyPage() {
   const [precisaoLocalizacao, setPrecisaoLocalizacao] = useState<number | null>(null);
   const [localizacaoAtualizadaEm, setLocalizacaoAtualizadaEm] = useState<string | null>(null);
   const [miniMapas, setMiniMapas] = useState<Record<string, EstadoMiniMapa>>({});
+  const [permissoesLocalizacao, setPermissoesLocalizacao] =
+    useState<EstadoPermissoesLocalizacao | null>(null);
+  const [verificandoPermissoes, setVerificandoPermissoes] = useState(false);
+  const [abrindoConfiguracoes, setAbrindoConfiguracoes] = useState(false);
 
   const watchIdRef = useRef<number | null>(null);
   const ultimaPosicaoRef = useRef<{
@@ -153,6 +167,48 @@ export default function MotoboyPage() {
   const atualizacaoAutomaticaEmAndamentoRef = useRef(false);
   const teleAtualizandoRef = useRef<string | null>(null);
   const miniMapasConsultadosRef = useRef<Set<string>>(new Set());
+
+  async function verificarPermissoesLocalizacao() {
+    if (!executandoNoAppAndroid()) {
+      return true;
+    }
+
+    setVerificandoPermissoes(true);
+
+    try {
+      const estado = await LocalizacaoNativa.verificarPermissoes();
+
+      setPermissoesLocalizacao(estado);
+
+      return estado.prontoParaFicarOnline;
+    } catch (erroPermissao) {
+      console.error("Não foi possível verificar as permissões nativas:", erroPermissao);
+      return false;
+    } finally {
+      setVerificandoPermissoes(false);
+    }
+  }
+
+  async function abrirConfiguracoesDaLocalizacao() {
+    if (!executandoNoAppAndroid() || abrindoConfiguracoes) {
+      return;
+    }
+
+    setAbrindoConfiguracoes(true);
+    setErroLocalizacao("");
+
+    try {
+      await LocalizacaoNativa.abrirConfiguracoesLocalizacao();
+    } catch (erroConfiguracoes) {
+      setErroLocalizacao(
+        erroConfiguracoes instanceof Error
+          ? erroConfiguracoes.message
+          : "Não foi possível abrir as configurações do aplicativo."
+      );
+    } finally {
+      setAbrindoConfiguracoes(false);
+    }
+  }
 
   async function carregarDados(mostrarAtualizacao = false) {
     if (mostrarAtualizacao) {
@@ -217,13 +273,23 @@ export default function MotoboyPage() {
   useEffect(() => {
     void carregarDados();
     void carregarPresenca();
+    void verificarPermissoesLocalizacao();
 
     const intervaloAtualizacao = window.setInterval(() => {
       void carregarTelesAutomaticamente();
     }, 3000);
 
+    const verificarAoRetornar = () => {
+      if (document.visibilityState === "visible") {
+        void verificarPermissoesLocalizacao();
+      }
+    };
+
+    document.addEventListener("visibilitychange", verificarAoRetornar);
+
     return () => {
       window.clearInterval(intervaloAtualizacao);
+      document.removeEventListener("visibilitychange", verificarAoRetornar);
       pararMonitoramentoLocal();
     };
   }, []);
@@ -478,6 +544,15 @@ export default function MotoboyPage() {
     setErroLocalizacao("");
 
     try {
+      if (executandoNoAppAndroid()) {
+        const permissaoPronta = await verificarPermissoesLocalizacao();
+
+        if (!permissaoPronta) {
+          throw new Error(
+            'Ative "Permitir o tempo todo" nas configurações de localização antes de ficar online.'
+          );
+        }
+      }
       if (typeof navigator === "undefined" || !navigator.geolocation) {
         throw new Error("Este aparelho não oferece suporte à localização.");
       }
@@ -885,10 +960,10 @@ export default function MotoboyPage() {
 
   const entregasAndamento = useMemo(
     () =>
-      telesHoje
+      teles
         .filter((tele) => tele.statusAceite === "ACEITA" && tele.status !== "ENTREGUE")
         .sort(ordenarTelesPorFila),
-    [telesHoje]
+    [teles]
   );
 
   const entregasConcluidas = useMemo(
@@ -972,6 +1047,63 @@ export default function MotoboyPage() {
           </div>
         </header>
 
+        {executandoNoAppAndroid() &&
+          permissoesLocalizacao &&
+          !permissoesLocalizacao.prontoParaFicarOnline && (
+            <section className="mt-5 overflow-hidden rounded-3xl border border-amber-300 bg-amber-50 shadow-sm">
+              <div className="p-5 sm:p-6">
+                <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-500 text-white">
+                      <LocateFixed size={23} />
+                    </div>
+
+                    <div>
+                      <p className="text-sm font-semibold text-amber-700">Permissão obrigatória</p>
+
+                      <h2 className="mt-1 text-xl font-bold text-slate-900">
+                        Ative a localização em segundo plano
+                      </h2>
+
+                      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-700">
+                        Para receber e realizar entregas, permita o acesso à localização em segundo
+                        plano. Assim, sua posição continuará sendo atualizada mesmo com a tela
+                        bloqueada. Ao tocar em “Ficar offline”, o compartilhamento da localização
+                        será encerrado.
+                      </p>
+
+                      <div className="mt-4 rounded-2xl border border-amber-200 bg-white/80 px-4 py-3 text-sm leading-6 text-slate-700">
+                        Abra as configurações e selecione:
+                        <strong className="ml-1">
+                          Permissões → Localização → Permitir o tempo todo
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => void abrirConfiguracoesDaLocalizacao()}
+                    disabled={abrindoConfiguracoes}
+                    className="flex h-12 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-amber-500 px-6 font-semibold text-white transition hover:bg-amber-600 disabled:cursor-wait disabled:opacity-60 md:w-auto"
+                  >
+                    {abrindoConfiguracoes ? (
+                      <>
+                        <Loader2 size={18} className="animate-spin" />
+                        Abrindo...
+                      </>
+                    ) : (
+                      <>
+                        <LocateFixed size={18} />
+                        Ativar permissão
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </section>
+          )}
+
         <section
           className={`mt-5 overflow-hidden rounded-3xl border p-5 shadow-sm sm:p-6 ${
             online ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"
@@ -1032,7 +1164,14 @@ export default function MotoboyPage() {
             <button
               type="button"
               onClick={() => void (online ? ficarOffline() : ficarOnline())}
-              disabled={alterandoPresenca}
+              disabled={
+                alterandoPresenca ||
+                verificandoPermissoes ||
+                (executandoNoAppAndroid() &&
+                  !online &&
+                  permissoesLocalizacao !== null &&
+                  !permissoesLocalizacao.prontoParaFicarOnline)
+              }
               className={`flex h-12 w-full items-center justify-center gap-2 rounded-xl px-6 font-semibold text-white transition disabled:cursor-wait disabled:opacity-60 md:w-auto ${
                 online ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"
               }`}

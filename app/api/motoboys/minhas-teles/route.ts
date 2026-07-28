@@ -3,6 +3,8 @@ import { createHash, timingSafeEqual } from "crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
+const PRAZO_ACEITE_MS = 5 * 60_000;
+
 function respostaErro(mensagem: string, status: number) {
   return NextResponse.json({ erro: mensagem }, { status });
 }
@@ -113,6 +115,56 @@ export async function GET(request: Request) {
       return respostaErro("Acesso negado.", 403);
     }
 
+    /*
+     * Compatibilidade com teles antigas:
+     * antes da implantação do aceite, algumas entregas foram concluídas,
+     * mas permaneceram com AGUARDANDO_ACEITE.
+     */
+    await prisma.tele.updateMany({
+      where: {
+        motoboyId: motoboy.id,
+        status: "ENTREGUE",
+        statusAceite: "AGUARDANDO_ACEITE",
+      },
+      data: {
+        statusAceite: "ACEITA",
+        etapaMotoboy: "CONCLUIDA",
+        ordemMotoboy: null,
+        motivoRecusaMotoboy: null,
+        recusadaPeloMotoboyEm: null,
+      },
+    });
+
+    const limiteExpiracao = new Date(Date.now() - PRAZO_ACEITE_MS);
+
+    /*
+     * Expira somente teles ainda não concluídas.
+     * Uma entrega já marcada como ENTREGUE nunca pode voltar para a Central.
+     */
+    await prisma.tele.updateMany({
+      where: {
+        motoboyId: motoboy.id,
+        statusAceite: "AGUARDANDO_ACEITE",
+        status: {
+          not: "ENTREGUE",
+        },
+        atribuidaAoMotoboyEm: {
+          lte: limiteExpiracao,
+        },
+      },
+      data: {
+        statusAceite: "RECUSADA",
+        etapaMotoboy: null,
+        ordemMotoboy: null,
+        aceitaPeloMotoboyEm: null,
+        recusadaPeloMotoboyEm: new Date(),
+        motivoRecusaMotoboy: "Prazo de aceite expirado",
+        motoboyId: null,
+        motoboyNome: "",
+        status: "AGUARDANDO_MOTOBOY",
+      },
+    });
+
     const teles = await prisma.tele.findMany({
       where: {
         motoboyId: motoboy.id,
@@ -151,7 +203,6 @@ export async function GET(request: Request) {
         teleB.statusAceite === "AGUARDANDO_ACEITE"
       ) {
         const atribuicaoA = teleA.atribuidaAoMotoboyEm?.getTime() ?? teleA.createdAt.getTime();
-
         const atribuicaoB = teleB.atribuidaAoMotoboyEm?.getTime() ?? teleB.createdAt.getTime();
 
         return atribuicaoA - atribuicaoB;
@@ -166,9 +217,10 @@ export async function GET(request: Request) {
     return NextResponse.json(
       telesOrdenadas.map((tele) => ({
         ...tele,
-        aguardandoAceite: tele.statusAceite === "AGUARDANDO_ACEITE",
+        aguardandoAceite: tele.status !== "ENTREGUE" && tele.statusAceite === "AGUARDANDO_ACEITE",
         aceitaPeloMotoboy: tele.statusAceite === "ACEITA",
-        posicaoNaFila: tele.statusAceite === "ACEITA" ? tele.ordemMotoboy : null,
+        posicaoNaFila:
+          tele.statusAceite === "ACEITA" && tele.status !== "ENTREGUE" ? tele.ordemMotoboy : null,
       }))
     );
   } catch (erro) {

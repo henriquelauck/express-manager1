@@ -1,0 +1,2 @@
+﻿app\api\maps\calcular-rota\route.ts
+app\api\maps\imagem-rota\route.ts

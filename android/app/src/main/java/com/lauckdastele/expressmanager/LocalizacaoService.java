@@ -10,8 +10,14 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.location.Location;
+import android.media.AudioAttributes;
+import android.media.Ringtone;
+import android.media.RingtoneManager;
+import android.net.Uri;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
@@ -25,6 +31,7 @@ import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.Priority;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -34,32 +41,98 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class LocalizacaoService extends Service {
 
+    public static final String ACAO_PARAR_SOM =
+            "com.lauckdastele.expressmanager.PARAR_SOM";
+
     private static final String TAG = "ExpressLocalizacao";
     private static final String CANAL_ID = "express_localizacao";
+    private static final String CANAL_NOVAS_TELES_ID = "express_novas_teles";
     private static final int NOTIFICACAO_ID = 1001;
+    private static final int NOTIFICACAO_NOVA_TELE_ID = 2001;
+    private static final long INTERVALO_CONSULTA_TELES_MS = 10000L;
 
     private static final String PREFERENCIAS = "express_manager_seguro";
     private static final String CHAVE_TOKEN = "motoboy_app_token";
+    private static final String CHAVE_TELES_NOTIFICADAS = "teles_notificadas";
 
     private static final String URL_LOCALIZACAO =
             "https://express-manager1.vercel.app/api/motoboys/minha-localizacao";
 
+    private static final String URL_MINHAS_TELES =
+            "https://express-manager1.vercel.app/api/motoboys/minhas-teles";
+
     private FusedLocationProviderClient clienteLocalizacao;
     private LocationCallback callbackLocalizacao;
     private ExecutorService executorRede;
+    private Handler handlerConsultaTeles;
+    private Runnable tarefaConsultaTeles;
+    private Ringtone toqueAlerta;
+    private Handler handlerSomAlerta;
+    private Runnable tarefaRepetirSom;
+    private boolean primeiraConsultaTeles = true;
 
     @Override
     public void onCreate() {
         super.onCreate();
 
         criarCanalNotificacao();
+        criarCanalNovasTeles();
 
         executorRede = Executors.newSingleThreadExecutor();
+        handlerConsultaTeles = new Handler(Looper.getMainLooper());
+        handlerSomAlerta = new Handler(Looper.getMainLooper());
+
+        tarefaRepetirSom = new Runnable() {
+            @Override
+            public void run() {
+                if (toqueAlerta == null) {
+                    return;
+                }
+
+                try {
+                    if (!toqueAlerta.isPlaying()) {
+                        toqueAlerta.play();
+                    }
+                } catch (Exception erro) {
+                    Log.e(
+                            TAG,
+                            "Erro ao repetir alerta sonoro.",
+                            erro
+                    );
+                }
+
+                if (
+                        handlerSomAlerta != null
+                                && toqueAlerta != null
+                ) {
+                    handlerSomAlerta.postDelayed(
+                            this,
+                            3000L
+                    );
+                }
+            }
+        };
+
+        tarefaConsultaTeles = new Runnable() {
+            @Override
+            public void run() {
+                consultarNovasTeles();
+
+                if (handlerConsultaTeles != null) {
+                    handlerConsultaTeles.postDelayed(
+                            this,
+                            INTERVALO_CONSULTA_TELES_MS
+                    );
+                }
+            }
+        };
 
         clienteLocalizacao =
                 LocationServices.getFusedLocationProviderClient(this);
@@ -95,8 +168,34 @@ public class LocalizacaoService extends Service {
             int flags,
             int startId
     ) {
+        if (
+                intent != null
+                        && ACAO_PARAR_SOM.equals(
+                                intent.getAction()
+                        )
+        ) {
+            pararSomAlerta();
+
+            NotificationManager gerenciador =
+                    (NotificationManager) getSystemService(
+                            Context.NOTIFICATION_SERVICE
+                    );
+
+            gerenciador.cancel(
+                    NOTIFICACAO_NOVA_TELE_ID
+            );
+
+            Log.d(
+                    TAG,
+                    "Comando imediato para parar o som recebido."
+            );
+
+            return START_STICKY;
+        }
+
         iniciarComoServicoEmPrimeiroPlano();
         iniciarAtualizacoesLocalizacao();
+        iniciarConsultaPeriodicaTeles();
 
         return START_STICKY;
     }
@@ -177,6 +276,384 @@ public class LocalizacaoService extends Service {
                 requisicao,
                 callbackLocalizacao,
                 getMainLooper()
+        );
+    }
+
+    private void iniciarConsultaPeriodicaTeles() {
+        if (handlerConsultaTeles == null || tarefaConsultaTeles == null) {
+            return;
+        }
+
+        handlerConsultaTeles.removeCallbacks(tarefaConsultaTeles);
+        handlerConsultaTeles.post(tarefaConsultaTeles);
+    }
+
+    private void consultarNovasTeles() {
+        if (executorRede == null || executorRede.isShutdown()) {
+            return;
+        }
+
+        executorRede.execute(() -> {
+            String token = obterToken();
+
+            if (token == null || token.trim().isEmpty()) {
+                Log.e(
+                        TAG,
+                        "Consulta de teles não realizada: token não encontrado."
+                );
+                return;
+            }
+
+            HttpURLConnection conexao = null;
+
+            try {
+                URL url = new URL(URL_MINHAS_TELES);
+
+                conexao = (HttpURLConnection) url.openConnection();
+                conexao.setRequestMethod("GET");
+                conexao.setConnectTimeout(15000);
+                conexao.setReadTimeout(15000);
+                conexao.setRequestProperty("Accept", "application/json");
+                conexao.setRequestProperty(
+                        "Authorization",
+                        "Bearer " + token
+                );
+
+                int status = conexao.getResponseCode();
+
+                InputStream fluxo =
+                        status >= 200 && status < 400
+                                ? conexao.getInputStream()
+                                : conexao.getErrorStream();
+
+                String resposta = lerResposta(fluxo);
+
+                if (status < 200 || status >= 300) {
+                    Log.e(
+                            TAG,
+                            "Servidor recusou consulta de teles. HTTP "
+                                    + status
+                                    + " | "
+                                    + resposta
+                    );
+                    return;
+                }
+
+                processarTelesParaNotificacao(resposta);
+            } catch (Exception erro) {
+                Log.e(
+                        TAG,
+                        "Erro ao consultar novas teles.",
+                        erro
+                );
+            } finally {
+                if (conexao != null) {
+                    conexao.disconnect();
+                }
+            }
+        });
+    }
+
+    private void processarTelesParaNotificacao(String resposta) {
+        try {
+            JSONArray teles = new JSONArray(resposta);
+            Set<String> pendentesAtuais = new HashSet<>();
+
+            for (int indice = 0; indice < teles.length(); indice++) {
+                JSONObject tele = teles.optJSONObject(indice);
+
+                if (tele == null) {
+                    continue;
+                }
+
+                String statusAceite =
+                        tele.optString("statusAceite", "");
+
+                boolean aguardandoAceite =
+                        "AGUARDANDO_ACEITE".equals(statusAceite)
+                                || tele.optBoolean("aguardandoAceite", false);
+
+                if (!aguardandoAceite) {
+                    continue;
+                }
+
+                String teleId = tele.optString("id", "").trim();
+
+                if (teleId.isEmpty()) {
+                    continue;
+                }
+
+                pendentesAtuais.add(teleId);
+            }
+
+            SharedPreferences preferencias =
+                    getSharedPreferences(
+                            PREFERENCIAS,
+                            Context.MODE_PRIVATE
+                    );
+
+            Set<String> notificadasSalvas =
+                    preferencias.getStringSet(
+                            CHAVE_TELES_NOTIFICADAS,
+                            new HashSet<>()
+                    );
+
+            Set<String> notificadas =
+                    new HashSet<>(notificadasSalvas);
+
+            boolean encontrouNova = false;
+
+            if (primeiraConsultaTeles) {
+                notificadas.clear();
+                notificadas.addAll(pendentesAtuais);
+                primeiraConsultaTeles = false;
+            } else {
+                for (String teleId : pendentesAtuais) {
+                    if (!notificadas.contains(teleId)) {
+                        encontrouNova = true;
+                        notificadas.add(teleId);
+                    }
+                }
+            }
+
+            notificadas.retainAll(pendentesAtuais);
+
+            preferencias
+                    .edit()
+                    .putStringSet(
+                            CHAVE_TELES_NOTIFICADAS,
+                            notificadas
+                    )
+                    .apply();
+
+            if (pendentesAtuais.isEmpty()) {
+                pararSomAlerta();
+            } else if (encontrouNova) {
+                iniciarSomAlerta();
+            }
+
+            if (encontrouNova) {
+                exibirNotificacaoNovaTele(
+                        pendentesAtuais.size()
+                );
+            }
+        } catch (Exception erro) {
+            Log.e(
+                    TAG,
+                    "Erro ao processar teles para notificação.",
+                    erro
+            );
+        }
+    }
+
+    private void iniciarSomAlerta() {
+        Handler handlerPrincipal =
+                handlerSomAlerta != null
+                        ? handlerSomAlerta
+                        : new Handler(Looper.getMainLooper());
+
+        handlerPrincipal.post(() -> {
+            try {
+                if (
+                        toqueAlerta != null
+                                && toqueAlerta.isPlaying()
+                ) {
+                    return;
+                }
+
+                pararSomAlertaInterno();
+
+                Uri som = RingtoneManager.getDefaultUri(
+                        RingtoneManager.TYPE_ALARM
+                );
+
+                if (som == null) {
+                    som = RingtoneManager.getDefaultUri(
+                            RingtoneManager.TYPE_NOTIFICATION
+                    );
+                }
+
+                if (som == null) {
+                    Log.e(
+                            TAG,
+                            "Nenhum som de alarme disponível no aparelho."
+                    );
+                    return;
+                }
+
+                toqueAlerta = RingtoneManager.getRingtone(
+                        getApplicationContext(),
+                        som
+                );
+
+                if (toqueAlerta == null) {
+                    Log.e(
+                            TAG,
+                            "Não foi possível criar o toque de alerta."
+                    );
+                    return;
+                }
+
+                AudioAttributes atributos =
+                        new AudioAttributes.Builder()
+                                .setUsage(
+                                        AudioAttributes.USAGE_ALARM
+                                )
+                                .setContentType(
+                                        AudioAttributes.CONTENT_TYPE_SONIFICATION
+                                )
+                                .build();
+
+                toqueAlerta.setAudioAttributes(atributos);
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    toqueAlerta.setLooping(true);
+                }
+
+                toqueAlerta.play();
+
+                if (
+                        Build.VERSION.SDK_INT < Build.VERSION_CODES.P
+                                && handlerSomAlerta != null
+                                && tarefaRepetirSom != null
+                ) {
+                    handlerSomAlerta.removeCallbacks(
+                            tarefaRepetirSom
+                    );
+
+                    handlerSomAlerta.postDelayed(
+                            tarefaRepetirSom,
+                            3000L
+                    );
+                }
+
+                Log.d(
+                        TAG,
+                        "Alerta sonoro de alarme iniciado."
+                );
+            } catch (Exception erro) {
+                Log.e(
+                        TAG,
+                        "Erro ao iniciar alerta sonoro.",
+                        erro
+                );
+
+                pararSomAlertaInterno();
+            }
+        });
+    }
+
+    private void pararSomAlerta() {
+        Handler handlerPrincipal =
+                handlerSomAlerta != null
+                        ? handlerSomAlerta
+                        : new Handler(Looper.getMainLooper());
+
+        handlerPrincipal.post(
+                this::pararSomAlertaInterno
+        );
+    }
+
+    private void pararSomAlertaInterno() {
+        if (
+                handlerSomAlerta != null
+                        && tarefaRepetirSom != null
+        ) {
+            handlerSomAlerta.removeCallbacks(
+                    tarefaRepetirSom
+            );
+        }
+
+        if (toqueAlerta == null) {
+            return;
+        }
+
+        try {
+            if (toqueAlerta.isPlaying()) {
+                toqueAlerta.stop();
+            }
+        } catch (Exception erro) {
+            Log.e(
+                    TAG,
+                    "Erro ao parar alerta sonoro.",
+                    erro
+            );
+        }
+
+        toqueAlerta = null;
+
+        Log.d(
+                TAG,
+                "Alerta sonoro encerrado."
+        );
+    }
+
+    private void exibirNotificacaoNovaTele(int quantidadePendentes) {
+        Intent abrirAplicativo =
+                new Intent(
+                        this,
+                        MainActivity.class
+                );
+
+        abrirAplicativo.setFlags(
+                Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        | Intent.FLAG_ACTIVITY_CLEAR_TOP
+        );
+
+        int flagsPendingIntent =
+                PendingIntent.FLAG_UPDATE_CURRENT;
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            flagsPendingIntent |= PendingIntent.FLAG_IMMUTABLE;
+        }
+
+        PendingIntent pendingIntent =
+                PendingIntent.getActivity(
+                        this,
+                        1,
+                        abrirAplicativo,
+                        flagsPendingIntent
+                );
+
+        String mensagem =
+                quantidadePendentes > 1
+                        ? "Você tem "
+                                + quantidadePendentes
+                                + " teles aguardando aceite."
+                        : "Uma nova tele está aguardando seu aceite.";
+
+        NotificationCompat.Builder notificacao =
+                new NotificationCompat.Builder(
+                        this,
+                        CANAL_NOVAS_TELES_ID
+                )
+                        .setSmallIcon(
+                                android.R.drawable.ic_dialog_info
+                        )
+                        .setContentTitle(
+                                "Nova tele recebida"
+                        )
+                        .setContentText(mensagem)
+                        .setContentIntent(pendingIntent)
+                        .setAutoCancel(true)
+                        .setPriority(
+                                NotificationCompat.PRIORITY_HIGH
+                        )
+                        .setCategory(
+                                NotificationCompat.CATEGORY_MESSAGE
+                        )
+                        .setDefaults(
+                                NotificationCompat.DEFAULT_ALL
+                        );
+
+        NotificationManager gerenciador =
+                (NotificationManager) getSystemService(
+                        Context.NOTIFICATION_SERVICE
+                );
+
+        gerenciador.notify(
+                NOTIFICACAO_NOVA_TELE_ID,
+                notificacao.build()
         );
     }
 
@@ -366,6 +843,29 @@ public class LocalizacaoService extends Service {
         gerenciador.createNotificationChannel(canal);
     }
 
+    private void criarCanalNovasTeles() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return;
+        }
+
+        NotificationChannel canal = new NotificationChannel(
+                CANAL_NOVAS_TELES_ID,
+                "Novas teles",
+                NotificationManager.IMPORTANCE_HIGH
+        );
+
+        canal.setDescription(
+                "Avisa quando uma nova tele precisa ser aceita."
+        );
+
+        canal.enableVibration(true);
+
+        NotificationManager gerenciador =
+                getSystemService(NotificationManager.class);
+
+        gerenciador.createNotificationChannel(canal);
+    }
+
     @Override
     public void onDestroy() {
         if (
@@ -376,6 +876,26 @@ public class LocalizacaoService extends Service {
                     callbackLocalizacao
             );
         }
+
+        if (
+                handlerConsultaTeles != null
+                        && tarefaConsultaTeles != null
+        ) {
+            handlerConsultaTeles.removeCallbacks(
+                    tarefaConsultaTeles
+            );
+        }
+
+        if (
+                handlerSomAlerta != null
+                        && tarefaRepetirSom != null
+        ) {
+            handlerSomAlerta.removeCallbacks(
+                    tarefaRepetirSom
+            );
+        }
+
+        pararSomAlertaInterno();
 
         if (executorRede != null) {
             executorRede.shutdownNow();
