@@ -1864,6 +1864,152 @@ function corRecebimento(recebimento: string) {
   return "border-amber-200 bg-amber-50 text-amber-800";
 }
 
+function rotuloEtapaMotoboy(etapa?: string | null) {
+  const mapa: Record<string, string> = {
+    AGUARDANDO_INICIO_COLETA: "Aguardando saída para coleta",
+    EM_ROTA_COLETA: "Indo até a coleta",
+    CHEGOU_NA_COLETA: "Chegou na coleta",
+    EM_ROTA_ENTREGA: "Indo até a entrega",
+    CHEGOU_NA_ENTREGA: "Chegou na entrega",
+    CONCLUIDA: "Entrega concluída",
+  };
+
+  return etapa ? mapa[etapa] || etapa : "";
+}
+
+function estiloEtapaMotoboy(etapa?: string | null) {
+  if (etapa === "AGUARDANDO_INICIO_COLETA") {
+    return "border-amber-200 bg-amber-50 text-amber-800";
+  }
+
+  if (etapa === "EM_ROTA_COLETA") {
+    return "border-blue-200 bg-blue-50 text-blue-800";
+  }
+
+  if (etapa === "CHEGOU_NA_COLETA") {
+    return "border-violet-200 bg-violet-50 text-violet-800";
+  }
+
+  if (etapa === "EM_ROTA_ENTREGA") {
+    return "border-sky-200 bg-sky-50 text-sky-800";
+  }
+
+  if (etapa === "CHEGOU_NA_ENTREGA") {
+    return "border-indigo-200 bg-indigo-50 text-indigo-800";
+  }
+
+  if (etapa === "CONCLUIDA") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  }
+
+  return "border-slate-200 bg-slate-50 text-slate-700";
+}
+
+function formatarHorarioOperacional(data?: string | null) {
+  if (!data) return null;
+
+  const dataConvertida = new Date(data);
+
+  if (Number.isNaN(dataConvertida.getTime())) {
+    return null;
+  }
+
+  return dataConvertida.toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "America/Sao_Paulo",
+  });
+}
+
+function LinhaTempoMotoboy({ tele }: { tele: Tele }) {
+  const eventos = [
+    {
+      chave: "aceite",
+      titulo: "Tele aceita",
+      data: tele.aceitaPeloMotoboyEm,
+    },
+    {
+      chave: "rota-coleta",
+      titulo: "Iniciou rota até a coleta",
+      data: tele.rotaColetaIniciadaEm,
+    },
+    {
+      chave: "chegada-coleta",
+      titulo: "Chegou na coleta",
+      data: tele.chegouNaColetaEm,
+    },
+    {
+      chave: "rota-entrega",
+      titulo: "Iniciou a entrega",
+      data: tele.entregaIniciadaEm,
+    },
+    {
+      chave: "chegada-entrega",
+      titulo: "Chegou na entrega",
+      data: tele.chegouNaEntregaEm,
+    },
+    {
+      chave: "conclusao",
+      titulo: "Entrega concluída",
+      data: tele.concluidaPeloMotoboyEm,
+    },
+  ];
+
+  const eventosRegistrados = eventos.filter((evento) => Boolean(evento.data));
+
+  if (!tele.etapaMotoboy && eventosRegistrados.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="border-b border-slate-100 bg-slate-50/70 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Timer size={16} className="text-blue-600" />
+          <h4 className="text-sm font-bold text-slate-900">Andamento do motoboy</h4>
+        </div>
+
+        {tele.etapaMotoboy && (
+          <span
+            className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${estiloEtapaMotoboy(
+              tele.etapaMotoboy
+            )}`}
+          >
+            {rotuloEtapaMotoboy(tele.etapaMotoboy)}
+          </span>
+        )}
+      </div>
+
+      {eventosRegistrados.length > 0 ? (
+        <div className="mt-4 space-y-3">
+          {eventosRegistrados.map((evento, indice) => (
+            <div key={evento.chave} className="flex items-start gap-3">
+              <div className="flex w-5 shrink-0 flex-col items-center">
+                <span className="mt-1 h-2.5 w-2.5 rounded-full bg-emerald-500" />
+
+                {indice < eventosRegistrados.length - 1 && (
+                  <span className="mt-1 h-6 w-px bg-slate-200" />
+                )}
+              </div>
+
+              <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+                <span className="text-xs font-medium text-slate-700">{evento.titulo}</span>
+                <strong className="shrink-0 text-xs text-slate-900">
+                  {formatarHorarioOperacional(evento.data)}
+                </strong>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 text-xs text-slate-500">
+          Aguardando o motoboy iniciar o andamento pelo aplicativo.
+        </p>
+      )}
+    </section>
+  );
+}
+
 function TeleCard({
   tele,
   arrastando,
@@ -1947,6 +2093,19 @@ function TeleCard({
             <h3 className="mt-1 break-words text-[15px] font-bold leading-6 text-slate-900">
               {resumoRota}
             </h3>
+
+            {tele.etapaMotoboy && (
+              <div className="mt-3">
+                <span
+                  className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${estiloEtapaMotoboy(
+                    tele.etapaMotoboy
+                  )}`}
+                >
+                  <Timer size={12} />
+                  {rotuloEtapaMotoboy(tele.etapaMotoboy)}
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="flex shrink-0 flex-col items-end gap-3">
@@ -2026,6 +2185,8 @@ function TeleCard({
               <strong className="text-lg text-emerald-700">R$ {tele.valor}</strong>
             </div>
           </div>
+
+          <LinhaTempoMotoboy tele={tele} />
 
           {/* Rota */}
           <div className="p-4">
