@@ -13,6 +13,7 @@ import {
   Copy,
   Filter,
   Loader2,
+  LocateFixed,
   MapPin,
   MessageCircle,
   Pencil,
@@ -23,6 +24,8 @@ import {
   Timer,
   Trash2,
   WalletCards,
+  Wifi,
+  WifiOff,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -54,6 +57,24 @@ type Parada = {
   observacao: string;
 };
 
+type MotoboyLocalizacao = {
+  id: string;
+  nome: string;
+  telefone?: string | null;
+  moto?: string | null;
+  placa?: string | null;
+  online: boolean;
+  latitude?: number | null;
+  longitude?: number | null;
+  precisao?: number | null;
+  onlineDesde?: string | null;
+  localizacaoAtualizadaEm?: string | null;
+  segundosSemAtualizar?: number | null;
+  possuiCoordenadas: boolean;
+  localizacaoRecente: boolean;
+  telesEmAndamento: number;
+};
+
 const statusOptions: StatusTele[] = [
   "Aguardando cliente",
   "Aguardando motoboy dispon\u00edvel",
@@ -72,6 +93,8 @@ export default function TelesPage() {
   const esperaTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const carregandoTelesRef = useRef(false);
   const carregarTelesRef = useRef<() => Promise<void>>(async () => {});
+  const carregandoLocalizacoesRef = useRef(false);
+  const carregarLocalizacoesRef = useRef<() => Promise<void>>(async () => {});
   const interacaoEmAndamentoRef = useRef(false);
 
   const [modalAberto, setModalAberto] = useState(false);
@@ -92,6 +115,11 @@ export default function TelesPage() {
   const [teleParaExcluir, setTeleParaExcluir] = useState<Tele | null>(null);
   const [excluindoTele, setExcluindoTele] = useState(false);
   const [erroExclusao, setErroExclusao] = useState("");
+  const [localizacoesMotoboys, setLocalizacoesMotoboys] = useState<MotoboyLocalizacao[]>([]);
+  const [erroLocalizacoes, setErroLocalizacoes] = useState("");
+  const [carregandoLocalizacoes, setCarregandoLocalizacoes] = useState(true);
+  const [versaoMapaMotoboys, setVersaoMapaMotoboys] = useState(Date.now());
+  const [mapaMotoboysDisponivel, setMapaMotoboysDisponivel] = useState(true);
 
   const carregarTeles = useCallback(async () => {
     if (carregandoTelesRef.current) return;
@@ -118,9 +146,50 @@ export default function TelesPage() {
     }
   }, [setTeles]);
 
+  const carregarLocalizacoes = useCallback(async () => {
+    if (carregandoLocalizacoesRef.current) return;
+
+    carregandoLocalizacoesRef.current = true;
+
+    try {
+      const resposta = await fetch("/api/motoboys/localizacoes", {
+        cache: "no-store",
+      });
+
+      if (!resposta.ok) {
+        let mensagem = "Não foi possível carregar as localizações.";
+
+        try {
+          const dadosErro = await resposta.json();
+          mensagem = dadosErro?.erro || mensagem;
+        } catch {}
+
+        setErroLocalizacoes(mensagem);
+        return;
+      }
+
+      const dados = await resposta.json();
+
+      setLocalizacoesMotoboys(Array.isArray(dados) ? dados : []);
+      setErroLocalizacoes("");
+      setVersaoMapaMotoboys(Date.now());
+      setMapaMotoboysDisponivel(true);
+    } catch (erro) {
+      console.error("Erro ao atualizar localizações dos motoboys.", erro);
+      setErroLocalizacoes("Não foi possível atualizar as localizações.");
+    } finally {
+      carregandoLocalizacoesRef.current = false;
+      setCarregandoLocalizacoes(false);
+    }
+  }, []);
+
   useEffect(() => {
     carregarTelesRef.current = carregarTeles;
   }, [carregarTeles]);
+
+  useEffect(() => {
+    carregarLocalizacoesRef.current = carregarLocalizacoes;
+  }, [carregarLocalizacoes]);
 
   useEffect(() => {
     interacaoEmAndamentoRef.current =
@@ -143,6 +212,7 @@ export default function TelesPage() {
 
   useEffect(() => {
     void carregarTelesRef.current();
+    void carregarLocalizacoesRef.current();
 
     const atualizarSePermitido = () => {
       if (document.visibilityState !== "visible" || interacaoEmAndamentoRef.current) {
@@ -150,6 +220,7 @@ export default function TelesPage() {
       }
 
       void carregarTelesRef.current();
+      void carregarLocalizacoesRef.current();
     };
 
     const intervalo = window.setInterval(atualizarSePermitido, 3000);
@@ -819,6 +890,11 @@ ${linkMaps}`
       .reduce((total: number, tele: Tele) => total + converterValor(tele.valor), 0);
   }
 
+  const motoboysOnline = localizacoesMotoboys.filter((motoboy) => motoboy.online);
+  const motoboysComLocalizacaoRecente = motoboysOnline.filter(
+    (motoboy) => motoboy.localizacaoRecente
+  );
+
   return (
     <PageContainer>
       <div className="mb-8 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
@@ -946,6 +1022,174 @@ ${linkMaps}`
           alerta={saldoPendenteFiltrado > 0}
         />
       </div>
+
+      <section className="mb-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-4 border-b border-slate-100 bg-slate-50/70 px-5 py-5 md:flex-row md:items-center md:justify-between md:px-6">
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-100 text-blue-700">
+              <LocateFixed size={21} />
+            </div>
+
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-lg font-bold text-slate-900">Mapa dos motoboys</h2>
+
+                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                  {motoboysComLocalizacaoRecente.length} com posição recente
+                </span>
+              </div>
+
+              <p className="mt-1 text-sm text-slate-500">
+                A posição é atualizada automaticamente enquanto o motoboy estiver online.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => void carregarLocalizacoes()}
+            disabled={carregandoLocalizacoesRef.current}
+            className="flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+          >
+            <RotateCcw size={16} className={carregandoLocalizacoes ? "animate-spin" : ""} />
+            Atualizar posições
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 gap-0 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="min-h-[360px] border-b border-slate-200 bg-slate-100 xl:border-b-0 xl:border-r">
+            {carregandoLocalizacoes ? (
+              <div className="flex min-h-[360px] items-center justify-center gap-3 text-sm text-slate-500">
+                <Loader2 size={20} className="animate-spin" />
+                Carregando posições...
+              </div>
+            ) : motoboysComLocalizacaoRecente.length > 0 && mapaMotoboysDisponivel ? (
+              <img
+                key={versaoMapaMotoboys}
+                src={`/api/maps/motoboys-online?versao=${versaoMapaMotoboys}`}
+                alt="Mapa com a posição atual dos motoboys online"
+                className="h-[360px] w-full object-cover md:h-[440px]"
+                onError={() => setMapaMotoboysDisponivel(false)}
+              />
+            ) : (
+              <div className="flex min-h-[360px] flex-col items-center justify-center px-6 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm">
+                  <MapPin size={25} />
+                </div>
+
+                <h3 className="mt-4 font-bold text-slate-800">Nenhuma posição recente no mapa</h3>
+
+                <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">
+                  O motoboy precisa estar online, com GPS ativo e ter atualizado sua localização nos
+                  últimos dois minutos.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="max-h-[440px] overflow-y-auto p-4 md:p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="font-bold text-slate-900">Equipe em campo</h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  {motoboysOnline.length} online de {localizacoesMotoboys.length} cadastrados
+                </p>
+              </div>
+
+              <span className="flex h-9 min-w-9 items-center justify-center rounded-xl bg-slate-900 px-3 text-sm font-bold text-white">
+                {motoboysOnline.length}
+              </span>
+            </div>
+
+            {erroLocalizacoes && (
+              <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {erroLocalizacoes}
+              </div>
+            )}
+
+            <div className="space-y-3">
+              {localizacoesMotoboys.map((motoboy, indice) => (
+                <div
+                  key={motoboy.id}
+                  className={`rounded-2xl border p-4 ${
+                    motoboy.localizacaoRecente
+                      ? "border-emerald-200 bg-emerald-50/70"
+                      : motoboy.online
+                        ? "border-amber-200 bg-amber-50/70"
+                        : "border-slate-200 bg-slate-50"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <span
+                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                          motoboy.localizacaoRecente
+                            ? "bg-emerald-600 text-white"
+                            : motoboy.online
+                              ? "bg-amber-500 text-white"
+                              : "bg-slate-200 text-slate-500"
+                        }`}
+                      >
+                        {motoboy.localizacaoRecente ? indice + 1 : <Bike size={17} />}
+                      </span>
+
+                      <div className="min-w-0">
+                        <p className="truncate font-bold text-slate-900">{motoboy.nome}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {[motoboy.moto, motoboy.placa].filter(Boolean).join(" • ") ||
+                            "Moto não informada"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <span
+                      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                        motoboy.online
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-slate-200 text-slate-600"
+                      }`}
+                    >
+                      {motoboy.online ? <Wifi size={12} /> : <WifiOff size={12} />}
+                      {motoboy.online ? "Online" : "Offline"}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-xl bg-white/80 px-3 py-2">
+                      <span className="block text-slate-400">Última posição</span>
+                      <strong className="mt-1 block text-slate-700">
+                        {formatarTempoLocalizacaoGestor(
+                          motoboy.localizacaoAtualizadaEm,
+                          motoboy.segundosSemAtualizar
+                        )}
+                      </strong>
+                    </div>
+
+                    <div className="rounded-xl bg-white/80 px-3 py-2">
+                      <span className="block text-slate-400">Teles em andamento</span>
+                      <strong className="mt-1 block text-slate-700">
+                        {motoboy.telesEmAndamento}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {typeof motoboy.precisao === "number" && (
+                    <p className="mt-3 text-xs text-slate-500">
+                      Precisão aproximada: {Math.round(motoboy.precisao)} m
+                    </p>
+                  )}
+                </div>
+              ))}
+
+              {!carregandoLocalizacoes && localizacoesMotoboys.length === 0 && (
+                <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
+                  Nenhum motoboy cadastrado foi retornado pela API.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
 
       {teles.length === 0 && (
         <div className="mb-6 rounded-3xl border border-slate-100 bg-white p-8 text-center shadow-sm">
@@ -1676,6 +1920,36 @@ ${linkMaps}`
       </Link>
     </PageContainer>
   );
+}
+
+function formatarTempoLocalizacaoGestor(
+  data?: string | null,
+  segundosSemAtualizar?: number | null
+) {
+  if (!data) return "Sem localização";
+
+  if (typeof segundosSemAtualizar === "number") {
+    if (segundosSemAtualizar < 10) return "Agora";
+    if (segundosSemAtualizar < 60) return `Há ${segundosSemAtualizar}s`;
+
+    const minutos = Math.floor(segundosSemAtualizar / 60);
+
+    if (minutos < 60) {
+      return minutos === 1 ? "Há 1 minuto" : `Há ${minutos} minutos`;
+    }
+  }
+
+  const dataConvertida = new Date(data);
+
+  if (Number.isNaN(dataConvertida.getTime())) {
+    return "Horário indisponível";
+  }
+
+  return dataConvertida.toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "America/Sao_Paulo",
+  });
 }
 
 type ResumoOperacaoProps = {
