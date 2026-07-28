@@ -267,18 +267,74 @@ export async function GET(request: Request) {
       );
     }
 
+    const chave = process.env.GOOGLE_MAPS_API_KEY;
+
+    if (chave) {
+      const inicio = pontos[0];
+      const fim = pontos[pontos.length - 1];
+
+      const parametros = new URLSearchParams({
+        size: "600x300",
+        scale: "2",
+        format: "png",
+        maptype: "roadmap",
+        language: "pt-BR",
+        region: "BR",
+        key: chave,
+      });
+
+      parametros.append("path", `color:0x059669ff|weight:6|enc:${polyline}`);
+
+      parametros.append("markers", `size:mid|color:0x0f172a|label:1|${inicio.lat},${inicio.lng}`);
+
+      parametros.append("markers", `size:mid|color:0x059669|label:2|${fim.lat},${fim.lng}`);
+
+      const urlGoogle = `https://maps.googleapis.com/maps/api/staticmap?${parametros.toString()}`;
+
+      const respostaGoogle = await fetch(urlGoogle, {
+        cache: "no-store",
+      });
+
+      const tipoConteudo = respostaGoogle.headers.get("content-type") || "";
+
+      if (respostaGoogle.ok && tipoConteudo.startsWith("image/")) {
+        const imagem = await respostaGoogle.arrayBuffer();
+
+        return new NextResponse(imagem, {
+          status: 200,
+          headers: {
+            "Content-Type": tipoConteudo,
+            "Cache-Control": "private, max-age=300",
+            "X-Content-Type-Options": "nosniff",
+          },
+        });
+      }
+
+      const detalheErro = await respostaGoogle.text().catch(() => "");
+
+      console.error(
+        "Maps Static API não retornou uma imagem:",
+        respostaGoogle.status,
+        tipoConteudo,
+        detalheErro.slice(0, 500)
+      );
+    } else {
+      console.error("GOOGLE_MAPS_API_KEY não está configurada.");
+    }
+
     const svg = gerarSvgRota(pontos);
 
     return new NextResponse(svg, {
       status: 200,
       headers: {
         "Content-Type": "image/svg+xml; charset=utf-8",
-        "Cache-Control": "private, max-age=300",
+        "Cache-Control": "private, max-age=60",
         "X-Content-Type-Options": "nosniff",
+        "X-Mapa-Fallback": "svg",
       },
     });
   } catch (erro) {
-    console.error("Erro ao gerar minimapa SVG:", erro);
+    console.error("Erro ao gerar imagem da rota:", erro);
 
     return NextResponse.json(
       {
