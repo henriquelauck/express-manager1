@@ -15,7 +15,121 @@ function inicialDoNome(nome: string) {
   return /^[A-Z0-9]$/.test(inicial) ? inicial : "M";
 }
 
-export async function GET() {
+function coordenadasValidas(latitude: unknown, longitude: unknown) {
+  return (
+    typeof latitude === "number" &&
+    typeof longitude === "number" &&
+    Number.isFinite(latitude) &&
+    Number.isFinite(longitude)
+  );
+}
+
+function destinoDaEtapa(etapa: string | null, paradas: Array<{ endereco: string }>) {
+  const enderecos = paradas.map((parada) => String(parada.endereco || "").trim()).filter(Boolean);
+
+  if (enderecos.length === 0) {
+    return null;
+  }
+
+  if (
+    etapa === "AGUARDANDO_INICIO_COLETA" ||
+    etapa === "EM_ROTA_COLETA" ||
+    etapa === "CHEGOU_NA_COLETA"
+  ) {
+    return enderecos[0];
+  }
+
+  return enderecos[enderecos.length - 1];
+}
+
+async function geocodificarDestino(endereco: string, chave: string) {
+  const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
+
+  url.searchParams.set("address", endereco);
+  url.searchParams.set("language", "pt-BR");
+  url.searchParams.set("region", "BR");
+  url.searchParams.set("key", chave);
+
+  const resposta = await fetch(url.toString(), {
+    cache: "no-store",
+  });
+
+  if (!resposta.ok) {
+    return null;
+  }
+
+  const dados = await resposta.json();
+  const localizacao = dados?.results?.[0]?.geometry?.location;
+
+  if (typeof localizacao?.lat !== "number" || typeof localizacao?.lng !== "number") {
+    console.error("Não foi possível geocodificar o destino:", dados?.status, dados?.error_message);
+
+    return null;
+  }
+
+  return {
+    latitude: localizacao.lat as number,
+    longitude: localizacao.lng as number,
+  };
+}
+
+async function buscarPolylineRota({
+  chave,
+  origemLatitude,
+  origemLongitude,
+  destinoLatitude,
+  destinoLongitude,
+}: {
+  chave: string;
+  origemLatitude: number;
+  origemLongitude: number;
+  destinoLatitude: number;
+  destinoLongitude: number;
+}) {
+  const resposta = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Goog-Api-Key": chave,
+      "X-Goog-FieldMask": "routes.polyline.encodedPolyline",
+    },
+    body: JSON.stringify({
+      origin: {
+        location: {
+          latLng: {
+            latitude: origemLatitude,
+            longitude: origemLongitude,
+          },
+        },
+      },
+      destination: {
+        location: {
+          latLng: {
+            latitude: destinoLatitude,
+            longitude: destinoLongitude,
+          },
+        },
+      },
+      travelMode: "DRIVE",
+      routingPreference: "TRAFFIC_AWARE",
+      languageCode: "pt-BR",
+      units: "METRIC",
+    }),
+    cache: "no-store",
+  });
+
+  const dados = await resposta.json();
+
+  if (!resposta.ok) {
+    console.error("Routes API não retornou a rota:", dados?.error?.message || resposta.status);
+
+    return null;
+  }
+
+  return dados?.routes?.[0]?.polyline?.encodedPolyline || null;
+}
+
+export async function GET(request: Request) {
   try {
     const cookieStore = await cookies();
     const userId = cookieStore.get("express_user_id")?.value;
@@ -43,6 +157,8 @@ export async function GET() {
       return respostaErro("Chave do Google Maps não configurada.", 500);
     }
 
+    const { searchParams } = new URL(request.url);
+    const motoboySelecionadoId = searchParams.get("motoboyId");
     const limiteAtualizacao = new Date(Date.now() - 2 * 60 * 1000);
 
     const motoboys = await prisma.motoboy.findMany({
@@ -59,6 +175,7 @@ export async function GET() {
         },
       },
       select: {
+        id: true,
         nome: true,
         latitude: true,
         longitude: true,
@@ -82,18 +199,106 @@ export async function GET() {
       key: chave,
     });
 
-    motoboys.forEach((motoboy, indice) => {
-      const latitude = Number(motoboy.latitude);
-      const longitude = Number(motoboy.longitude);
+    let exibiuMotoboySelecionado = false;
 
-      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-        return;
+    if (motoboySelecionadoId) {
+      const motoboySelecionado = await prisma.motoboy.findUnique({
+        where: {
+          id: motoboySelecionadoId,
+        },
+        select: {
+          id: true,
+          nome: true,
+          online: true,
+          latitude: true,
+          longitude: true,
+          localizacaoAtualizadaEm: true,
+          teles: {
+            where: {
+              statusAceite: "ACEITA",
+              status: {
+                not: "ENTREGUE",
+              },
+            },
+            orderBy: [
+              {
+                ordemMotoboy: "asc",
+              },
+              {
+                aceitaPeloMotoboyEm: "asc",
+              },
+            ],
+            take: 1,
+            select: {
+              etapaMotoboy: true,
+              paradas: {
+                orderBy: {
+                  ordem: "asc",
+                },
+                select: {
+                  endereco: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (
+        motoboySelecionado &&
+        motoboySelecionado.online &&
+        coordenadasValidas(motoboySelecionado.latitude, motoboySelecionado.longitude)
+      ) {
+        const origemLatitude = motoboySelecionado.latitude as number;
+        const origemLongitude = motoboySelecionado.longitude as number;
+        const teleAtual = motoboySelecionado.teles[0] || null;
+        const destinoEndereco = teleAtual
+          ? destinoDaEtapa(teleAtual.etapaMotoboy, teleAtual.paradas)
+          : null;
+
+        parametros.append("markers", `color:blue|label:M|${origemLatitude},${origemLongitude}`);
+
+        exibiuMotoboySelecionado = true;
+
+        if (destinoEndereco) {
+          const destinoCoordenadas = await geocodificarDestino(destinoEndereco, chave);
+
+          if (destinoCoordenadas) {
+            const polyline = await buscarPolylineRota({
+              chave,
+              origemLatitude,
+              origemLongitude,
+              destinoLatitude: destinoCoordenadas.latitude,
+              destinoLongitude: destinoCoordenadas.longitude,
+            });
+
+            if (polyline) {
+              parametros.append("path", `weight:6|color:0x2563ebff|enc:${polyline}`);
+
+              parametros.append(
+                "markers",
+                `color:red|label:D|${destinoCoordenadas.latitude},${destinoCoordenadas.longitude}`
+              );
+            }
+          }
+        }
       }
+    }
 
-      const rotulo = motoboys.length <= 9 ? String(indice + 1) : inicialDoNome(motoboy.nome);
+    if (!exibiuMotoboySelecionado) {
+      motoboys.forEach((motoboy, indice) => {
+        if (!coordenadasValidas(motoboy.latitude, motoboy.longitude)) {
+          return;
+        }
 
-      parametros.append("markers", `color:green|label:${rotulo}|${latitude},${longitude}`);
-    });
+        const rotulo = motoboys.length <= 9 ? String(indice + 1) : inicialDoNome(motoboy.nome);
+
+        parametros.append(
+          "markers",
+          `color:green|label:${rotulo}|${motoboy.latitude},${motoboy.longitude}`
+        );
+      });
+    }
 
     const respostaMapa = await fetch(
       `https://maps.googleapis.com/maps/api/staticmap?${parametros.toString()}`,
@@ -124,7 +329,9 @@ export async function GET() {
       status: 200,
       headers: {
         "Content-Type": tipoConteudo,
-        "Cache-Control": "no-store, max-age=0",
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        Pragma: "no-cache",
+        Expires: "0",
       },
     });
   } catch (erro) {
