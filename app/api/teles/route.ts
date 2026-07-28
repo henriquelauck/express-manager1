@@ -99,6 +99,14 @@ function formatarTeleParaTela(tele: any) {
     aceitaPeloMotoboyEm: tele.aceitaPeloMotoboyEm,
     recusadaPeloMotoboyEm: tele.recusadaPeloMotoboyEm,
     motivoRecusaMotoboy: tele.motivoRecusaMotoboy,
+
+    etapaMotoboy: tele.etapaMotoboy,
+    rotaColetaIniciadaEm: tele.rotaColetaIniciadaEm,
+    chegouNaColetaEm: tele.chegouNaColetaEm,
+    entregaIniciadaEm: tele.entregaIniciadaEm,
+    chegouNaEntregaEm: tele.chegouNaEntregaEm,
+    concluidaPeloMotoboyEm: tele.concluidaPeloMotoboyEm,
+
     status: statusParaTela(tele.status),
     criadoEm: formatarData(tele.createdAt),
     dataOperacao: formatarData(tele.dataTele),
