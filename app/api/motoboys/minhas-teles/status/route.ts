@@ -28,15 +28,6 @@ const ETAPAS_PERMITIDAS: EtapaMotoboyTele[] = [
   "CONCLUIDA",
 ];
 
-const PROXIMA_ETAPA: Partial<Record<EtapaMotoboyTele, EtapaMotoboyTele[]>> = {
-  AGUARDANDO_INICIO_COLETA: ["EM_ROTA_COLETA"],
-  EM_ROTA_COLETA: ["CHEGOU_NA_COLETA"],
-  CHEGOU_NA_COLETA: ["EM_ROTA_ENTREGA"],
-  EM_ROTA_ENTREGA: ["CHEGOU_NA_ENTREGA"],
-  CHEGOU_NA_ENTREGA: ["CONCLUIDA"],
-  CONCLUIDA: [],
-};
-
 function respostaErro(mensagem: string, status: number) {
   return NextResponse.json(
     {
@@ -157,7 +148,16 @@ export async function PUT(request: Request) {
         status: true,
         statusAceite: true,
         etapaMotoboy: true,
+        paradaAtualMotoboy: true,
         motoboyId: true,
+        paradas: {
+          orderBy: {
+            ordem: "asc",
+          },
+          select: {
+            id: true,
+          },
+        },
       },
     });
 
@@ -176,21 +176,72 @@ export async function PUT(request: Request) {
 
       const etapaAtual = tele.etapaMotoboy || "AGUARDANDO_INICIO_COLETA";
 
-      if (etapaAtual === novaEtapa) {
+      const totalParadas = tele.paradas.length;
+      const indiceAtual = Math.max(
+        0,
+        Math.min(tele.paradaAtualMotoboy, Math.max(totalParadas - 1, 0))
+      );
+
+      if (totalParadas === 0) {
+        return respostaErro("Esta tele não possui paradas cadastradas.", 409);
+      }
+
+      let proximaParada = indiceAtual;
+
+      if (novaEtapa === etapaAtual) {
         return NextResponse.json({
           ok: true,
           tele: {
             id: tele.id,
             status: tele.status,
             etapaMotoboy: etapaAtual,
+            paradaAtualMotoboy: indiceAtual,
           },
         });
       }
 
-      const etapasPermitidas = PROXIMA_ETAPA[etapaAtual] || [];
+      if (etapaAtual === "AGUARDANDO_INICIO_COLETA" && novaEtapa !== "EM_ROTA_COLETA") {
+        return respostaErro("Inicie primeiro a rota até a primeira parada.", 409);
+      }
 
-      if (!etapasPermitidas.includes(novaEtapa)) {
-        return respostaErro("Essa alteração de etapa não é permitida.", 409);
+      if (etapaAtual === "EM_ROTA_COLETA" && novaEtapa !== "CHEGOU_NA_COLETA") {
+        return respostaErro("Confirme primeiro a chegada na primeira parada.", 409);
+      }
+
+      if (etapaAtual === "CHEGOU_NA_COLETA" && novaEtapa !== "EM_ROTA_ENTREGA") {
+        return respostaErro("Inicie a rota até a próxima parada.", 409);
+      }
+
+      if (etapaAtual === "EM_ROTA_ENTREGA" && novaEtapa !== "CHEGOU_NA_ENTREGA") {
+        return respostaErro("Confirme primeiro a chegada na parada atual.", 409);
+      }
+
+      if (etapaAtual === "CHEGOU_NA_ENTREGA") {
+        const temProximaParada = indiceAtual < totalParadas - 1;
+
+        if (temProximaParada && novaEtapa !== "EM_ROTA_ENTREGA") {
+          return respostaErro("Ainda existem paradas pendentes nesta tele.", 409);
+        }
+
+        if (!temProximaParada && novaEtapa !== "CONCLUIDA") {
+          return respostaErro("Esta é a última parada. Finalize a tele.", 409);
+        }
+      }
+
+      if (etapaAtual === "CONCLUIDA") {
+        return respostaErro("Esta tele já foi concluída.", 409);
+      }
+
+      if (novaEtapa === "EM_ROTA_ENTREGA") {
+        if (indiceAtual >= totalParadas - 1) {
+          return respostaErro("Não existe outra parada para iniciar.", 409);
+        }
+
+        proximaParada = indiceAtual + 1;
+      }
+
+      if (novaEtapa === "CONCLUIDA" && indiceAtual < totalParadas - 1) {
+        return respostaErro("Ainda existem paradas pendentes nesta tele.", 409);
       }
 
       const dadosEtapa = dadosDaEtapa(novaEtapa);
@@ -201,12 +252,14 @@ export async function PUT(request: Request) {
         },
         data: {
           etapaMotoboy: novaEtapa,
+          paradaAtualMotoboy: proximaParada,
           ...dadosEtapa,
         },
         select: {
           id: true,
           status: true,
           etapaMotoboy: true,
+          paradaAtualMotoboy: true,
           rotaColetaIniciadaEm: true,
           chegouNaColetaEm: true,
           entregaIniciadaEm: true,
@@ -234,6 +287,7 @@ export async function PUT(request: Request) {
           id: tele.id,
           status: tele.status,
           etapaMotoboy: tele.etapaMotoboy,
+          paradaAtualMotoboy: tele.paradaAtualMotoboy,
         },
       });
     }
@@ -255,6 +309,7 @@ export async function PUT(request: Request) {
         id: true,
         status: true,
         etapaMotoboy: true,
+        paradaAtualMotoboy: true,
         dataTele: true,
         updatedAt: true,
       },

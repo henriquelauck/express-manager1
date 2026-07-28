@@ -1,3 +1,698 @@
+﻿===== app\api\maps\calcular-rota\route.ts =====
+import {
+  calcularRota,
+  ErroCalculoRota,
+  type ParadaCalculoRota,
+} from "@/lib/google-maps/calcularRota";
+import { NextResponse } from "next/server";
+
+type CorpoCalculoRota = {
+  paradas?: ParadaCalculoRota[];
+  temRetorno?: boolean;
+};
+
+export async function POST(request: Request) {
+  try {
+    const body = (await request.json()) as CorpoCalculoRota;
+
+    const resultado = await calcularRota({
+      paradas: body.paradas || [],
+
+      temRetorno: Boolean(body.temRetorno),
+    });
+
+    return NextResponse.json(resultado);
+  } catch (error) {
+    console.error("ERRO AO CALCULAR ROTA:", error);
+
+    if (error instanceof ErroCalculoRota) {
+      return NextResponse.json(
+        {
+          erro: error.message,
+        },
+        {
+          status: error.status,
+        }
+      );
+    }
+
+    return NextResponse.json(
+      {
+        erro: error instanceof Error ? error.message : "Erro ao calcular rota.",
+      },
+      {
+        status: 500,
+      }
+    );
+  }
+}
+
+
+===== app\api\teles\route.ts =====
+import { prisma } from "@/lib/prisma";
+import type { StatusTele as StatusTeleBanco, TipoMovimentoFinanceiro } from "@prisma/client";
+import { NextResponse } from "next/server";
+
+function statusParaBanco(status: string): StatusTeleBanco {
+  const mapa: Record<string, StatusTeleBanco> = {
+    "Aguardando cliente": "AGUARDANDO_CLIENTE",
+    "Aguardando motoboy disponível": "AGUARDANDO_MOTOBOY",
+    "Aguardando coleta": "AGUARDANDO_COLETA",
+    "Em rota": "EM_ROTA",
+    Entregue: "ENTREGUE",
+  };
+
+  return mapa[status] ?? "AGUARDANDO_CLIENTE";
+}
+
+function statusParaTela(status: string) {
+  const mapa: Record<string, string> = {
+    AGUARDANDO_CLIENTE: "Aguardando cliente",
+    AGUARDANDO_MOTOBOY: "Aguardando motoboy disponível",
+    AGUARDANDO_COLETA: "Aguardando coleta",
+    EM_ROTA: "Em rota",
+    ENTREGUE: "Entregue",
+  };
+
+  return mapa[status] || "Aguardando cliente";
+}
+
+function tipoParadaParaBanco(tipo: string) {
+  const mapa: Record<string, string> = {
+    Entrega: "ENTREGA",
+    Coleta: "COLETA",
+    Trocar: "TROCAR",
+    "Entrega e coleta": "ENTREGA_E_COLETA",
+  };
+
+  return mapa[tipo] || "ENTREGA";
+}
+
+function tipoParadaParaTela(tipo: string) {
+  const mapa: Record<string, string> = {
+    ENTREGA: "Entrega",
+    COLETA: "Coleta",
+    TROCAR: "Trocar",
+    ENTREGA_E_COLETA: "Entrega e coleta",
+  };
+
+  return mapa[tipo] || "Entrega";
+}
+
+function recebimentoParaBanco(recebimento: string) {
+  const mapa: Record<string, string> = {
+    pendente: "PENDENTE",
+    escritorio: "ESCRITORIO",
+    motoboy: "MOTOBOY",
+  };
+
+  return mapa[recebimento] || "PENDENTE";
+}
+
+function recebimentoParaTela(recebimento: string) {
+  const mapa: Record<string, string> = {
+    PENDENTE: "pendente",
+    ESCRITORIO: "escritorio",
+    MOTOBOY: "motoboy",
+  };
+
+  return mapa[recebimento] || "pendente";
+}
+
+function formaCobrancaParaBanco(forma: string) {
+  const mapa: Record<string, string> = {
+    na_hora: "NA_HORA",
+    semanal: "SEMANAL",
+    quinzenal: "QUINZENAL",
+    mensal: "MENSAL",
+  };
+
+  return mapa[forma] || "SEMANAL";
+}
+
+function formatarData(data: Date) {
+  return data.toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+  });
+}
+
+function formatarTeleParaTela(tele: any) {
+  const primeiraParada = tele.paradas?.[0];
+
+  return {
+    id: tele.id,
+    solicitante: tele.solicitante,
+    motoboyId: tele.motoboyId,
+    motoboy: tele.motoboyNome || tele.motoboy?.nome || "",
+    statusAceite: tele.statusAceite,
+    ordemMotoboy: tele.ordemMotoboy,
+    atribuidaAoMotoboyEm: tele.atribuidaAoMotoboyEm,
+    aceitaPeloMotoboyEm: tele.aceitaPeloMotoboyEm,
+    recusadaPeloMotoboyEm: tele.recusadaPeloMotoboyEm,
+    motivoRecusaMotoboy: tele.motivoRecusaMotoboy,
+
+    etapaMotoboy: tele.etapaMotoboy,
+    rotaColetaIniciadaEm: tele.rotaColetaIniciadaEm,
+    chegouNaColetaEm: tele.chegouNaColetaEm,
+    entregaIniciadaEm: tele.entregaIniciadaEm,
+    chegouNaEntregaEm: tele.chegouNaEntregaEm,
+    concluidaPeloMotoboyEm: tele.concluidaPeloMotoboyEm,
+
+    status: statusParaTela(tele.status),
+    criadoEm: formatarData(tele.createdAt),
+    dataOperacao: formatarData(tele.dataTele),
+    dataTele: tele.dataTele,
+    distanciaKm: tele.distanciaKm,
+    tempoMinutos: tele.tempoMinutos,
+
+    valorBase: tele.valorBase,
+    retorno: tele.retorno,
+    espera: tele.espera,
+    total: tele.total,
+
+    recebido: Number(tele.valorRecebido || 0) >= Number(tele.total || 0) - 0.009,
+    recebimento: recebimentoParaTela(tele.recebimento),
+    formaCobranca: tele.formaCobranca?.toLowerCase() || "semanal",
+    valorRecebido: tele.valorRecebido,
+    dataRecebimento: tele.dataRecebimento,
+    motoboyRecebedor: tele.motoboyRecebedor,
+    fechamentoId: tele.fechamentoId,
+
+    observacaoGeral: tele.observacaoGeral || "",
+
+    paradas: tele.paradas.map((parada: any) => ({
+      id: parada.id,
+      tipo: tipoParadaParaTela(parada.tipo),
+      cliente: parada.cliente,
+      endereco: parada.endereco,
+      contato: parada.contato || "",
+      observacao: parada.observacao || "",
+    })),
+
+    tipoRota: tele.tipoRota,
+    nomeCliente: primeiraParada?.cliente || "",
+    endereco: primeiraParada?.endereco || "",
+    contato: primeiraParada?.contato || "",
+    observacao: primeiraParada?.observacao || "",
+    valor: tele.total.toFixed(2).replace(".", ","),
+    esperaMinutos: 0,
+  };
+}
+
+async function sincronizarRecebimentoMotoboy({
+  tx,
+  teleId,
+  solicitante,
+  recebimento,
+  valorRecebido,
+  motoboyRecebedor,
+}: {
+  tx: any;
+  teleId: string;
+  solicitante: string;
+  recebimento: string;
+  valorRecebido: number;
+  motoboyRecebedor: string | null;
+}) {
+  const tipoMovimento: TipoMovimentoFinanceiro = "CLIENTE";
+
+  const deveTerMovimento =
+    recebimento === "motoboy" && valorRecebido > 0.009 && Boolean(motoboyRecebedor);
+
+  const movimentosExistentes = await tx.movimentoFinanceiroMotoboy.findMany({
+    where: {
+      teleId,
+      tipo: tipoMovimento,
+    },
+    orderBy: {
+      createdAt: "asc",
+    },
+  });
+
+  if (!deveTerMovimento) {
+    if (movimentosExistentes.length > 0) {
+      await tx.movimentoFinanceiroMotoboy.deleteMany({
+        where: {
+          teleId,
+          tipo: tipoMovimento,
+        },
+      });
+    }
+
+    return;
+  }
+
+  const motoboy = await tx.motoboy.findFirst({
+    where: {
+      nome: motoboyRecebedor!,
+    },
+    select: {
+      id: true,
+      nome: true,
+    },
+  });
+
+  if (!motoboy) {
+    throw new Error("O motoboy recebedor não foi encontrado para gerar o extrato.");
+  }
+
+  const dadosMovimento = {
+    motoboyId: motoboy.id,
+    tipo: tipoMovimento,
+    clienteNome: solicitante || null,
+    valor: valorRecebido,
+    descricao: `Recebimento da tele de ${solicitante}`,
+    teleId,
+    fechamentoId: null,
+  };
+
+  if (movimentosExistentes.length === 0) {
+    await tx.movimentoFinanceiroMotoboy.create({
+      data: dadosMovimento,
+    });
+
+    return;
+  }
+
+  const movimentoPrincipal = movimentosExistentes[0];
+
+  await tx.movimentoFinanceiroMotoboy.update({
+    where: {
+      id: movimentoPrincipal.id,
+    },
+    data: dadosMovimento,
+  });
+
+  if (movimentosExistentes.length > 1) {
+    await tx.movimentoFinanceiroMotoboy.deleteMany({
+      where: {
+        teleId,
+        tipo: tipoMovimento,
+        id: {
+          not: movimentoPrincipal.id,
+        },
+      },
+    });
+  }
+}
+
+export async function GET() {
+  const teles = await prisma.tele.findMany({
+    include: {
+      paradas: {
+        orderBy: {
+          ordem: "asc",
+        },
+      },
+      motoboy: true,
+      cliente: true,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  return NextResponse.json(teles.map(formatarTeleParaTela));
+}
+
+export async function POST(request: Request) {
+  const body = await request.json();
+
+  const cliente = await prisma.cliente.findFirst({
+    where: {
+      nome: body.solicitante,
+    },
+  });
+
+  const motoboy = body.motoboy
+    ? await prisma.motoboy.findFirst({
+        where: {
+          nome: body.motoboy,
+        },
+      })
+    : null;
+
+  const total = Number(body.total ?? Number(String(body.valor || "0").replace(",", ".")));
+
+  const valorRecebido = Math.max(0, Math.min(Number(body.valorRecebido || 0), total));
+
+  const tele = await prisma.$transaction(async (tx) => {
+    const teleCriada = await tx.tele.create({
+      data: {
+        clienteId: cliente?.id,
+        solicitante: body.solicitante,
+        dataTele: body.dataTele ? new Date(`${body.dataTele}T12:00:00`) : new Date(),
+        motoboyId: motoboy?.id,
+        motoboyNome: body.motoboy || "",
+
+        statusAceite: motoboy ? "AGUARDANDO_ACEITE" : "NAO_ENVIADA",
+        ordemMotoboy: null,
+        atribuidaAoMotoboyEm: motoboy ? new Date() : null,
+        aceitaPeloMotoboyEm: null,
+        recusadaPeloMotoboyEm: null,
+        motivoRecusaMotoboy: null,
+
+        status: motoboy
+          ? "AGUARDANDO_MOTOBOY"
+          : statusParaBanco(body.status || "Aguardando cliente"),
+        tipoRota: body.tipoRota || "Entrega",
+
+        valorBase: body.valorBase || 0,
+        retorno: body.retorno || 0,
+        espera: body.espera || 0,
+        total,
+
+        distanciaKm: body.distanciaKm || null,
+        tempoMinutos: body.tempoMinutos || null,
+
+        recebimento: recebimentoParaBanco(
+          valorRecebido > 0 ? body.recebimento || "escritorio" : "pendente"
+        ) as any,
+        formaCobranca: formaCobrancaParaBanco(body.formaCobranca || "semanal") as any,
+        valorRecebido,
+        dataRecebimento: valorRecebido > 0 ? new Date() : null,
+        motoboyRecebedor:
+          valorRecebido > 0 && body.recebimento === "motoboy"
+            ? body.motoboyRecebedor || null
+            : null,
+        fechamentoId: body.fechamentoId || null,
+
+        observacaoGeral: body.observacaoGeral || "",
+
+        paradas: {
+          create: body.paradas.map((parada: any, index: number) => ({
+            tipo: tipoParadaParaBanco(parada.tipo) as any,
+            cliente: parada.cliente || parada.nomeCliente || "",
+            endereco: parada.endereco || "",
+            contato: parada.contato || "",
+            observacao: parada.observacao || "",
+            ordem: index + 1,
+          })),
+        },
+      },
+      include: {
+        paradas: {
+          orderBy: {
+            ordem: "asc",
+          },
+        },
+        motoboy: true,
+        cliente: true,
+      },
+    });
+
+    await sincronizarRecebimentoMotoboy({
+      tx,
+      teleId: teleCriada.id,
+      solicitante: teleCriada.solicitante,
+      recebimento: body.recebimento || "pendente",
+      valorRecebido,
+      motoboyRecebedor: body.motoboyRecebedor || null,
+    });
+
+    return teleCriada;
+  });
+
+  return NextResponse.json(formatarTeleParaTela(tele));
+}
+
+export async function PUT(request: Request) {
+  try {
+    const body = await request.json();
+
+    const totalInformado = Number(
+      body.total ?? Number(String(body.valor || "0").replace(",", "."))
+    );
+
+    const valorRecebidoInformado = Math.max(
+      0,
+      Math.min(Number(body.valorRecebido || 0), totalInformado)
+    );
+
+    const possuiRecebimento = valorRecebidoInformado > 0.009;
+
+    const motoboy = body.motoboy
+      ? await prisma.motoboy.findFirst({
+          where: {
+            nome: body.motoboy,
+          },
+        })
+      : null;
+
+    const recebimentoTela = possuiRecebimento ? body.recebimento || "escritorio" : "pendente";
+
+    const motoboyRecebedor =
+      possuiRecebimento && recebimentoTela === "motoboy" ? body.motoboyRecebedor || null : null;
+
+    const teleAtualAntesDaEdicao = await prisma.tele.findUnique({
+      where: {
+        id: body.id,
+      },
+      select: {
+        motoboyId: true,
+        statusAceite: true,
+        ordemMotoboy: true,
+        atribuidaAoMotoboyEm: true,
+        aceitaPeloMotoboyEm: true,
+        recusadaPeloMotoboyEm: true,
+        motivoRecusaMotoboy: true,
+      },
+    });
+
+    if (!teleAtualAntesDaEdicao) {
+      return NextResponse.json({ erro: "Tele não encontrada." }, { status: 404 });
+    }
+
+    const haviaMotoboy = Boolean(teleAtualAntesDaEdicao.motoboyId);
+    const possuiMotoboyAgora = Boolean(motoboy?.id);
+    const trocouMotoboy =
+      haviaMotoboy && possuiMotoboyAgora && teleAtualAntesDaEdicao.motoboyId !== motoboy?.id;
+    const atribuiuMotoboyAgora = !haviaMotoboy && possuiMotoboyAgora;
+    const removeuMotoboy = haviaMotoboy && !possuiMotoboyAgora;
+    const deveReiniciarAceite = trocouMotoboy || atribuiuMotoboyAgora;
+
+    const dadosAceite = removeuMotoboy
+      ? {
+          statusAceite: "NAO_ENVIADA" as const,
+          ordemMotoboy: null,
+          atribuidaAoMotoboyEm: null,
+          aceitaPeloMotoboyEm: null,
+          recusadaPeloMotoboyEm: null,
+          motivoRecusaMotoboy: null,
+        }
+      : deveReiniciarAceite
+        ? {
+            statusAceite: "AGUARDANDO_ACEITE" as const,
+            ordemMotoboy: null,
+            atribuidaAoMotoboyEm: new Date(),
+            aceitaPeloMotoboyEm: null,
+            recusadaPeloMotoboyEm: null,
+            motivoRecusaMotoboy: null,
+          }
+        : {
+            statusAceite: teleAtualAntesDaEdicao.statusAceite,
+            ordemMotoboy: teleAtualAntesDaEdicao.ordemMotoboy,
+            atribuidaAoMotoboyEm: teleAtualAntesDaEdicao.atribuidaAoMotoboyEm,
+            aceitaPeloMotoboyEm: teleAtualAntesDaEdicao.aceitaPeloMotoboyEm,
+            recusadaPeloMotoboyEm: teleAtualAntesDaEdicao.recusadaPeloMotoboyEm,
+            motivoRecusaMotoboy: teleAtualAntesDaEdicao.motivoRecusaMotoboy,
+          };
+
+    const statusAtualizado =
+      deveReiniciarAceite || removeuMotoboy ? "AGUARDANDO_MOTOBOY" : statusParaBanco(body.status);
+
+    const tele = await prisma.$transaction(async (tx) => {
+      await tx.teleParada.deleteMany({
+        where: {
+          teleId: body.id,
+        },
+      });
+
+      const teleAtualizada = await tx.tele.update({
+        where: {
+          id: body.id,
+        },
+        data: {
+          solicitante: body.solicitante,
+          dataTele: body.dataTele ? new Date(`${body.dataTele.slice(0, 10)}T12:00:00`) : undefined,
+
+          motoboyId: motoboy?.id || null,
+          motoboyNome: body.motoboy || "",
+
+          ...dadosAceite,
+
+          status: statusAtualizado,
+          tipoRota: body.tipoRota || "Entrega",
+
+          valorBase: body.valorBase || Number(String(body.valor || "0").replace(",", ".")),
+          retorno: body.retorno || 0,
+          espera: body.espera || 0,
+          total: totalInformado,
+
+          recebimento: recebimentoParaBanco(recebimentoTela) as any,
+          formaCobranca: formaCobrancaParaBanco(body.formaCobranca || "semanal") as any,
+          valorRecebido: valorRecebidoInformado,
+          dataRecebimento: possuiRecebimento
+            ? body.dataRecebimento
+              ? new Date(body.dataRecebimento)
+              : new Date()
+            : null,
+          motoboyRecebedor,
+          fechamentoId: body.fechamentoId || null,
+          observacaoGeral: body.observacaoGeral || "",
+
+          paradas: {
+            create: body.paradas.map((parada: any, index: number) => ({
+              tipo: tipoParadaParaBanco(parada.tipo) as any,
+              cliente: parada.cliente || parada.nomeCliente || "",
+              endereco: parada.endereco || "",
+              contato: parada.contato || "",
+              observacao: parada.observacao || "",
+              ordem: index + 1,
+            })),
+          },
+        },
+        include: {
+          paradas: {
+            orderBy: {
+              ordem: "asc",
+            },
+          },
+          motoboy: true,
+          cliente: true,
+        },
+      });
+
+      await sincronizarRecebimentoMotoboy({
+        tx,
+        teleId: teleAtualizada.id,
+        solicitante: teleAtualizada.solicitante,
+        recebimento: recebimentoTela,
+        valorRecebido: valorRecebidoInformado,
+        motoboyRecebedor,
+      });
+
+      return teleAtualizada;
+    });
+
+    return NextResponse.json(formatarTeleParaTela(tele));
+  } catch (error: any) {
+    return NextResponse.json(
+      {
+        erro: error.message || "Erro desconhecido ao atualizar tele",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const body = await request.json();
+
+    if (!body?.id) {
+      return NextResponse.json({ erro: "Tele nÃƒÂ£o informada." }, { status: 400 });
+    }
+
+    const teleAtual = await prisma.tele.findUnique({
+      where: {
+        id: body.id,
+      },
+      select: {
+        id: true,
+        solicitante: true,
+        total: true,
+      },
+    });
+
+    if (!teleAtual) {
+      return NextResponse.json({ erro: "Tele nÃƒÂ£o encontrada." }, { status: 404 });
+    }
+
+    const total = Number(teleAtual.total || 0);
+    const valorRecebido = Math.max(0, Math.min(Number(body.valorRecebido || 0), total));
+
+    const possuiRecebimento = valorRecebido > 0.009;
+    const recebimentoTela = possuiRecebimento ? body.recebimento || "escritorio" : "pendente";
+
+    const motoboyRecebedor =
+      possuiRecebimento && recebimentoTela === "motoboy" ? body.motoboyRecebedor || null : null;
+
+    if (possuiRecebimento && recebimentoTela === "motoboy" && !motoboyRecebedor) {
+      return NextResponse.json(
+        { erro: "Selecione o motoboy que recebeu o pagamento." },
+        { status: 400 }
+      );
+    }
+
+    const tele = await prisma.$transaction(async (tx) => {
+      const teleAtualizada = await tx.tele.update({
+        where: {
+          id: body.id,
+        },
+        data: {
+          recebimento: recebimentoParaBanco(recebimentoTela) as any,
+          valorRecebido,
+          dataRecebimento: possuiRecebimento ? new Date() : null,
+          motoboyRecebedor,
+        },
+        include: {
+          paradas: {
+            orderBy: {
+              ordem: "asc",
+            },
+          },
+          motoboy: true,
+          cliente: true,
+        },
+      });
+
+      await sincronizarRecebimentoMotoboy({
+        tx,
+        teleId: teleAtualizada.id,
+        solicitante: teleAtualizada.solicitante,
+        recebimento: recebimentoTela,
+        valorRecebido,
+        motoboyRecebedor,
+      });
+
+      return teleAtualizada;
+    });
+
+    return NextResponse.json(formatarTeleParaTela(tele));
+  } catch (error: any) {
+    return NextResponse.json(
+      {
+        erro: error.message || "NÃƒÂ£o foi possÃƒÂ­vel atualizar o recebimento da tele.",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  const body = await request.json();
+
+  await prisma.$transaction(async (tx) => {
+    await tx.movimentoFinanceiroMotoboy.deleteMany({
+      where: {
+        teleId: body.id,
+        tipo: "CLIENTE",
+      },
+    });
+
+    await tx.tele.delete({
+      where: {
+        id: body.id,
+      },
+    });
+  });
+
+  return NextResponse.json({ ok: true });
+}
+
+
+===== app\nova-tele\page.tsx =====
 "use client";
 
 import { MapaRota } from "@/components/maps";
@@ -41,16 +736,12 @@ type RotaAlternativa = {
   duracaoMin: number;
   valorSugerido: number;
   polyline: string | null;
-  distanciaOperacionalKm?: number;
-  duracaoOperacionalMin?: number;
 };
 
 type ResultadoRotaCalculada = {
   distanciaKm: number;
   duracaoMin: number;
   valorSugerido: number;
-  distanciaOperacionalKm?: number;
-  duracaoOperacionalMin?: number;
   enderecosEncontrados: string[];
   polyline: string | null;
   pontos: {
@@ -97,10 +788,6 @@ function formatarFormaCobranca(forma: FormaCobrancaTele) {
   };
 
   return mapa[forma];
-}
-
-function calcularValorBaseSugerido(valorSugerido: number, possuiRetorno: boolean) {
-  return valorSugerido - (possuiRetorno ? 5 : 0);
 }
 
 export default function NovaTelePage() {
@@ -277,7 +964,7 @@ export default function NovaTelePage() {
       });
       setRotaSelecionadaId(rotaPrincipal.id);
       setValorBase(
-        formatarValor(calcularValorBaseSugerido(rotaPrincipal.valorSugerido, temRetorno(paradas)))
+        formatarValor(rotaPrincipal.valorSugerido - calcularRetorno(solicitante, paradas))
       );
     } catch (error) {
       console.error("Erro ao calcular rota:", error);
@@ -326,15 +1013,10 @@ export default function NovaTelePage() {
 
   function selecionarRota(rota: RotaAlternativa) {
     setRotaSelecionadaId(rota.id);
-    setValorBase(formatarValor(calcularValorBaseSugerido(rota.valorSugerido, temRetorno(paradas))));
+    setValorBase(formatarValor(rota.valorSugerido - calcularRetorno(solicitante, paradas)));
   }
 
   const totalAtual = calcularTotal(valorBase, retornoAtual, 0);
-  const possuiRetornoAtual = temRetorno(paradas);
-  const distanciaOperacionalAtual =
-    rotaSelecionada?.distanciaOperacionalKm ?? rotaSelecionada?.distanciaKm ?? 0;
-  const duracaoOperacionalAtual =
-    rotaSelecionada?.duracaoOperacionalMin ?? rotaSelecionada?.duracaoMin ?? 0;
 
   return (
     <PageContainer>
@@ -473,74 +1155,24 @@ export default function NovaTelePage() {
                   <MapaRota polyline={rotaSelecionada.polyline} pontos={rotaCalculada.pontos} />
                 )}
 
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <ResumoRota
                     icon={<Route size={19} />}
-                    label="Distância cobrada"
+                    label="Distância"
                     value={`${rotaSelecionada.distanciaKm.toFixed(1)} km`}
                   />
 
                   <ResumoRota
                     icon={<Clock3 size={19} />}
-                    label="Tempo cobrado"
+                    label="Tempo estimado"
                     value={`${rotaSelecionada.duracaoMin} min`}
                   />
 
                   <ResumoRota
-                    icon={<MapPinned size={19} />}
-                    label="Trajeto operacional"
-                    value={`${distanciaOperacionalAtual.toFixed(1)} km`}
+                    icon={<CheckCircle2 size={19} />}
+                    label="Valor sugerido"
+                    value={`R$ ${formatarValor(rotaSelecionada.valorSugerido)}`}
                   />
-
-                  <ResumoRota
-                    icon={<Clock3 size={19} />}
-                    label="Tempo operacional"
-                    value={`${duracaoOperacionalAtual} min`}
-                  />
-                </div>
-
-                <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="font-semibold text-slate-800">Composição do valor</p>
-                      <p className="mt-1 text-sm text-slate-500">
-                        O retorno aparece no trajeto do motoboy, mas não entra na distância cobrada.
-                      </p>
-                    </div>
-
-                    <strong className="text-lg text-emerald-700">
-                      R$ {formatarValor(totalAtual)}
-                    </strong>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
-                    <div className="rounded-xl bg-white px-4 py-3">
-                      <span className="block text-xs text-slate-400">Valor-base</span>
-                      <strong className="mt-1 block text-slate-800">
-                        R$ {formatarValor(converterValor(valorBase))}
-                      </strong>
-                    </div>
-
-                    <div className="rounded-xl bg-white px-4 py-3">
-                      <span className="block text-xs text-slate-400">Adicional de retorno</span>
-                      <strong className="mt-1 block text-slate-800">
-                        R$ {formatarValor(retornoAtual)}
-                      </strong>
-                    </div>
-
-                    <div className="rounded-xl bg-white px-4 py-3">
-                      <span className="block text-xs text-slate-400">Retorno operacional</span>
-                      <strong className="mt-1 block text-slate-800">
-                        {possuiRetornoAtual ? "Incluído na rota" : "Não aplicável"}
-                      </strong>
-                    </div>
-                  </div>
-
-                  {possuiRetornoAtual && retornoAtual === 0 && (
-                    <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-                      Retorno operacional sem adicional financeiro para este solicitante.
-                    </p>
-                  )}
                 </div>
 
                 <div className="mt-6">
@@ -586,40 +1218,25 @@ export default function NovaTelePage() {
                             </span>
                           </div>
 
-                          <div className="mt-4 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+                          <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
                             <div>
-                              <span className="block text-xs text-slate-400">
-                                Distância cobrada
-                              </span>
+                              <span className="block text-xs text-slate-400">Distância</span>
                               <strong className="mt-1 block text-slate-700">
                                 {rota.distanciaKm.toFixed(1)} km
                               </strong>
                             </div>
 
                             <div>
-                              <span className="block text-xs text-slate-400">Trajeto total</span>
+                              <span className="block text-xs text-slate-400">Tempo</span>
                               <strong className="mt-1 block text-slate-700">
-                                {(rota.distanciaOperacionalKm ?? rota.distanciaKm).toFixed(1)} km
+                                {rota.duracaoMin} min
                               </strong>
                             </div>
 
                             <div>
-                              <span className="block text-xs text-slate-400">Tempo total</span>
+                              <span className="block text-xs text-slate-400">Valor</span>
                               <strong className="mt-1 block text-slate-700">
-                                {rota.duracaoOperacionalMin ?? rota.duracaoMin} min
-                              </strong>
-                            </div>
-
-                            <div>
-                              <span className="block text-xs text-slate-400">Valor sugerido</span>
-                              <strong className="mt-1 block text-slate-700">
-                                R${" "}
-                                {formatarValor(
-                                  calcularValorBaseSugerido(
-                                    rota.valorSugerido,
-                                    possuiRetornoAtual
-                                  ) + retornoAtual
-                                )}
+                                R$ {formatarValor(rota.valorSugerido)}
                               </strong>
                             </div>
                           </div>
@@ -753,3 +1370,5 @@ function ResumoRota({ icon, label, value }: ResumoRotaProps) {
     </div>
   );
 }
+
+

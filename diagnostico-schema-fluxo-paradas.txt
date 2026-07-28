@@ -1,3 +1,4 @@
+﻿===== prisma\schema.prisma =====
 generator client {
   provider = "prisma-client-js"
 }
@@ -25,7 +26,6 @@ enum TipoParada {
   COLETA
   TROCAR
   ENTREGA_E_COLETA
-  RETORNO
 }
 
 enum Recebimento {
@@ -250,10 +250,9 @@ model Tele {
   recusadaPeloMotoboyEm DateTime?
   motivoRecusaMotoboy   String?
 
-  status             StatusTele        @default(AGUARDANDO_CLIENTE)
-  etapaMotoboy       EtapaMotoboyTele?
-  paradaAtualMotoboy Int               @default(0)
-  tipoRota           String
+  status       StatusTele        @default(AGUARDANDO_CLIENTE)
+  etapaMotoboy EtapaMotoboyTele?
+  tipoRota     String
 
   rotaColetaIniciadaEm   DateTime?
   chegouNaColetaEm       DateTime?
@@ -627,3 +626,4 @@ model MensagemAtendimento {
   @@index([autor, enviadaEm])
   @@index([direcao, enviadaEm])
 }
+

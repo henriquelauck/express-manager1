@@ -14,6 +14,8 @@ export type RotaAlternativa = {
   duracaoMin: number;
   valorSugerido: number;
   polyline: string | null;
+  distanciaOperacionalKm?: number;
+  duracaoOperacionalMin?: number;
 };
 
 export type ResultadoCalculoRota = {
@@ -24,6 +26,8 @@ export type ResultadoCalculoRota = {
   polyline: string | null;
   pontos: PontoRota[];
   rotasAlternativas: RotaAlternativa[];
+  distanciaOperacionalKm?: number;
+  duracaoOperacionalMin?: number;
 };
 
 type Coordenada = {
@@ -153,9 +157,7 @@ async function geocodificar(endereco: string, chaveGoogleMaps: string): Promise<
   }
 
   const resultado = dados.results?.[0];
-
   const latitude = resultado?.geometry?.location?.lat;
-
   const longitude = resultado?.geometry?.location?.lng;
 
   if (!resultado || typeof latitude !== "number" || typeof longitude !== "number") {
@@ -169,56 +171,17 @@ async function geocodificar(endereco: string, chaveGoogleMaps: string): Promise<
   return {
     lat: latitude,
     lng: longitude,
-
     cidade: componenteCidade?.long_name || "",
-
     enderecoEncontrado: resultado.formatted_address || endereco,
   };
 }
 
-export async function calcularRota({
-  paradas,
-  temRetorno,
-}: {
-  paradas: ParadaCalculoRota[];
-  temRetorno: boolean;
-}): Promise<ResultadoCalculoRota> {
-  const chaveGoogleMaps = process.env.GOOGLE_MAPS_API_KEY;
-
-  if (!chaveGoogleMaps) {
-    throw new ErroCalculoRota("GOOGLE_MAPS_API_KEY não configurada.", 500);
-  }
-
-  if (!Array.isArray(paradas) || paradas.length < 2) {
-    throw new ErroCalculoRota("Informe pelo menos duas paradas.", 400);
-  }
-
-  const possuiEnderecoInvalido = paradas.some(
-    (parada) => typeof parada?.endereco !== "string" || !parada.endereco.trim()
-  );
-
-  if (possuiEnderecoInvalido) {
-    throw new ErroCalculoRota("Todas as paradas precisam possuir endereço.", 400);
-  }
-
-  const coordenadas: Coordenada[] = [];
-
-  for (const parada of paradas) {
-    const endereco = parada.endereco.trim();
-
-    const coordenada = await geocodificar(endereco, chaveGoogleMaps);
-
-    if (!coordenada) {
-      throw new ErroCalculoRota(`Não foi possível encontrar: ${endereco}`, 404);
-    }
-
-    coordenadas.push(coordenada);
-  }
-
+async function consultarRotasGoogle(
+  coordenadas: Coordenada[],
+  chaveGoogleMaps: string
+): Promise<RotaGoogle[]> {
   const origem = coordenadas[0];
-
   const destino = coordenadas[coordenadas.length - 1];
-
   const intermediarias = coordenadas.slice(1, -1);
 
   const respostaRota = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
@@ -226,9 +189,7 @@ export async function calcularRota({
 
     headers: {
       "Content-Type": "application/json",
-
       "X-Goog-Api-Key": chaveGoogleMaps,
-
       "X-Goog-FieldMask": "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline",
     },
 
@@ -261,13 +222,9 @@ export async function calcularRota({
       })),
 
       travelMode: "DRIVE",
-
       routingPreference: "TRAFFIC_AWARE",
-
       computeAlternativeRoutes: true,
-
       languageCode: "pt-BR",
-
       units: "METRIC",
     }),
 
@@ -280,64 +237,142 @@ export async function calcularRota({
     throw new ErroCalculoRota(dadosRota.error?.message || "Erro ao calcular rota.", 500);
   }
 
-  const rotaPrincipal = dadosRota.routes?.[0];
+  const rotas = dadosRota.routes || [];
 
-  if (!rotaPrincipal || typeof rotaPrincipal.distanceMeters !== "number") {
+  if (rotas.length === 0 || typeof rotas[0]?.distanceMeters !== "number") {
     throw new ErroCalculoRota("Nenhuma rota encontrada.", 404);
   }
 
-  const distanciaKm = rotaPrincipal.distanceMeters / 1000;
+  return rotas;
+}
 
-  const duracaoMin = converterDuracaoParaMinutos(rotaPrincipal.duration);
+export async function calcularRota({
+  paradas,
+  temRetorno,
+}: {
+  paradas: ParadaCalculoRota[];
+  temRetorno: boolean;
+}): Promise<ResultadoCalculoRota> {
+  const chaveGoogleMaps = process.env.GOOGLE_MAPS_API_KEY;
 
-  const cidadeOrigem = coordenadas[0]?.cidade || "";
+  if (!chaveGoogleMaps) {
+    throw new ErroCalculoRota("GOOGLE_MAPS_API_KEY não configurada.", 500);
+  }
 
-  const cidadeDestino = coordenadas[coordenadas.length - 1]?.cidade || "";
+  if (!Array.isArray(paradas) || paradas.length < 2) {
+    throw new ErroCalculoRota("Informe pelo menos duas paradas.", 400);
+  }
 
-  const rotasAlternativas = (dadosRota.routes || []).flatMap((rotaItem, index) => {
-    if (typeof rotaItem.distanceMeters !== "number") {
+  const possuiEnderecoInvalido = paradas.some(
+    (parada) => typeof parada?.endereco !== "string" || !parada.endereco.trim()
+  );
+
+  if (possuiEnderecoInvalido) {
+    throw new ErroCalculoRota("Todas as paradas precisam possuir endereço.", 400);
+  }
+
+  const coordenadasCobranca: Coordenada[] = [];
+
+  for (const parada of paradas) {
+    const endereco = parada.endereco.trim();
+    const coordenada = await geocodificar(endereco, chaveGoogleMaps);
+
+    if (!coordenada) {
+      throw new ErroCalculoRota(`Não foi possível encontrar: ${endereco}`, 404);
+    }
+
+    coordenadasCobranca.push(coordenada);
+  }
+
+  /*
+   * A rota de cobrança considera somente as paradas informadas.
+   * O retorno operacional não entra na distância cobrada.
+   */
+  const rotasCobranca = await consultarRotasGoogle(coordenadasCobranca, chaveGoogleMaps);
+
+  /*
+   * Quando existe retorno, o ponto inicial é acrescentado apenas
+   * à rota operacional exibida no mapa e usada pelo motoboy.
+   */
+  const coordenadasOperacionais = temRetorno
+    ? [
+        ...coordenadasCobranca,
+        {
+          ...coordenadasCobranca[0],
+          enderecoEncontrado: `Retorno — ${coordenadasCobranca[0].enderecoEncontrado}`,
+        },
+      ]
+    : coordenadasCobranca;
+
+  const rotasOperacionais = temRetorno
+    ? await consultarRotasGoogle(coordenadasOperacionais, chaveGoogleMaps)
+    : rotasCobranca;
+
+  const rotaCobrancaPrincipal = rotasCobranca[0];
+  const rotaOperacionalPrincipal = rotasOperacionais[0];
+
+  const distanciaKm = Number(rotaCobrancaPrincipal.distanceMeters || 0) / 1000;
+
+  const distanciaOperacionalKm = Number(rotaOperacionalPrincipal.distanceMeters || 0) / 1000;
+
+  const duracaoMin = converterDuracaoParaMinutos(rotaCobrancaPrincipal.duration);
+
+  const duracaoOperacionalMin = converterDuracaoParaMinutos(rotaOperacionalPrincipal.duration);
+
+  const cidadeOrigem = coordenadasCobranca[0]?.cidade || "";
+
+  const cidadeDestino = coordenadasCobranca[coordenadasCobranca.length - 1]?.cidade || "";
+
+  const rotasAlternativas = rotasOperacionais.flatMap((rotaOperacional, index) => {
+    if (typeof rotaOperacional.distanceMeters !== "number") {
       return [];
     }
 
-    const distanciaKmItem = rotaItem.distanceMeters / 1000;
+    const rotaCobranca = rotasCobranca[index] || rotasCobranca[0];
 
-    const duracaoMinItem = converterDuracaoParaMinutos(rotaItem.duration);
+    if (!rotaCobranca || typeof rotaCobranca.distanceMeters !== "number") {
+      return [];
+    }
+
+    const distanciaCobradaKm = rotaCobranca.distanceMeters / 1000;
+
+    const distanciaCompletaKm = rotaOperacional.distanceMeters / 1000;
 
     return [
       {
         id: index,
-
-        distanciaKm: distanciaKmItem,
-
-        duracaoMin: duracaoMinItem,
-
+        distanciaKm: distanciaCobradaKm,
+        duracaoMin: converterDuracaoParaMinutos(rotaCobranca.duration),
         valorSugerido: calcularValorRota(
-          distanciaKmItem,
+          distanciaCobradaKm,
           Boolean(temRetorno),
           cidadeOrigem,
           cidadeDestino
         ),
-
-        polyline: rotaItem.polyline?.encodedPolyline || null,
+        polyline: rotaOperacional.polyline?.encodedPolyline || null,
+        distanciaOperacionalKm: distanciaCompletaKm,
+        duracaoOperacionalMin: converterDuracaoParaMinutos(rotaOperacional.duration),
       },
     ];
   });
 
   return {
     distanciaKm,
-
     duracaoMin,
-
     valorSugerido: calcularValorRota(distanciaKm, Boolean(temRetorno), cidadeOrigem, cidadeDestino),
 
-    enderecosEncontrados: coordenadas.map((coordenada) => coordenada.enderecoEncontrado),
+    distanciaOperacionalKm,
+    duracaoOperacionalMin,
 
-    polyline: rotaPrincipal.polyline?.encodedPolyline || null,
+    enderecosEncontrados: coordenadasOperacionais.map(
+      (coordenada) => coordenada.enderecoEncontrado
+    ),
 
-    pontos: coordenadas.map((coordenada) => ({
+    polyline: rotaOperacionalPrincipal.polyline?.encodedPolyline || null,
+
+    pontos: coordenadasOperacionais.map((coordenada) => ({
       lat: coordenada.lat,
       lng: coordenada.lng,
-
       endereco: coordenada.enderecoEncontrado,
     })),
 

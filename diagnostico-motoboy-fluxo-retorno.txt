@@ -1,3 +1,4 @@
+﻿===== app\motoboy\page.tsx =====
 "use client";
 
 import { Capacitor, registerPlugin } from "@capacitor/core";
@@ -117,7 +118,6 @@ type Tele = {
   solicitante?: string | null;
   status: string;
   etapaMotoboy?: EtapaMotoboyTele | null;
-  paradaAtualMotoboy?: number | null;
   rotaColetaIniciadaEm?: string | null;
   chegouNaColetaEm?: string | null;
   entregaIniciadaEm?: string | null;
@@ -370,11 +370,7 @@ export default function MotoboyPage() {
 
     try {
       const temRetorno = paradasValidas.some((parada) =>
-        ["TROCAR", "ENTREGA_E_COLETA", "RETORNO"].includes(String(parada.tipo || "").toUpperCase())
-      );
-
-      const paradasParaCalculo = paradasValidas.filter(
-        (parada) => String(parada.tipo || "").toUpperCase() !== "RETORNO"
+        ["TROCAR", "ENTREGA_E_COLETA"].includes(String(parada.tipo || "").toUpperCase())
       );
 
       const resposta = await fetch("/api/maps/calcular-rota", {
@@ -383,7 +379,7 @@ export default function MotoboyPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          paradas: paradasParaCalculo.map((parada) => ({
+          paradas: paradasValidas.map((parada) => ({
             endereco: String(parada.endereco || "").trim(),
           })),
           temRetorno,
@@ -773,21 +769,55 @@ export default function MotoboyPage() {
     }
   }
 
-  function abrirRotaParaParadaAtual(tele: Tele) {
+  function abrirRotaParaColeta(tele: Tele) {
     const paradasOrdenadas = Array.isArray(tele.paradas)
       ? [...tele.paradas].sort((a, b) => Number(a.ordem || 0) - Number(b.ordem || 0))
       : [];
 
-    const indiceAtual = Math.max(
-      0,
-      Math.min(Number(tele.paradaAtualMotoboy || 0), Math.max(paradasOrdenadas.length - 1, 0))
-    );
+    const paradaColeta =
+      paradasOrdenadas.find((parada) =>
+        ["COLETA", "ENTREGA_E_COLETA", "TROCAR"].includes(String(parada.tipo || "").toUpperCase())
+      ) || paradasOrdenadas[0];
 
-    const paradaAtual = paradasOrdenadas[indiceAtual];
-    const endereco = String(paradaAtual?.endereco || "").trim();
+    const endereco = String(paradaColeta?.endereco || "").trim();
 
     if (!endereco) {
-      setErro("A parada atual não possui endereço informado.");
+      setErro("A parada de coleta não possui endereço informado.");
+      return;
+    }
+
+    const destino = encodeURIComponent(endereco);
+
+    if (executandoNoAppAndroid()) {
+      window.location.href = `geo:0,0?q=${destino}`;
+      return;
+    }
+
+    window.open(
+      `https://www.google.com/maps/dir/?api=1&destination=${destino}&travelmode=driving`,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  }
+
+  function abrirRotaParaEntrega(tele: Tele) {
+    const paradasOrdenadas = Array.isArray(tele.paradas)
+      ? [...tele.paradas].sort((a, b) => Number(a.ordem || 0) - Number(b.ordem || 0))
+      : [];
+
+    const paradaEntrega =
+      [...paradasOrdenadas]
+        .reverse()
+        .find((parada) =>
+          ["ENTREGA", "ENTREGA_E_COLETA", "TROCAR"].includes(
+            String(parada.tipo || "").toUpperCase()
+          )
+        ) || paradasOrdenadas[paradasOrdenadas.length - 1];
+
+    const endereco = String(paradaEntrega?.endereco || "").trim();
+
+    if (!endereco) {
+      setErro("A parada de entrega não possui endereço informado.");
       return;
     }
 
@@ -858,8 +888,6 @@ export default function MotoboyPage() {
                 ...item,
                 status: teleAtualizada?.status || item.status,
                 etapaMotoboy: teleAtualizada?.etapaMotoboy || novaEtapa,
-                paradaAtualMotoboy:
-                  teleAtualizada?.paradaAtualMotoboy ?? item.paradaAtualMotoboy ?? 0,
                 rotaColetaIniciadaEm:
                   teleAtualizada?.rotaColetaIniciadaEm ?? item.rotaColetaIniciadaEm,
                 chegouNaColetaEm: teleAtualizada?.chegouNaColetaEm ?? item.chegouNaColetaEm,
@@ -1323,7 +1351,8 @@ export default function MotoboyPage() {
                   onAceitar={() => void responderAceite(tele, "ACEITAR")}
                   onRecusar={() => void responderAceite(tele, "RECUSAR")}
                   onExpirarAceite={() => void expirarAceiteAutomaticamente(tele)}
-                  onAbrirMapaParadaAtual={() => {}}
+                  onAbrirMapaColeta={() => {}}
+                  onAbrirMapaEntrega={() => {}}
                 />
               ))}
             </div>
@@ -1357,7 +1386,8 @@ export default function MotoboyPage() {
                   onAceitar={() => {}}
                   onRecusar={() => {}}
                   onExpirarAceite={() => {}}
-                  onAbrirMapaParadaAtual={() => abrirRotaParaParadaAtual(tele)}
+                  onAbrirMapaColeta={() => abrirRotaParaColeta(tele)}
+                  onAbrirMapaEntrega={() => abrirRotaParaEntrega(tele)}
                 />
               ))}
             </div>
@@ -1393,7 +1423,8 @@ export default function MotoboyPage() {
                   onAceitar={() => {}}
                   onRecusar={() => {}}
                   onExpirarAceite={() => {}}
-                  onAbrirMapaParadaAtual={() => {}}
+                  onAbrirMapaColeta={() => {}}
+                  onAbrirMapaEntrega={() => {}}
                 />
               ))}
             </div>
@@ -1493,7 +1524,8 @@ function CardTele({
   onAceitar,
   onRecusar,
   onExpirarAceite,
-  onAbrirMapaParadaAtual,
+  onAbrirMapaColeta,
+  onAbrirMapaEntrega,
 }: {
   tele: Tele;
   miniMapa?: EstadoMiniMapa;
@@ -1504,7 +1536,8 @@ function CardTele({
   onAceitar: () => void;
   onRecusar: () => void;
   onExpirarAceite: () => void;
-  onAbrirMapaParadaAtual: () => void;
+  onAbrirMapaColeta: () => void;
+  onAbrirMapaEntrega: () => void;
 }) {
   const [agoraAceite, setAgoraAceite] = useState(() => Date.now());
   const expiracaoDisparadaRef = useRef(false);
@@ -1548,17 +1581,8 @@ function CardTele({
     : [];
 
   const etapaAtual = tele.etapaMotoboy || "AGUARDANDO_INICIO_COLETA";
-  const indiceParadaAtual = Math.max(
-    0,
-    Math.min(Number(tele.paradaAtualMotoboy || 0), Math.max(paradas.length - 1, 0))
-  );
-  const paradaAtual = paradas[indiceParadaAtual];
-  const proximaParada = paradas[indiceParadaAtual + 1];
-  const acaoEtapa = obterAcaoEtapaMotoboy({
-    etapa: etapaAtual,
-    paradaAtual,
-    proximaParada,
-  });
+
+  const acaoEtapa = obterAcaoEtapaMotoboy(etapaAtual);
   const observacao = tele.observacaoGeral || tele.observacao;
 
   return (
@@ -1663,59 +1687,37 @@ function CardTele({
 
           {paradas.length > 0 ? (
             <div className="mt-5 space-y-3">
-              {paradas.map((parada, indice) => {
-                const paradaAtiva =
-                  !concluida && tele.statusAceite === "ACEITA" && indice === indiceParadaAtual;
-
-                const paradaConcluida =
-                  concluida || (tele.statusAceite === "ACEITA" && indice < indiceParadaAtual);
-
-                return (
-                  <div
-                    key={parada.id || `${tele.id}-${indice}`}
-                    className={`relative flex gap-3 rounded-2xl p-3 ${
-                      paradaAtiva ? "border border-blue-200 bg-blue-50" : ""
-                    }`}
-                  >
-                    <div className="flex w-7 shrink-0 flex-col items-center">
-                      <div
-                        className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
-                          paradaConcluida
-                            ? "bg-emerald-100 text-emerald-700"
-                            : paradaAtiva
-                              ? "bg-blue-600 text-white"
-                              : "bg-slate-900 text-white"
-                        }`}
-                      >
-                        {indice + 1}
-                      </div>
-
-                      {indice < paradas.length - 1 && (
-                        <div className="mt-1 h-full min-h-6 w-px bg-slate-200" />
-                      )}
+              {paradas.map((parada, indice) => (
+                <div key={parada.id || `${tele.id}-${indice}`} className="relative flex gap-3">
+                  <div className="flex w-7 shrink-0 flex-col items-center">
+                    <div
+                      className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
+                        concluida ? "bg-emerald-100 text-emerald-700" : "bg-slate-900 text-white"
+                      }`}
+                    >
+                      {indice + 1}
                     </div>
 
-                    <div className="min-w-0 pb-2">
-                      <p className="font-semibold text-slate-800">
-                        {parada.cliente || tituloTipoParada(parada.tipo) || `Parada ${indice + 1}`}
-                      </p>
-
-                      <p className="mt-1 break-words text-sm leading-6 text-slate-500">
-                        {parada.endereco || "Endereço não informado"}
-                      </p>
-
-                      {parada.observacao && (
-                        <p className="mt-1 text-sm text-slate-600">{parada.observacao}</p>
-                      )}
-                      {paradaAtiva && (
-                        <span className="mt-2 inline-flex rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                          Parada atual
-                        </span>
-                      )}
-                    </div>
+                    {indice < paradas.length - 1 && (
+                      <div className="mt-1 h-full min-h-6 w-px bg-slate-200" />
+                    )}
                   </div>
-                );
-              })}
+
+                  <div className="min-w-0 pb-2">
+                    <p className="font-semibold text-slate-800">
+                      {parada.cliente || tituloTipoParada(parada.tipo) || `Parada ${indice + 1}`}
+                    </p>
+
+                    <p className="mt-1 break-words text-sm leading-6 text-slate-500">
+                      {parada.endereco || "Endereço não informado"}
+                    </p>
+
+                    {parada.observacao && (
+                      <p className="mt-1 text-sm text-slate-600">{parada.observacao}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
             <div className="mt-5 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-500">
@@ -1769,17 +1771,8 @@ function CardTele({
                     Etapa atual
                   </p>
                   <p className="mt-1 font-semibold text-slate-800">
-                    {rotuloEtapaMotoboy(etapaAtual, paradaAtual)}
+                    {rotuloEtapaMotoboy(etapaAtual)}
                   </p>
-
-                  {paradaAtual && (
-                    <p className="mt-1 text-sm text-slate-500">
-                      Destino atual:{" "}
-                      <strong className="text-slate-700">
-                        {tituloParada(paradaAtual, indiceParadaAtual)}
-                      </strong>
-                    </p>
-                  )}
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row">
@@ -1810,18 +1803,29 @@ function CardTele({
                     )}
                   </button>
 
-                  {(etapaAtual === "EM_ROTA_COLETA" || etapaAtual === "EM_ROTA_ENTREGA") &&
-                    paradaAtual && (
-                      <button
-                        type="button"
-                        onClick={onAbrirMapaParadaAtual}
-                        disabled={bloqueado}
-                        className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-                      >
-                        <MapPin size={18} />
-                        Abrir mapa: {rotuloCurtoTipoParada(paradaAtual.tipo)}
-                      </button>
-                    )}
+                  {etapaAtual === "EM_ROTA_COLETA" && (
+                    <button
+                      type="button"
+                      onClick={onAbrirMapaColeta}
+                      disabled={bloqueado}
+                      className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                    >
+                      <MapPin size={18} />
+                      Abrir mapa da coleta
+                    </button>
+                  )}
+
+                  {etapaAtual === "EM_ROTA_ENTREGA" && (
+                    <button
+                      type="button"
+                      onClick={onAbrirMapaEntrega}
+                      disabled={bloqueado}
+                      className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                    >
+                      <MapPin size={18} />
+                      Abrir mapa da entrega
+                    </button>
+                  )}
                 </div>
               </div>
             )
@@ -1868,107 +1872,54 @@ function EstadoVazio({
   );
 }
 
-function obterAcaoEtapaMotoboy({
-  etapa,
-  paradaAtual,
-  proximaParada,
-}: {
-  etapa: EtapaMotoboyTele;
-  paradaAtual?: Parada;
-  proximaParada?: Parada;
-}): {
+function obterAcaoEtapaMotoboy(etapa: EtapaMotoboyTele): {
   texto: string;
   proximaEtapa: EtapaMotoboyTele;
 } | null {
-  const tipoAtual = rotuloCurtoTipoParada(paradaAtual?.tipo);
-  const tipoProximo = rotuloCurtoTipoParada(proximaParada?.tipo);
-
-  if (etapa === "AGUARDANDO_INICIO_COLETA") {
-    return {
-      texto: `Iniciar rota até ${artigoParaTipo(tipoAtual)} ${tipoAtual.toLowerCase()}`,
+  const mapa: Record<
+    EtapaMotoboyTele,
+    {
+      texto: string;
+      proximaEtapa: EtapaMotoboyTele;
+    } | null
+  > = {
+    AGUARDANDO_INICIO_COLETA: {
+      texto: "Iniciar rota até a coleta",
       proximaEtapa: "EM_ROTA_COLETA",
-    };
-  }
-
-  if (etapa === "EM_ROTA_COLETA") {
-    return {
-      texto: `Cheguei ${artigoEmTipo(tipoAtual)} ${tipoAtual.toLowerCase()}`,
+    },
+    EM_ROTA_COLETA: {
+      texto: "Cheguei na coleta",
       proximaEtapa: "CHEGOU_NA_COLETA",
-    };
-  }
-
-  if (etapa === "CHEGOU_NA_COLETA") {
-    return {
-      texto: `Iniciar rota até ${artigoParaTipo(tipoProximo)} ${tipoProximo.toLowerCase()}`,
+    },
+    CHEGOU_NA_COLETA: {
+      texto: "Iniciar entrega",
       proximaEtapa: "EM_ROTA_ENTREGA",
-    };
-  }
-
-  if (etapa === "EM_ROTA_ENTREGA") {
-    return {
-      texto: `Cheguei ${artigoEmTipo(tipoAtual)} ${tipoAtual.toLowerCase()}`,
+    },
+    EM_ROTA_ENTREGA: {
+      texto: "Cheguei na entrega",
       proximaEtapa: "CHEGOU_NA_ENTREGA",
-    };
-  }
-
-  if (etapa === "CHEGOU_NA_ENTREGA") {
-    if (proximaParada) {
-      return {
-        texto: `Iniciar rota até ${artigoParaTipo(tipoProximo)} ${tipoProximo.toLowerCase()}`,
-        proximaEtapa: "EM_ROTA_ENTREGA",
-      };
-    }
-
-    return {
-      texto: "Finalizar tele",
+    },
+    CHEGOU_NA_ENTREGA: {
+      texto: "Entregue",
       proximaEtapa: "CONCLUIDA",
-    };
-  }
-
-  return null;
-}
-
-function rotuloEtapaMotoboy(etapa: EtapaMotoboyTele, paradaAtual?: Parada) {
-  const tipoAtual = rotuloCurtoTipoParada(paradaAtual?.tipo);
-
-  const mapa: Record<EtapaMotoboyTele, string> = {
-    AGUARDANDO_INICIO_COLETA: `Aguardando início da rota até ${artigoParaTipo(tipoAtual)} ${tipoAtual.toLowerCase()}`,
-    EM_ROTA_COLETA: `Em deslocamento até ${artigoParaTipo(tipoAtual)} ${tipoAtual.toLowerCase()}`,
-    CHEGOU_NA_COLETA: `No local ${artigoDeTipo(tipoAtual)} ${tipoAtual.toLowerCase()}`,
-    EM_ROTA_ENTREGA: `Em deslocamento até ${artigoParaTipo(tipoAtual)} ${tipoAtual.toLowerCase()}`,
-    CHEGOU_NA_ENTREGA: `No local ${artigoDeTipo(tipoAtual)} ${tipoAtual.toLowerCase()}`,
-    CONCLUIDA: "Tele concluída",
+    },
+    CONCLUIDA: null,
   };
 
   return mapa[etapa];
 }
 
-function rotuloCurtoTipoParada(tipo?: string | null) {
-  const mapa: Record<string, string> = {
-    COLETA: "Coleta",
-    ENTREGA: "Entrega",
-    RETORNO: "Retorno",
-    TROCAR: "Troca",
-    ENTREGA_E_COLETA: "Entrega e coleta",
+function rotuloEtapaMotoboy(etapa: EtapaMotoboyTele) {
+  const mapa: Record<EtapaMotoboyTele, string> = {
+    AGUARDANDO_INICIO_COLETA: "Aguardando início da rota até a coleta",
+    EM_ROTA_COLETA: "Em deslocamento até a coleta",
+    CHEGOU_NA_COLETA: "No local da coleta",
+    EM_ROTA_ENTREGA: "Em deslocamento até a entrega",
+    CHEGOU_NA_ENTREGA: "No local da entrega",
+    CONCLUIDA: "Entrega concluída",
   };
 
-  return mapa[String(tipo || "").toUpperCase()] || "Parada";
-}
-
-function artigoParaTipo(tipo: string) {
-  return tipo === "Entrega" || tipo === "Entrega e coleta" || tipo === "Troca" ? "a" : "o";
-}
-
-function artigoEmTipo(tipo: string) {
-  return tipo === "Entrega" || tipo === "Entrega e coleta" || tipo === "Troca" ? "na" : "no";
-}
-
-function artigoDeTipo(tipo: string) {
-  return tipo === "Entrega" || tipo === "Entrega e coleta" || tipo === "Troca" ? "da" : "do";
-}
-
-function tituloParada(parada: Parada, indice: number) {
-  return parada.cliente || tituloTipoParada(parada.tipo) || `Parada ${indice + 1}`;
+  return mapa[etapa];
 }
 
 function calcularSegundosRestantesAceite(
@@ -2200,3 +2151,4 @@ function formatarTempoLocalizacao(data: string) {
     timeZone: FUSO_BRASIL,
   });
 }
+

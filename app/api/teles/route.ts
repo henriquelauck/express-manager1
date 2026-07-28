@@ -32,6 +32,8 @@ function tipoParadaParaBanco(tipo: string) {
     Coleta: "COLETA",
     Trocar: "TROCAR",
     "Entrega e coleta": "ENTREGA_E_COLETA",
+    Retorno: "RETORNO",
+    RETORNO: "RETORNO",
   };
 
   return mapa[tipo] || "ENTREGA";
@@ -43,9 +45,50 @@ function tipoParadaParaTela(tipo: string) {
     COLETA: "Coleta",
     TROCAR: "Trocar",
     ENTREGA_E_COLETA: "Entrega e coleta",
+    RETORNO: "Retorno",
   };
 
   return mapa[tipo] || "Entrega";
+}
+
+function paradaExigeRetorno(tipo: string) {
+  return (
+    tipo === "Trocar" ||
+    tipo === "TROCAR" ||
+    tipo === "Entrega e coleta" ||
+    tipo === "ENTREGA_E_COLETA"
+  );
+}
+
+function montarParadasOperacionais(paradasRecebidas: any[]) {
+  const paradasOriginais = Array.isArray(paradasRecebidas)
+    ? paradasRecebidas.filter((parada) => parada?.tipo !== "Retorno" && parada?.tipo !== "RETORNO")
+    : [];
+
+  if (paradasOriginais.length === 0) {
+    return [];
+  }
+
+  const possuiRetorno = paradasOriginais.some((parada) =>
+    paradaExigeRetorno(String(parada?.tipo || ""))
+  );
+
+  if (!possuiRetorno) {
+    return paradasOriginais;
+  }
+
+  const primeiraParada = paradasOriginais[0];
+
+  return [
+    ...paradasOriginais,
+    {
+      tipo: "RETORNO",
+      cliente: primeiraParada.cliente || primeiraParada.nomeCliente || "",
+      endereco: primeiraParada.endereco || "",
+      contato: primeiraParada.contato || "",
+      observacao: "Retorno ao ponto inicial",
+    },
+  ];
 }
 
 function recebimentoParaBanco(recebimento: string) {
@@ -101,6 +144,7 @@ function formatarTeleParaTela(tele: any) {
     motivoRecusaMotoboy: tele.motivoRecusaMotoboy,
 
     etapaMotoboy: tele.etapaMotoboy,
+    paradaAtualMotoboy: tele.paradaAtualMotoboy,
     rotaColetaIniciadaEm: tele.rotaColetaIniciadaEm,
     chegouNaColetaEm: tele.chegouNaColetaEm,
     entregaIniciadaEm: tele.entregaIniciadaEm,
@@ -284,6 +328,14 @@ export async function POST(request: Request) {
   const total = Number(body.total ?? Number(String(body.valor || "0").replace(",", ".")));
 
   const valorRecebido = Math.max(0, Math.min(Number(body.valorRecebido || 0), total));
+  const paradasOperacionais = montarParadasOperacionais(body.paradas);
+
+  if (paradasOperacionais.length === 0) {
+    return NextResponse.json(
+      { erro: "Informe ao menos uma parada para criar a tele." },
+      { status: 400 }
+    );
+  }
 
   const tele = await prisma.$transaction(async (tx) => {
     const teleCriada = await tx.tele.create({
@@ -329,7 +381,7 @@ export async function POST(request: Request) {
         observacaoGeral: body.observacaoGeral || "",
 
         paradas: {
-          create: body.paradas.map((parada: any, index: number) => ({
+          create: paradasOperacionais.map((parada: any, index: number) => ({
             tipo: tipoParadaParaBanco(parada.tipo) as any,
             cliente: parada.cliente || parada.nomeCliente || "",
             endereco: parada.endereco || "",
@@ -450,6 +502,15 @@ export async function PUT(request: Request) {
     const statusAtualizado =
       deveReiniciarAceite || removeuMotoboy ? "AGUARDANDO_MOTOBOY" : statusParaBanco(body.status);
 
+    const paradasOperacionais = montarParadasOperacionais(body.paradas);
+
+    if (paradasOperacionais.length === 0) {
+      return NextResponse.json(
+        { erro: "Informe ao menos uma parada para atualizar a tele." },
+        { status: 400 }
+      );
+    }
+
     const tele = await prisma.$transaction(async (tx) => {
       await tx.teleParada.deleteMany({
         where: {
@@ -491,7 +552,7 @@ export async function PUT(request: Request) {
           observacaoGeral: body.observacaoGeral || "",
 
           paradas: {
-            create: body.paradas.map((parada: any, index: number) => ({
+            create: paradasOperacionais.map((parada: any, index: number) => ({
               tipo: tipoParadaParaBanco(parada.tipo) as any,
               cliente: parada.cliente || parada.nomeCliente || "",
               endereco: parada.endereco || "",
