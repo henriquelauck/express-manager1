@@ -118,7 +118,6 @@ export default function TelesPage() {
   const [localizacoesMotoboys, setLocalizacoesMotoboys] = useState<MotoboyLocalizacao[]>([]);
   const [erroLocalizacoes, setErroLocalizacoes] = useState("");
   const [carregandoLocalizacoes, setCarregandoLocalizacoes] = useState(true);
-  const [versaoMapaMotoboys, setVersaoMapaMotoboys] = useState(Date.now());
   const [mapaMotoboysDisponivel, setMapaMotoboysDisponivel] = useState(true);
 
   const carregarTeles = useCallback(async () => {
@@ -172,7 +171,6 @@ export default function TelesPage() {
 
       setLocalizacoesMotoboys(Array.isArray(dados) ? dados : []);
       setErroLocalizacoes("");
-      setVersaoMapaMotoboys(Date.now());
       setMapaMotoboysDisponivel(true);
     } catch (erro) {
       console.error("Erro ao atualizar localizações dos motoboys.", erro);
@@ -895,6 +893,17 @@ ${linkMaps}`
     (motoboy) => motoboy.localizacaoRecente
   );
 
+  const assinaturaMapaMotoboys = motoboysComLocalizacaoRecente
+    .map((motoboy) =>
+      [
+        motoboy.id,
+        Number(motoboy.latitude || 0).toFixed(5),
+        Number(motoboy.longitude || 0).toFixed(5),
+      ].join(":")
+    )
+    .sort()
+    .join("|");
+
   return (
     <PageContainer>
       <div className="mb-8 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
@@ -1065,8 +1074,9 @@ ${linkMaps}`
               </div>
             ) : motoboysComLocalizacaoRecente.length > 0 && mapaMotoboysDisponivel ? (
               <img
-                key={versaoMapaMotoboys}
-                src={`/api/maps/motoboys-online?versao=${versaoMapaMotoboys}`}
+                src={`/api/maps/motoboys-online?posicoes=${encodeURIComponent(
+                  assinaturaMapaMotoboys
+                )}`}
                 alt="Mapa com a posição atual dos motoboys online"
                 className="h-[360px] w-full object-cover md:h-[440px]"
                 onError={() => setMapaMotoboysDisponivel(false)}
