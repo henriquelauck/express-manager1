@@ -73,6 +73,28 @@ type MotoboyLocalizacao = {
   possuiCoordenadas: boolean;
   localizacaoRecente: boolean;
   telesEmAndamento: number;
+  teleAtual?: {
+    id: string;
+    solicitante: string;
+    status: string;
+    statusAceite: string;
+    etapaMotoboy?: string | null;
+    ordemMotoboy?: number | null;
+    aceitaPeloMotoboyEm?: string | null;
+    rotaColetaIniciadaEm?: string | null;
+    chegouNaColetaEm?: string | null;
+    entregaIniciadaEm?: string | null;
+    chegouNaEntregaEm?: string | null;
+    paradas: Array<{
+      id: string;
+      ordem: number;
+      tipo: string;
+      cliente: string;
+      endereco: string;
+      contato?: string | null;
+      observacao?: string | null;
+    }>;
+  } | null;
 };
 
 const statusOptions: StatusTele[] = [
@@ -119,6 +141,7 @@ export default function TelesPage() {
   const [erroLocalizacoes, setErroLocalizacoes] = useState("");
   const [carregandoLocalizacoes, setCarregandoLocalizacoes] = useState(true);
   const [mapaMotoboysDisponivel, setMapaMotoboysDisponivel] = useState(true);
+  const [motoboySelecionadoId, setMotoboySelecionadoId] = useState<string | null>(null);
 
   const carregarTeles = useCallback(async () => {
     if (carregandoTelesRef.current) return;
@@ -893,16 +916,36 @@ ${linkMaps}`
     (motoboy) => motoboy.localizacaoRecente
   );
 
-  const assinaturaMapaMotoboys = motoboysComLocalizacaoRecente
-    .map((motoboy) =>
-      [
-        motoboy.id,
-        Number(motoboy.latitude || 0).toFixed(5),
-        Number(motoboy.longitude || 0).toFixed(5),
-      ].join(":")
-    )
-    .sort()
-    .join("|");
+  const motoboySelecionado =
+    localizacoesMotoboys.find((motoboy) => motoboy.id === motoboySelecionadoId) || null;
+
+  const assinaturaMapaMotoboys = [
+    motoboySelecionadoId || "todos",
+    ...motoboysComLocalizacaoRecente
+      .map((motoboy) =>
+        [
+          motoboy.id,
+          Number(motoboy.latitude || 0).toFixed(5),
+          Number(motoboy.longitude || 0).toFixed(5),
+        ].join(":")
+      )
+      .sort(),
+  ].join("|");
+
+  const urlMapaMotoboys = motoboySelecionadoId
+    ? `/api/maps/motoboys-online?motoboyId=${encodeURIComponent(
+        motoboySelecionadoId
+      )}&posicoes=${encodeURIComponent(assinaturaMapaMotoboys)}`
+    : `/api/maps/motoboys-online?posicoes=${encodeURIComponent(assinaturaMapaMotoboys)}`;
+
+  function selecionarMotoboyNoMapa(motoboy: MotoboyLocalizacao) {
+    if (!motoboy.localizacaoRecente) {
+      return;
+    }
+
+    setMapaMotoboysDisponivel(true);
+    setMotoboySelecionadoId((atual) => (atual === motoboy.id ? null : motoboy.id));
+  }
 
   return (
     <PageContainer>
@@ -1049,20 +1092,38 @@ ${linkMaps}`
               </div>
 
               <p className="mt-1 text-sm text-slate-500">
-                A posição é atualizada automaticamente enquanto o motoboy estiver online.
+                {motoboySelecionado
+                  ? `Exibindo a rota atual de ${motoboySelecionado.nome}.`
+                  : "Clique em um motoboy da lista para visualizar a rota atual."}
               </p>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => void carregarLocalizacoes()}
-            disabled={carregandoLocalizacoesRef.current}
-            className="flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
-          >
-            <RotateCcw size={16} className={carregandoLocalizacoes ? "animate-spin" : ""} />
-            Atualizar posições
-          </button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            {motoboySelecionadoId && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMotoboySelecionadoId(null);
+                  setMapaMotoboysDisponivel(true);
+                }}
+                className="flex h-10 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-medium text-blue-700 transition hover:bg-blue-100"
+              >
+                <X size={16} />
+                Ver todos
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => void carregarLocalizacoes()}
+              disabled={carregandoLocalizacoesRef.current}
+              className="flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+            >
+              <RotateCcw size={16} className={carregandoLocalizacoes ? "animate-spin" : ""} />
+              Atualizar posições
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-0 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -1074,10 +1135,12 @@ ${linkMaps}`
               </div>
             ) : motoboysComLocalizacaoRecente.length > 0 && mapaMotoboysDisponivel ? (
               <img
-                src={`/api/maps/motoboys-online?posicoes=${encodeURIComponent(
-                  assinaturaMapaMotoboys
-                )}`}
-                alt="Mapa com a posição atual dos motoboys online"
+                src={urlMapaMotoboys}
+                alt={
+                  motoboySelecionado
+                    ? `Mapa com a rota atual de ${motoboySelecionado.nome}`
+                    : "Mapa com a posição atual dos motoboys online"
+                }
                 className="h-[360px] w-full object-cover md:h-[440px]"
                 onError={() => setMapaMotoboysDisponivel(false)}
               />
@@ -1118,78 +1181,114 @@ ${linkMaps}`
             )}
 
             <div className="space-y-3">
-              {localizacoesMotoboys.map((motoboy, indice) => (
-                <div
-                  key={motoboy.id}
-                  className={`rounded-2xl border p-4 ${
-                    motoboy.localizacaoRecente
-                      ? "border-emerald-200 bg-emerald-50/70"
-                      : motoboy.online
-                        ? "border-amber-200 bg-amber-50/70"
-                        : "border-slate-200 bg-slate-50"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 items-start gap-3">
+              {localizacoesMotoboys.map((motoboy, indice) => {
+                const selecionado = motoboySelecionadoId === motoboy.id;
+
+                return (
+                  <button
+                    type="button"
+                    key={motoboy.id}
+                    onClick={() => selecionarMotoboyNoMapa(motoboy)}
+                    disabled={!motoboy.localizacaoRecente}
+                    className={`w-full rounded-2xl border p-4 text-left transition ${
+                      selecionado
+                        ? "border-blue-500 bg-blue-50 ring-4 ring-blue-100"
+                        : motoboy.localizacaoRecente
+                          ? "border-emerald-200 bg-emerald-50/70 hover:border-emerald-400 hover:bg-emerald-50"
+                          : motoboy.online
+                            ? "cursor-not-allowed border-amber-200 bg-amber-50/70 opacity-80"
+                            : "cursor-not-allowed border-slate-200 bg-slate-50 opacity-70"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <span
+                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                            selecionado
+                              ? "bg-blue-600 text-white"
+                              : motoboy.localizacaoRecente
+                                ? "bg-emerald-600 text-white"
+                                : motoboy.online
+                                  ? "bg-amber-500 text-white"
+                                  : "bg-slate-200 text-slate-500"
+                          }`}
+                        >
+                          {motoboy.localizacaoRecente ? indice + 1 : <Bike size={17} />}
+                        </span>
+
+                        <div className="min-w-0">
+                          <p className="truncate font-bold text-slate-900">{motoboy.nome}</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {[motoboy.moto, motoboy.placa].filter(Boolean).join(" • ") ||
+                              "Moto não informada"}
+                          </p>
+                        </div>
+                      </div>
+
                       <span
-                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                          motoboy.localizacaoRecente
-                            ? "bg-emerald-600 text-white"
-                            : motoboy.online
-                              ? "bg-amber-500 text-white"
-                              : "bg-slate-200 text-slate-500"
+                        className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                          motoboy.online
+                            ? "bg-emerald-100 text-emerald-700"
+                            : "bg-slate-200 text-slate-600"
                         }`}
                       >
-                        {motoboy.localizacaoRecente ? indice + 1 : <Bike size={17} />}
+                        {motoboy.online ? <Wifi size={12} /> : <WifiOff size={12} />}
+                        {motoboy.online ? "Online" : "Offline"}
                       </span>
+                    </div>
 
-                      <div className="min-w-0">
-                        <p className="truncate font-bold text-slate-900">{motoboy.nome}</p>
-                        <p className="mt-1 text-xs text-slate-500">
-                          {[motoboy.moto, motoboy.placa].filter(Boolean).join(" • ") ||
-                            "Moto não informada"}
-                        </p>
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                      <div className="rounded-xl bg-white/80 px-3 py-2">
+                        <span className="block text-slate-400">Última posição</span>
+                        <strong className="mt-1 block text-slate-700">
+                          {formatarTempoLocalizacaoGestor(
+                            motoboy.localizacaoAtualizadaEm,
+                            motoboy.segundosSemAtualizar
+                          )}
+                        </strong>
+                      </div>
+
+                      <div className="rounded-xl bg-white/80 px-3 py-2">
+                        <span className="block text-slate-400">Teles em andamento</span>
+                        <strong className="mt-1 block text-slate-700">
+                          {motoboy.telesEmAndamento}
+                        </strong>
                       </div>
                     </div>
 
-                    <span
-                      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                        motoboy.online
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-slate-200 text-slate-600"
-                      }`}
-                    >
-                      {motoboy.online ? <Wifi size={12} /> : <WifiOff size={12} />}
-                      {motoboy.online ? "Online" : "Offline"}
-                    </span>
-                  </div>
+                    {motoboy.teleAtual && (
+                      <div className="mt-3 rounded-xl border border-white/80 bg-white/80 px-3 py-3">
+                        <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                          Rota atual
+                        </span>
+                        <strong className="mt-1 block text-sm text-slate-800">
+                          {motoboy.teleAtual.solicitante}
+                        </strong>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {rotuloEtapaMotoboy(motoboy.teleAtual.etapaMotoboy) ||
+                            "Aguardando início da operação"}
+                        </p>
+                      </div>
+                    )}
 
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                    <div className="rounded-xl bg-white/80 px-3 py-2">
-                      <span className="block text-slate-400">Última posição</span>
-                      <strong className="mt-1 block text-slate-700">
-                        {formatarTempoLocalizacaoGestor(
-                          motoboy.localizacaoAtualizadaEm,
-                          motoboy.segundosSemAtualizar
-                        )}
-                      </strong>
-                    </div>
+                    {motoboy.localizacaoRecente && (
+                      <p className="mt-3 text-xs font-medium text-blue-700">
+                        {selecionado
+                          ? "Rota exibida no mapa. Clique novamente para remover."
+                          : motoboy.teleAtual
+                            ? "Clique para visualizar a rota."
+                            : "Clique para destacar o motoboy no mapa."}
+                      </p>
+                    )}
 
-                    <div className="rounded-xl bg-white/80 px-3 py-2">
-                      <span className="block text-slate-400">Teles em andamento</span>
-                      <strong className="mt-1 block text-slate-700">
-                        {motoboy.telesEmAndamento}
-                      </strong>
-                    </div>
-                  </div>
-
-                  {typeof motoboy.precisao === "number" && (
-                    <p className="mt-3 text-xs text-slate-500">
-                      Precisão aproximada: {Math.round(motoboy.precisao)} m
-                    </p>
-                  )}
-                </div>
-              ))}
+                    {typeof motoboy.precisao === "number" && (
+                      <p className="mt-2 text-xs text-slate-500">
+                        Precisão aproximada: {Math.round(motoboy.precisao)} m
+                      </p>
+                    )}
+                  </button>
+                );
+              })}
 
               {!carregandoLocalizacoes && localizacoesMotoboys.length === 0 && (
                 <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">

@@ -41,10 +41,55 @@ export async function GET() {
         precisaoLocalizacao: true,
         onlineDesde: true,
         localizacaoAtualizadaEm: true,
+        teles: {
+          where: {
+            statusAceite: "ACEITA",
+            status: {
+              not: "ENTREGUE",
+            },
+          },
+          orderBy: [
+            {
+              ordemMotoboy: "asc",
+            },
+            {
+              aceitaPeloMotoboyEm: "asc",
+            },
+          ],
+          take: 1,
+          select: {
+            id: true,
+            solicitante: true,
+            status: true,
+            statusAceite: true,
+            etapaMotoboy: true,
+            ordemMotoboy: true,
+            aceitaPeloMotoboyEm: true,
+            rotaColetaIniciadaEm: true,
+            chegouNaColetaEm: true,
+            entregaIniciadaEm: true,
+            chegouNaEntregaEm: true,
+            paradas: {
+              orderBy: {
+                ordem: "asc",
+              },
+              select: {
+                id: true,
+                ordem: true,
+                tipo: true,
+                cliente: true,
+                endereco: true,
+                contato: true,
+                observacao: true,
+              },
+            },
+          },
+        },
         _count: {
           select: {
             teles: {
               where: {
+                statusAceite: "ACEITA",
                 status: {
                   not: "ENTREGUE",
                 },
@@ -71,14 +116,14 @@ export async function GET() {
     return NextResponse.json(
       motoboys.map((motoboy) => {
         const atualizadaEm = motoboy.localizacaoAtualizadaEm;
+        const teleAtual = motoboy.teles[0] || null;
 
         const segundosSemAtualizar = atualizadaEm
           ? Math.max(0, Math.floor((agora - atualizadaEm.getTime()) / 1000))
           : null;
 
         const possuiCoordenadas =
-          typeof motoboy.latitude === "number" &&
-          typeof motoboy.longitude === "number";
+          typeof motoboy.latitude === "number" && typeof motoboy.longitude === "number";
 
         return {
           id: motoboy.id,
@@ -100,15 +145,28 @@ export async function GET() {
             segundosSemAtualizar !== null &&
             segundosSemAtualizar <= 120,
           telesEmAndamento: motoboy._count.teles,
+          teleAtual: teleAtual
+            ? {
+                id: teleAtual.id,
+                solicitante: teleAtual.solicitante,
+                status: teleAtual.status,
+                statusAceite: teleAtual.statusAceite,
+                etapaMotoboy: teleAtual.etapaMotoboy,
+                ordemMotoboy: teleAtual.ordemMotoboy,
+                aceitaPeloMotoboyEm: teleAtual.aceitaPeloMotoboyEm,
+                rotaColetaIniciadaEm: teleAtual.rotaColetaIniciadaEm,
+                chegouNaColetaEm: teleAtual.chegouNaColetaEm,
+                entregaIniciadaEm: teleAtual.entregaIniciadaEm,
+                chegouNaEntregaEm: teleAtual.chegouNaEntregaEm,
+                paradas: teleAtual.paradas,
+              }
+            : null,
         };
       })
     );
   } catch (erro) {
     console.error("Erro ao carregar localizações dos motoboys:", erro);
 
-    return respostaErro(
-      "Não foi possível carregar as localizações dos motoboys.",
-      500
-    );
+    return respostaErro("Não foi possível carregar as localizações dos motoboys.", 500);
   }
 }
