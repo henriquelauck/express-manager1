@@ -272,9 +272,14 @@ export async function GET(request: Request) {
     return NextResponse.json(
       telesOrdenadas.map((tele) => {
         const itensDaTele = itensPorTele.get(tele.id) || [];
-        const itemAtualDaTele = itemFilaAtual?.teleId === tele.id ? itemFilaAtual : null;
 
-        const filaOperacionalAtiva = itensFilaOperacional.length > 0;
+        /*
+         * Cada tele controla sua própria sequência de paradas.
+         * Uma tele anterior não bloqueia o início de outra tele.
+         */
+        const itemAtualDaTele = itensDaTele[0] || null;
+
+        const filaOperacionalAtiva = itensDaTele.length > 0;
         const teleAceitaPendente = tele.statusAceite === "ACEITA" && tele.status !== "ENTREGUE";
 
         /*
