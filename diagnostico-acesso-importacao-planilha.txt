@@ -1,17 +1,10 @@
+﻿===== C:\Projetos\express-manager\app\financeiro\importar-historico\page.tsx =====
 "use client";
 
 import PageContainer from "@/components/ui/PageContainer";
 import PageHeader from "@/components/ui/PageHeader";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  FileSpreadsheet,
-  Loader2,
-  Save,
-  Trash2,
-  Upload,
-} from "lucide-react";
-import { type FormEvent, useEffect, useState } from "react";
+import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Save, Upload } from "lucide-react";
+import { type FormEvent, useState } from "react";
 
 type RegistroPreview = {
   aba: string;
@@ -60,17 +53,6 @@ type AssociacaoCliente = {
   clienteId: string;
 };
 
-type ImportacaoHistorico = {
-  id: string;
-  nomeArquivo: string;
-  ano: number;
-  quantidade: number;
-  quantidadeRegistros: number;
-  total: number;
-  createdAt: string;
-  updatedAt: string;
-};
-
 function formatarDinheiro(valor: number) {
   return valor.toLocaleString("pt-BR", {
     style: "currency",
@@ -97,78 +79,6 @@ export default function ImportarHistoricoPage() {
   const [resultado, setResultado] = useState<ResultadoPreview | null>(null);
 
   const [associacoes, setAssociacoes] = useState<AssociacaoCliente[]>([]);
-
-  const [importacoes, setImportacoes] = useState<ImportacaoHistorico[]>([]);
-  const [carregandoImportacoes, setCarregandoImportacoes] = useState(true);
-  const [erroImportacoes, setErroImportacoes] = useState("");
-  const [excluindoImportacaoId, setExcluindoImportacaoId] = useState<string | null>(null);
-
-  async function carregarImportacoes() {
-    try {
-      setCarregandoImportacoes(true);
-      setErroImportacoes("");
-
-      const resposta = await fetch("/api/importacoes/planilha", {
-        cache: "no-store",
-      });
-
-      const dados = await resposta.json();
-
-      if (!resposta.ok) {
-        throw new Error(dados.erro || "Erro ao carregar as importações.");
-      }
-
-      setImportacoes(Array.isArray(dados) ? dados : []);
-    } catch (error) {
-      setErroImportacoes(
-        error instanceof Error ? error.message : "Erro ao carregar as importações."
-      );
-    } finally {
-      setCarregandoImportacoes(false);
-    }
-  }
-
-  useEffect(() => {
-    void carregarImportacoes();
-  }, []);
-
-  async function excluirImportacao(importacao: ImportacaoHistorico) {
-    if (excluindoImportacaoId) return;
-
-    const confirmou = window.confirm(
-      `Excluir a importação "${importacao.nomeArquivo}" de ${importacao.ano}?\n\n` +
-        `Isso também apagará ${importacao.quantidadeRegistros} registros históricos vinculados.`
-    );
-
-    if (!confirmou) return;
-
-    try {
-      setExcluindoImportacaoId(importacao.id);
-      setErroImportacoes("");
-
-      const resposta = await fetch("/api/importacoes/planilha", {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          importacaoId: importacao.id,
-        }),
-      });
-
-      const dados = await resposta.json();
-
-      if (!resposta.ok) {
-        throw new Error(dados.erro || "Erro ao excluir a importação.");
-      }
-
-      setImportacoes((atuais) => atuais.filter((item) => item.id !== importacao.id));
-    } catch (error) {
-      setErroImportacoes(error instanceof Error ? error.message : "Erro ao excluir a importação.");
-    } finally {
-      setExcluindoImportacaoId(null);
-    }
-  }
 
   async function visualizar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
@@ -289,8 +199,6 @@ export default function ImportarHistoricoPage() {
         `${dados.quantidadeRegistros} registros foram importados com sucesso. ` +
           `${dados.clientesCriados} clientes novos foram criados.`
       );
-
-      await carregarImportacoes();
     } catch (error) {
       setErro(error instanceof Error ? error.message : "Erro ao salvar o histórico.");
     } finally {
@@ -304,108 +212,6 @@ export default function ImportarHistoricoPage() {
         titulo="Importar histórico"
         descricao="Importe o faturamento antigo das suas planilhas para o Express Manager."
       />
-
-      <section className="mt-8 rounded-3xl border border-slate-100 bg-white p-5 shadow-sm md:p-7">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-xl font-bold text-slate-900">Histórico de importações</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Confira os arquivos que já foram importados antes de enviar uma nova planilha.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => void carregarImportacoes()}
-            disabled={carregandoImportacoes}
-            className="flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 disabled:opacity-50"
-          >
-            {carregandoImportacoes && <Loader2 size={17} className="animate-spin" />}
-            Atualizar
-          </button>
-        </div>
-
-        {erroImportacoes && (
-          <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            {erroImportacoes}
-          </div>
-        )}
-
-        {carregandoImportacoes && importacoes.length === 0 ? (
-          <div className="mt-5 flex items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-sm text-slate-500">
-            <Loader2 size={18} className="animate-spin" />
-            Carregando importações...
-          </div>
-        ) : importacoes.length === 0 ? (
-          <div className="mt-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center">
-            <FileSpreadsheet className="mx-auto text-slate-300" size={30} />
-            <p className="mt-3 font-medium text-slate-700">Nenhuma importação encontrada</p>
-            <p className="mt-1 text-sm text-slate-500">
-              Quando uma planilha for importada, ela aparecerá aqui.
-            </p>
-          </div>
-        ) : (
-          <div className="mt-5 overflow-x-auto">
-            <table className="w-full min-w-[850px]">
-              <thead>
-                <tr className="border-b text-left text-sm text-slate-500">
-                  <th className="p-3">Arquivo</th>
-                  <th className="p-3">Ano</th>
-                  <th className="p-3">Registros</th>
-                  <th className="p-3 text-right">Total</th>
-                  <th className="p-3">Importado em</th>
-                  <th className="p-3 text-right">Ação</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {importacoes.map((importacao) => (
-                  <tr key={importacao.id} className="border-b last:border-b-0">
-                    <td className="p-3">
-                      <strong className="text-slate-900">{importacao.nomeArquivo}</strong>
-                    </td>
-
-                    <td className="p-3">{importacao.ano}</td>
-
-                    <td className="p-3">{importacao.quantidadeRegistros}</td>
-
-                    <td className="p-3 text-right font-semibold text-emerald-700">
-                      {formatarDinheiro(importacao.total)}
-                    </td>
-
-                    <td className="p-3 text-sm text-slate-600">
-                      {new Date(importacao.createdAt).toLocaleString("pt-BR", {
-                        timeZone: "America/Sao_Paulo",
-                      })}
-                    </td>
-
-                    <td className="p-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => void excluirImportacao(importacao)}
-                        disabled={Boolean(excluindoImportacaoId)}
-                        className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-red-50 px-4 text-sm font-semibold text-red-600 transition hover:bg-red-100 disabled:cursor-wait disabled:opacity-50"
-                      >
-                        {excluindoImportacaoId === importacao.id ? (
-                          <>
-                            <Loader2 size={16} className="animate-spin" />
-                            Excluindo...
-                          </>
-                        ) : (
-                          <>
-                            <Trash2 size={16} />
-                            Excluir
-                          </>
-                        )}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
 
       <form
         onSubmit={visualizar}
@@ -721,3 +527,208 @@ function CardResumo({ titulo, valor }: { titulo: string; valor: string }) {
     </div>
   );
 }
+
+
+===== C:\Projetos\express-manager\components\Sidebar.tsx =====
+"use client";
+
+import {
+  BarChart3,
+  Bike,
+  ClipboardList,
+  DollarSign,
+  Home,
+  KeyRound,
+  LogOut,
+  Package,
+  Truck,
+  User,
+  Users,
+} from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+
+type Usuario = {
+  nome?: string;
+  role?: string;
+};
+
+type MenuLinkProps = {
+  href: string;
+  icon: React.ReactNode;
+  text: string;
+  ativo: boolean;
+};
+
+export default function Sidebar() {
+  const pathname = usePathname();
+  const [usuario, setUsuario] = useState<Usuario | null>(null);
+
+  useEffect(() => {
+    let ativo = true;
+
+    async function carregarUsuario() {
+      try {
+        const resposta = await fetch("/api/auth/me", {
+          cache: "no-store",
+        });
+
+        if (!resposta.ok) return;
+
+        const dados = await resposta.json();
+
+        if (ativo) {
+          setUsuario(dados.usuario || null);
+        }
+      } catch (erro) {
+        console.error("Erro ao carregar usuário:", erro);
+      }
+    }
+
+    void carregarUsuario();
+
+    return () => {
+      ativo = false;
+    };
+  }, []);
+
+  async function logout() {
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+      });
+    } finally {
+      window.location.href = "/login";
+    }
+  }
+
+  function rotaAtiva(href: string) {
+    if (href === "/") {
+      return pathname === "/";
+    }
+
+    return pathname === href || pathname.startsWith(`${href}/`);
+  }
+
+  const financeiroAtivo =
+    rotaAtiva("/financeiro") ||
+    rotaAtiva("/fechamentos") ||
+    rotaAtiva("/extrato-geral") ||
+    rotaAtiva("/motoboys/extrato");
+
+  return (
+    <aside className="flex min-h-screen w-[300px] max-w-[85vw] flex-col overflow-y-auto border-r border-slate-200 bg-white p-6">
+      <div className="mb-10 flex items-center gap-3">
+        <Package className="h-12 w-12 text-emerald-600" />
+
+        <div className="text-2xl font-bold leading-6 text-slate-900">
+          Express <br />
+          <span className="text-emerald-600">Manager</span>
+        </div>
+      </div>
+
+      <nav className="space-y-3">
+        <MenuLink href="/" icon={<Home size={22} />} text="Dashboard" ativo={rotaAtiva("/")} />
+
+        <MenuLink
+          href="/nova-tele"
+          icon={<Truck size={22} />}
+          text="Nova Tele"
+          ativo={rotaAtiva("/nova-tele")}
+        />
+
+        <MenuLink
+          href="/teles"
+          icon={<ClipboardList size={22} />}
+          text="Operações"
+          ativo={rotaAtiva("/teles")}
+        />
+
+        <MenuLink
+          href="/financeiro"
+          icon={<DollarSign size={22} />}
+          text="Financeiro"
+          ativo={financeiroAtivo}
+        />
+
+        <MenuLink
+          href="/relatorios"
+          icon={<BarChart3 size={22} />}
+          text="Relatórios"
+          ativo={rotaAtiva("/relatorios")}
+        />
+
+        <div className="my-4 border-t border-slate-100" />
+
+        <MenuLink
+          href="/clientes"
+          icon={<Users size={22} />}
+          text="Clientes"
+          ativo={rotaAtiva("/clientes")}
+        />
+
+        <MenuLink
+          href="/motoboys"
+          icon={<Bike size={22} />}
+          text="Motoboys"
+          ativo={rotaAtiva("/motoboys")}
+        />
+
+        <MenuLink
+          href="/configuracoes/logins"
+          icon={<KeyRound size={22} />}
+          text="Logins Motoboys"
+          ativo={rotaAtiva("/configuracoes/logins")}
+        />
+      </nav>
+
+      <div className="mt-auto border-t border-slate-200 pt-6">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+            <User size={20} />
+          </div>
+
+          <div className="min-w-0">
+            <p className="truncate font-bold leading-5 text-slate-900">
+              {usuario?.nome || "Usuário"}
+            </p>
+
+            <p className="text-sm text-slate-500">
+              {usuario?.role === "MOTOBOY" ? "Motoboy" : "Gestor"}
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => void logout()}
+          className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-red-50 text-red-600 transition hover:bg-red-100"
+        >
+          <LogOut size={18} />
+          Sair
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+function MenuLink({ href, icon, text, ativo }: MenuLinkProps) {
+  return (
+    <Link
+      href={href}
+      aria-current={ativo ? "page" : undefined}
+      className={`flex items-center gap-4 rounded-2xl px-5 py-4 transition ${
+        ativo
+          ? "bg-emerald-100 font-semibold text-emerald-700"
+          : "text-slate-700 hover:bg-emerald-50 hover:text-emerald-700"
+      }`}
+    >
+      <div className="flex h-6 w-6 items-center justify-center">{icon}</div>
+
+      <span>{text}</span>
+    </Link>
+  );
+}
+
+

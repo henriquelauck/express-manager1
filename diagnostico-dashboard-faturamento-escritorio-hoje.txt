@@ -1,3 +1,4 @@
+﻿===== app\page.tsx =====
 "use client";
 
 import PageContainer from "@/components/ui/PageContainer";
@@ -6,7 +7,6 @@ import { useExpressManager } from "@/context/ExpressManagerContext";
 import type { Tele } from "@/types/Tele";
 import {
   Bike,
-  Building2,
   Calendar,
   CheckCircle2,
   ChevronRight,
@@ -248,7 +248,6 @@ export default function Dashboard() {
   );
 
   const faturamentoHoje = telesHoje.reduce((total, tele) => total + valorDaTele(tele), 0);
-  const faturamentoEscritorioHoje = faturamentoHoje * 0.2;
 
   const telesEmAndamento = teles.filter((tele) => tele.status !== "Entregue");
 
@@ -372,7 +371,7 @@ export default function Dashboard() {
         />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-6 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-6">
         <Card
           title="Faturamento hoje"
           value={`R$ ${formatarValor(faturamentoHoje)}`}
@@ -381,14 +380,6 @@ export default function Dashboard() {
             telesHoje.length === 1 ? "tele registrada" : "teles registradas"
           } hoje`}
           tone="emerald"
-        />
-
-        <Card
-          title="Escritório hoje"
-          value={`R$ ${formatarValor(faturamentoEscritorioHoje)}`}
-          icon={<Building2 size={24} />}
-          description="20% do faturamento de hoje"
-          tone="violet"
         />
 
         <Card
@@ -1260,3 +1251,4 @@ function EmptyPanel({ icon, title, text }: { icon: ReactNode; title: string; tex
     </div>
   );
 }
+

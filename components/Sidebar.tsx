@@ -5,6 +5,7 @@ import {
   Bike,
   ClipboardList,
   DollarSign,
+  FileSpreadsheet,
   Home,
   KeyRound,
   LogOut,
@@ -81,6 +82,7 @@ export default function Sidebar() {
 
   const financeiroAtivo =
     rotaAtiva("/financeiro") ||
+    rotaAtiva("/financeiro/importar-historico") ||
     rotaAtiva("/fechamentos") ||
     rotaAtiva("/extrato-geral") ||
     rotaAtiva("/motoboys/extrato");
@@ -118,6 +120,13 @@ export default function Sidebar() {
           icon={<DollarSign size={22} />}
           text="Financeiro"
           ativo={financeiroAtivo}
+        />
+
+        <MenuLink
+          href="/financeiro/importar-historico"
+          icon={<FileSpreadsheet size={22} />}
+          text="Importar histórico"
+          ativo={rotaAtiva("/financeiro/importar-historico")}
         />
 
         <MenuLink
