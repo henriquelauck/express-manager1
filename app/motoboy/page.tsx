@@ -730,6 +730,59 @@ export default function MotoboyPage() {
   async function responderAceite(tele: Tele, acao: "ACEITAR" | "RECUSAR") {
     if (teleAtualizando) return;
 
+    /*
+     * Antes de aceitar uma tele, confirma novamente as permissões
+     * obrigatórias no Android. Recusar continua permitido.
+     */
+    if (acao === "ACEITAR" && executandoNoAppAndroid()) {
+      setVerificandoPermissoes(true);
+      setErro("");
+
+      try {
+        const estado = await LocalizacaoNativa.verificarPermissoes();
+
+        setPermissoesLocalizacao(estado);
+
+        if (!estado.prontoParaFicarOnline) {
+          const faltando: string[] = [];
+
+          if (!estado.localizacaoDuranteUso) {
+            faltando.push("localização");
+          }
+
+          if (!estado.localizacaoSegundoPlano) {
+            faltando.push('localização em "Permitir o tempo todo"');
+          }
+
+          if (!estado.notificacoes) {
+            faltando.push("notificações");
+          }
+
+          setErro(
+            `Não é possível aceitar esta tele. Ative: ${faltando.join(
+              ", "
+            )}. Depois volte ao aplicativo e tente novamente.`
+          );
+
+          setErroLocalizacao(
+            "As permissões obrigatórias precisam estar ativas para aceitar e realizar uma tele."
+          );
+
+          return;
+        }
+      } catch (erroPermissao) {
+        console.error("Não foi possível confirmar as permissões antes do aceite:", erroPermissao);
+
+        setErro(
+          "Não foi possível verificar as permissões do celular. Abra as configurações do Express Manager e confirme a localização e as notificações."
+        );
+
+        return;
+      } finally {
+        setVerificandoPermissoes(false);
+      }
+    }
+
     let motivo = "";
 
     if (acao === "RECUSAR") {
@@ -892,6 +945,8 @@ export default function MotoboyPage() {
             : item
         )
       );
+
+      await carregarDados(true);
     } catch (erroAtualizacao) {
       setErro(
         erroAtualizacao instanceof Error
