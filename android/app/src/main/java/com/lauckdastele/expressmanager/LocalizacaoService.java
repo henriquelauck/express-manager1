@@ -18,6 +18,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
@@ -76,6 +77,12 @@ public class LocalizacaoService extends Service {
     private Ringtone toqueAlerta;
     private Handler handlerSomAlerta;
     private Runnable tarefaRepetirSom;
+    private Handler handlerSinalVida;
+private Runnable tarefaSinalVida;
+private Location ultimaLocalizacaoConhecida;
+private PowerManager.WakeLock wakeLock;
+
+private static final long INTERVALO_SINAL_VIDA_MS = 30000L;
 
     @Override
     public void onCreate() {
@@ -87,6 +94,32 @@ public class LocalizacaoService extends Service {
         executorRede = Executors.newSingleThreadExecutor();
         handlerConsultaTeles = new Handler(Looper.getMainLooper());
         handlerSomAlerta = new Handler(Looper.getMainLooper());
+        handlerSinalVida = new Handler(Looper.getMainLooper());
+
+tarefaSinalVida = new Runnable() {
+    @Override
+    public void run() {
+        if (ultimaLocalizacaoConhecida != null) {
+            Log.d(
+                    TAG,
+                    "Enviando sinal de vida com a última localização conhecida."
+            );
+
+            enviarLocalizacaoParaServidor(
+                    ultimaLocalizacaoConhecida
+            );
+        } else {
+            buscarUltimaLocalizacaoConhecida();
+        }
+
+        if (handlerSinalVida != null) {
+            handlerSinalVida.postDelayed(
+                    this,
+                    INTERVALO_SINAL_VIDA_MS
+            );
+        }
+    }
+};
 
         tarefaRepetirSom = new Runnable() {
             @Override
@@ -149,6 +182,8 @@ public class LocalizacaoService extends Service {
                     return;
                 }
 
+                ultimaLocalizacaoConhecida = localizacao;
+
                 Log.d(
                         TAG,
                         "Latitude: " + localizacao.getLatitude()
@@ -173,6 +208,7 @@ public class LocalizacaoService extends Service {
          * comando para parar o som.
          */
         iniciarComoServicoEmPrimeiroPlano();
+        adquirirWakeLock();
 
         if (
                 intent != null
@@ -204,7 +240,73 @@ public class LocalizacaoService extends Service {
 
         return START_STICKY;
     }
+private void adquirirWakeLock() {
+    try {
+        if (
+                wakeLock != null
+                        && wakeLock.isHeld()
+        ) {
+            return;
+        }
 
+        PowerManager powerManager =
+                (PowerManager) getSystemService(
+                        Context.POWER_SERVICE
+                );
+
+        if (powerManager == null) {
+            Log.e(
+                    TAG,
+                    "Não foi possível acessar o gerenciador de energia."
+            );
+            return;
+        }
+
+        wakeLock = powerManager.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                getPackageName()
+                        + ":ExpressManagerLocalizacao"
+        );
+
+        wakeLock.setReferenceCounted(false);
+        wakeLock.acquire();
+
+        Log.d(
+                TAG,
+                "Wake Lock adquirido. Serviço continuará ativo com a tela bloqueada."
+        );
+    } catch (Exception erro) {
+        Log.e(
+                TAG,
+                "Não foi possível adquirir o Wake Lock.",
+                erro
+        );
+    }
+}
+
+private void liberarWakeLock() {
+    try {
+        if (
+                wakeLock != null
+                        && wakeLock.isHeld()
+        ) {
+            wakeLock.release();
+
+            Log.d(
+                    TAG,
+                    "Wake Lock liberado."
+            );
+        }
+    } catch (Exception erro) {
+        Log.e(
+                TAG,
+                "Erro ao liberar o Wake Lock.",
+                erro
+        );
+    } finally {
+        wakeLock = null;
+    }
+}
     private void iniciarComoServicoEmPrimeiroPlano() {
         Intent abrirAplicativo = new Intent(this, MainActivity.class);
 
@@ -274,7 +376,7 @@ public class LocalizacaoService extends Service {
                         15000L
                 )
                         .setMinUpdateIntervalMillis(10000L)
-                        .setMinUpdateDistanceMeters(25f)
+                        .setMinUpdateDistanceMeters(0f)
                         .build();
 
         clienteLocalizacao.requestLocationUpdates(
@@ -282,8 +384,65 @@ public class LocalizacaoService extends Service {
                 callbackLocalizacao,
                 getMainLooper()
         );
+        buscarUltimaLocalizacaoConhecida();
+iniciarSinalVida();
+    }
+private void iniciarSinalVida() {
+    if (
+            handlerSinalVida == null
+                    || tarefaSinalVida == null
+    ) {
+        return;
     }
 
+    handlerSinalVida.removeCallbacks(
+            tarefaSinalVida
+    );
+
+    handlerSinalVida.postDelayed(
+            tarefaSinalVida,
+            INTERVALO_SINAL_VIDA_MS
+    );
+}
+
+private void buscarUltimaLocalizacaoConhecida() {
+    boolean permissaoPrecisa =
+            ActivityCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED;
+
+    boolean permissaoAproximada =
+            ActivityCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED;
+
+    if (!permissaoPrecisa && !permissaoAproximada) {
+        return;
+    }
+
+    clienteLocalizacao
+            .getLastLocation()
+            .addOnSuccessListener(localizacao -> {
+                if (localizacao == null) {
+                    return;
+                }
+
+                ultimaLocalizacaoConhecida = localizacao;
+
+                enviarLocalizacaoParaServidor(
+                        localizacao
+                );
+            })
+            .addOnFailureListener(erro ->
+                    Log.e(
+                            TAG,
+                            "Não foi possível recuperar a última localização.",
+                            erro
+                    )
+            );
+}
     private void iniciarConsultaPeriodicaTeles() {
         if (handlerConsultaTeles == null || tarefaConsultaTeles == null) {
             return;
@@ -466,6 +625,7 @@ public class LocalizacaoService extends Service {
                 }
 
                 pararSomAlertaInterno();
+                
 
                 Uri som = RingtoneManager.getDefaultUri(
                         RingtoneManager.TYPE_ALARM
@@ -898,8 +1058,16 @@ public class LocalizacaoService extends Service {
                     tarefaRepetirSom
             );
         }
-
+if (
+        handlerSinalVida != null
+                && tarefaSinalVida != null
+) {
+    handlerSinalVida.removeCallbacks(
+            tarefaSinalVida
+    );
+}
         pararSomAlertaInterno();
+        liberarWakeLock();
 
         if (executorRede != null) {
             executorRede.shutdownNow();
