@@ -276,13 +276,6 @@ export async function PUT(request: Request) {
     const itensEmAndamento = itensAtivos.filter((item) => item.status === "EM_ANDAMENTO");
     const itensPendentes = itensAtivos.filter((item) => item.status === "PENDENTE");
 
-    if (itensEmAndamento.length > 1) {
-      return respostaErro(
-        "A fila possui mais de uma etapa em andamento. Corrija a inconsistência antes de reordenar.",
-        409
-      );
-    }
-
     if (idsOrdenados.length !== itensPendentes.length) {
       return respostaErro("A nova sequência precisa conter todos os itens pendentes da fila.", 400);
     }
@@ -324,7 +317,7 @@ export async function PUT(request: Request) {
       ultimaOrdemDaParadaPorTele.set(item.teleId, item.parada.ordem);
     }
 
-    const ordemInicial = itensEmAndamento.length > 0 ? 2 : 1;
+    const ordemInicial = itensEmAndamento.length + 1;
 
     await prisma.$transaction(
       idsOrdenados.map((id, indice) =>
@@ -339,15 +332,23 @@ export async function PUT(request: Request) {
       )
     );
 
-    if (itensEmAndamento.length === 1 && itensEmAndamento[0].ordem !== 1) {
-      await prisma.itemFilaOperacionalMotoboy.update({
-        where: {
-          id: itensEmAndamento[0].id,
-        },
-        data: {
-          ordem: 1,
-        },
-      });
+    /*
+     * Pode existir mais de uma rota já iniciada.
+     * Mantemos todas no começo da visualização, na ordem em que já estavam.
+     */
+    if (itensEmAndamento.length > 0) {
+      await prisma.$transaction(
+        itensEmAndamento.map((item, indice) =>
+          prisma.itemFilaOperacionalMotoboy.update({
+            where: {
+              id: item.id,
+            },
+            data: {
+              ordem: indice + 1,
+            },
+          })
+        )
+      );
     }
 
     const filaAtualizada = await prisma.itemFilaOperacionalMotoboy.findMany({
