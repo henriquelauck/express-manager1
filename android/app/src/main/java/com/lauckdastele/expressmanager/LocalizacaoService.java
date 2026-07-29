@@ -168,6 +168,13 @@ public class LocalizacaoService extends Service {
             int flags,
             int startId
     ) {
+        /*
+         * Todo startForegroundService precisa chamar startForeground
+         * imediatamente, inclusive quando o serviço recebe apenas o
+         * comando para parar o som.
+         */
+        iniciarComoServicoEmPrimeiroPlano();
+
         if (
                 intent != null
                         && ACAO_PARAR_SOM.equals(
@@ -193,7 +200,6 @@ public class LocalizacaoService extends Service {
             return START_STICKY;
         }
 
-        iniciarComoServicoEmPrimeiroPlano();
         iniciarAtualizacoesLocalizacao();
         iniciarConsultaPeriodicaTeles();
 

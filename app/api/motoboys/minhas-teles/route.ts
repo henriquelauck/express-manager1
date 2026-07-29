@@ -277,6 +277,16 @@ export async function GET(request: Request) {
         const filaOperacionalAtiva = itensFilaOperacional.length > 0;
         const teleAceitaPendente = tele.statusAceite === "ACEITA" && tele.status !== "ENTREGUE";
 
+        /*
+         * Depois que a última entrega da tele foi confirmada, o item da fila
+         * já está CONCLUIDO. Mesmo que a próxima etapa global pertença a outra
+         * tele, esta tele precisa continuar liberada somente para finalizar.
+         */
+        const finalizacaoLiberadaPelaFila =
+          teleAceitaPendente &&
+          tele.etapaMotoboy === "CHEGOU_NA_ENTREGA" &&
+          itensDaTele.length === 0;
+
         return {
           ...tele,
           aguardandoAceite: tele.status !== "ENTREGUE" && tele.statusAceite === "AGUARDANDO_ACEITE",
@@ -285,8 +295,14 @@ export async function GET(request: Request) {
             tele.statusAceite === "ACEITA" && tele.status !== "ENTREGUE" ? tele.ordemMotoboy : null,
 
           filaOperacionalAtiva,
-          etapaLiberadaPelaFila: !filaOperacionalAtiva || Boolean(itemAtualDaTele),
-          bloqueadaPelaFila: filaOperacionalAtiva && teleAceitaPendente && !itemAtualDaTele,
+          finalizacaoLiberadaPelaFila,
+          etapaLiberadaPelaFila:
+            !filaOperacionalAtiva || Boolean(itemAtualDaTele) || finalizacaoLiberadaPelaFila,
+          bloqueadaPelaFila:
+            filaOperacionalAtiva &&
+            teleAceitaPendente &&
+            !itemAtualDaTele &&
+            !finalizacaoLiberadaPelaFila,
           totalEtapasPendentesFila: itensDaTele.length,
 
           itemFilaAtual: itemAtualDaTele

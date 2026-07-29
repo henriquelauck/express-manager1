@@ -177,36 +177,6 @@ export async function GET(request: Request) {
         latitude: true,
         longitude: true,
         localizacaoAtualizadaEm: true,
-        teles: {
-          where: {
-            statusAceite: "ACEITA",
-            status: {
-              not: "ENTREGUE",
-            },
-          },
-          orderBy: [
-            {
-              ordemMotoboy: "asc",
-            },
-            {
-              aceitaPeloMotoboyEm: "asc",
-            },
-          ],
-          take: 1,
-          select: {
-            id: true,
-            solicitante: true,
-            etapaMotoboy: true,
-            paradas: {
-              orderBy: {
-                ordem: "asc",
-              },
-              select: {
-                endereco: true,
-              },
-            },
-          },
-        },
       },
     });
 
@@ -218,34 +188,119 @@ export async function GET(request: Request) {
       return respostaErro("O motoboy não está online ou não possui localização válida.", 404);
     }
 
-    const teleAtual = motoboy.teles[0] || null;
-
-    if (!teleAtual) {
-      return NextResponse.json(
+    /*
+     * A rota principal do gestor deve seguir a mesma fila
+     * operacional organizada manualmente.
+     */
+    const itemFilaAtual = await prisma.itemFilaOperacionalMotoboy.findFirst({
+      where: {
+        motoboyId,
+        status: {
+          in: ["PENDENTE", "EM_ANDAMENTO"],
+        },
+      },
+      orderBy: [
         {
-          motoboyId: motoboy.id,
-          motoboyNome: motoboy.nome,
-          possuiRota: false,
-          motivo: "Nenhuma tele aceita em andamento.",
+          ordem: "asc",
         },
         {
-          headers: {
-            "Cache-Control": "private, no-store, max-age=0",
+          createdAt: "asc",
+        },
+      ],
+      select: {
+        id: true,
+        ordem: true,
+        status: true,
+        teleId: true,
+        paradaId: true,
+        parada: {
+          select: {
+            id: true,
+            ordem: true,
+            tipo: true,
+            cliente: true,
+            endereco: true,
           },
-        }
-      );
+        },
+        tele: {
+          select: {
+            id: true,
+            solicitante: true,
+            etapaMotoboy: true,
+          },
+        },
+      },
+    });
+
+    let teleId: string | null = null;
+    let solicitante: string | null = null;
+    let etapaMotoboy: string | null = null;
+    let enderecoDestino: string | null = null;
+    let itemFilaId: string | null = null;
+    let itemFilaOrdem: number | null = null;
+    let tipoParada: string | null = null;
+    let clienteParada: string | null = null;
+
+    if (itemFilaAtual) {
+      teleId = itemFilaAtual.teleId;
+      solicitante = itemFilaAtual.tele.solicitante;
+      etapaMotoboy = itemFilaAtual.tele.etapaMotoboy;
+      enderecoDestino = String(itemFilaAtual.parada.endereco || "").trim();
+      itemFilaId = itemFilaAtual.id;
+      itemFilaOrdem = itemFilaAtual.ordem;
+      tipoParada = itemFilaAtual.parada.tipo;
+      clienteParada = itemFilaAtual.parada.cliente;
+    } else {
+      /*
+       * Compatibilidade com teles antigas que ainda não possuem
+       * itens na fila operacional.
+       */
+      const teleAntiga = await prisma.tele.findFirst({
+        where: {
+          motoboyId,
+          statusAceite: "ACEITA",
+          status: {
+            not: "ENTREGUE",
+          },
+        },
+        orderBy: [
+          {
+            ordemMotoboy: "asc",
+          },
+          {
+            aceitaPeloMotoboyEm: "asc",
+          },
+        ],
+        select: {
+          id: true,
+          solicitante: true,
+          etapaMotoboy: true,
+          paradas: {
+            orderBy: {
+              ordem: "asc",
+            },
+            select: {
+              endereco: true,
+            },
+          },
+        },
+      });
+
+      if (teleAntiga) {
+        teleId = teleAntiga.id;
+        solicitante = teleAntiga.solicitante;
+        etapaMotoboy = teleAntiga.etapaMotoboy;
+        enderecoDestino = destinoDaEtapa(teleAntiga.etapaMotoboy, teleAntiga.paradas);
+      }
     }
 
-    const enderecoDestino = destinoDaEtapa(teleAtual.etapaMotoboy, teleAtual.paradas);
-
-    if (!enderecoDestino) {
+    if (!teleId || !enderecoDestino) {
       return NextResponse.json(
         {
           motoboyId: motoboy.id,
           motoboyNome: motoboy.nome,
-          teleId: teleAtual.id,
           possuiRota: false,
-          motivo: "A tele não possui endereço de destino válido.",
+          motivo: "Nenhuma etapa operacional pendente encontrada.",
         },
         {
           headers: {
@@ -277,10 +332,22 @@ export async function GET(request: Request) {
       {
         motoboyId: motoboy.id,
         motoboyNome: motoboy.nome,
-        teleId: teleAtual.id,
-        solicitante: teleAtual.solicitante,
-        etapaMotoboy: teleAtual.etapaMotoboy,
+        teleId,
+        solicitante,
+        etapaMotoboy,
         possuiRota: true,
+
+        filaOperacional: itemFilaAtual
+          ? {
+              itemId: itemFilaId,
+              ordem: itemFilaOrdem,
+              status: itemFilaAtual.status,
+              paradaId: itemFilaAtual.paradaId,
+              tipoParada,
+              cliente: clienteParada,
+            }
+          : null,
+
         origem: {
           latitude: motoboy.latitude,
           longitude: motoboy.longitude,
