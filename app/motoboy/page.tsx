@@ -1457,7 +1457,7 @@ export default function MotoboyPage() {
                   tele={tele}
                   miniMapa={undefined}
                   atualizando={teleAtualizando === tele.id}
-                  bloqueado={Boolean(teleAtualizando) || Boolean(tele.bloqueadaPelaFila)}
+                  bloqueado={Boolean(teleAtualizando)}
                   onAvancarEtapa={(etapa) => void avancarEtapaMotoboy(tele, etapa)}
                   onAceitar={() => {}}
                   onRecusar={() => {}}
@@ -1673,29 +1673,25 @@ function CardTele({
       ? paradaLiberada
       : paradas[indiceParadaAtual + 1];
 
-  const teleBloqueadaPelaFila =
-    tele.filaOperacionalAtiva === true && tele.bloqueadaPelaFila === true;
+  const sugestaoGestor = tele.proximaEtapaDaTele || tele.itemFilaAtual || null;
 
   /*
-   * Depois de confirmar a chegada na última entrega, o item da fila
-   * já foi concluído. Sem etapas pendentes dessa tele, a única ação
-   * possível deve ser finalizar.
+   * A fila do gestor agora é apenas uma sugestão visual.
+   * O motoboy continua livre para iniciar qualquer tele.
    */
   const deveFinalizarTele =
     etapaAtual === "CHEGOU_NA_ENTREGA" && Number(tele.totalEtapasPendentesFila || 0) === 0;
 
-  const acaoEtapa = teleBloqueadaPelaFila
-    ? null
-    : deveFinalizarTele
-      ? {
-          texto: "Finalizar tele",
-          proximaEtapa: "CONCLUIDA" as EtapaMotoboyTele,
-        }
-      : obterAcaoEtapaMotoboy({
-          etapa: etapaAtual,
-          paradaAtual,
-          proximaParada,
-        });
+  const acaoEtapa = deveFinalizarTele
+    ? {
+        texto: "Finalizar tele",
+        proximaEtapa: "CONCLUIDA" as EtapaMotoboyTele,
+      }
+    : obterAcaoEtapaMotoboy({
+        etapa: etapaAtual,
+        paradaAtual,
+        proximaParada,
+      });
 
   const observacao = tele.observacaoGeral || tele.observacao;
 
@@ -1736,19 +1732,11 @@ function CardTele({
               </span>
             )}
 
-            {tele.statusAceite === "ACEITA" && tele.itemFilaAtual && !teleBloqueadaPelaFila && (
-              <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">
-                Etapa atual definida pelo gestor
+            {tele.statusAceite === "ACEITA" && sugestaoGestor?.posicao && (
+              <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-bold text-violet-700">
+                Sugestão do gestor: {sugestaoGestor.posicao}ª etapa
               </span>
             )}
-
-            {tele.statusAceite === "ACEITA" &&
-              teleBloqueadaPelaFila &&
-              tele.proximaEtapaDaTele?.posicao && (
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                  Etapa {tele.proximaEtapaDaTele.posicao} da fila
-                </span>
-              )}
           </div>
 
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-500">
@@ -1811,10 +1799,7 @@ function CardTele({
             <div className="mt-5 space-y-3">
               {paradas.map((parada, indice) => {
                 const paradaAtiva =
-                  !concluida &&
-                  tele.statusAceite === "ACEITA" &&
-                  !teleBloqueadaPelaFila &&
-                  indice === indiceVisualAtual;
+                  !concluida && tele.statusAceite === "ACEITA" && indice === indiceVisualAtual;
 
                 const paradaConcluida =
                   concluida || (tele.statusAceite === "ACEITA" && indice < indiceParadaAtual);
@@ -1878,30 +1863,34 @@ function CardTele({
             </div>
           )}
 
-          {!concluida && tele.statusAceite === "ACEITA" && teleBloqueadaPelaFila && (
-            <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
-              <p className="text-xs font-bold uppercase tracking-wide text-amber-700">
-                Etapa bloqueada
+          {!concluida && tele.statusAceite === "ACEITA" && sugestaoGestor?.parada && (
+            <div className="mt-5 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-violet-700">
+                Sugestão de rota do gestor
               </p>
 
               <p className="mt-1 font-semibold text-slate-900">
-                Aguarde a ordem definida pelo gestor
+                {sugestaoGestor.posicao
+                  ? `Sugestão ${sugestaoGestor.posicao}ª da sequência`
+                  : "Próxima parada sugerida"}
               </p>
 
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Você deve concluir primeiro a etapa que está no topo da fila operacional. Esta tele
-                será liberada automaticamente quando chegar a vez dela.
+                Esta ordem é apenas uma recomendação. Você pode iniciar outra tele quando for mais
+                prático para a operação.
               </p>
 
-              {tele.proximaEtapaDaTele?.parada && (
-                <div className="mt-3 rounded-xl bg-white/80 px-3 py-3 text-sm text-slate-600">
-                  <strong className="text-slate-800">Próxima etapa desta tele:</strong>{" "}
-                  {rotuloCurtoTipoParada(tele.proximaEtapaDaTele.parada.tipo)}
-                  {tele.proximaEtapaDaTele.parada.cliente
-                    ? ` — ${tele.proximaEtapaDaTele.parada.cliente}`
-                    : ""}
-                </div>
-              )}
+              <div className="mt-3 rounded-xl bg-white/80 px-3 py-3 text-sm text-slate-600">
+                <strong className="text-slate-800">
+                  {rotuloCurtoTipoParada(sugestaoGestor.parada.tipo)}
+                </strong>
+                {sugestaoGestor.parada.cliente ? ` — ${sugestaoGestor.parada.cliente}` : ""}
+                {sugestaoGestor.parada.endereco && (
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    {sugestaoGestor.parada.endereco}
+                  </p>
+                )}
+              </div>
             </div>
           )}
 
@@ -1938,7 +1927,6 @@ function CardTele({
           ) : (
             !concluida &&
             tele.statusAceite === "ACEITA" &&
-            !teleBloqueadaPelaFila &&
             acaoEtapa && (
               <div className="mt-5">
                 <div className="mb-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
