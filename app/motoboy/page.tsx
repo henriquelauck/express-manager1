@@ -299,7 +299,7 @@ export default function MotoboyPage() {
 
     const intervaloAtualizacao = window.setInterval(() => {
       void carregarTelesAutomaticamente();
-    }, 3000);
+    }, 15000);
 
     const verificarAoRetornar = () => {
       if (document.visibilityState === "visible") {
