@@ -10,6 +10,30 @@ const VALOR_POR_BLOCO_ESPERA = 5;
 async function atualizarEsperasAtivas(motoboyId: string) {
   const agora = new Date();
 
+  /*
+   * Correção de segurança:
+   * se a tele já está parada na coleta ou na entrega, mas o horário
+   * de início não foi gravado por alguma inconsistência anterior,
+   * inicia a espera automaticamente nesta consulta.
+   */
+  await prisma.tele.updateMany({
+    where: {
+      motoboyId,
+      statusAceite: "ACEITA",
+      status: {
+        not: "ENTREGUE",
+      },
+      etapaMotoboy: {
+        in: ["CHEGOU_NA_COLETA", "CHEGOU_NA_ENTREGA"],
+      },
+      esperaAtualIniciadaEm: null,
+    },
+    data: {
+      esperaAtualIniciadaEm: agora,
+      blocosEsperaAtual: 0,
+    },
+  });
+
   const telesComEsperaAtiva = await prisma.tele.findMany({
     where: {
       motoboyId,
