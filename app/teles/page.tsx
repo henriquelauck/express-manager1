@@ -144,6 +144,17 @@ export default function TelesPage() {
   const [carregandoLocalizacoes, setCarregandoLocalizacoes] = useState(true);
   const [motoboySelecionadoId, setMotoboySelecionadoId] = useState<string | null>(null);
   const [statusSidebar, setStatusSidebar] = useState<StatusTele>("Aguardando coleta");
+  const [agoraCronometros, setAgoraCronometros] = useState(() => Date.now());
+
+  useEffect(() => {
+    const intervaloCronometros = window.setInterval(() => {
+      setAgoraCronometros(Date.now());
+    }, 1000);
+
+    return () => {
+      window.clearInterval(intervaloCronometros);
+    };
+  }, []);
 
   const carregarTeles = useCallback(async () => {
     if (carregandoTelesRef.current) return;
@@ -1403,6 +1414,7 @@ ${linkMaps}`
                   valorEspera={valorEspera}
                   formatarValor={formatarValor}
                   converterValor={converterValor}
+                  agoraCronometros={agoraCronometros}
                 />
               ))
             )}
@@ -2395,6 +2407,7 @@ function TeleCard({
   valorEspera,
   formatarValor,
   converterValor,
+  agoraCronometros,
 }: any) {
   const [expandido, setExpandido] = useState(false);
   const [acaoSalvando, setAcaoSalvando] = useState<string | null>(null);
@@ -2424,6 +2437,8 @@ function TeleCard({
 
   const resumoRota = paradas.length > 1 && origem !== destino ? `${origem} → ${destino}` : origem;
   const situacaoCobranca = descobrirSituacaoCobranca(tele);
+  const prazoOperacional = calcularPrazoOperacional(tele, agoraCronometros);
+  const esperaOperacional = calcularEsperaOperacional(tele, agoraCronometros);
 
   return (
     <div
@@ -2467,6 +2482,26 @@ function TeleCard({
                   <Timer size={12} />
                   {rotuloEtapaMotoboy(tele.etapaMotoboy)}
                 </span>
+              </div>
+            )}
+
+            {(prazoOperacional || esperaOperacional) && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {prazoOperacional && (
+                  <span
+                    className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-bold ${prazoOperacional.classes}`}
+                  >
+                    <Timer size={12} />
+                    Prazo {prazoOperacional.tempo}
+                  </span>
+                )}
+
+                {esperaOperacional && (
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-bold text-orange-800">
+                    <Timer size={12} />
+                    Espera {esperaOperacional.tempo}
+                  </span>
+                )}
               </div>
             )}
           </div>
@@ -2548,6 +2583,49 @@ function TeleCard({
               <strong className="text-lg text-emerald-700">R$ {tele.valor}</strong>
             </div>
           </div>
+
+          {(prazoOperacional || esperaOperacional) && (
+            <section className="grid grid-cols-1 gap-3 border-b border-slate-100 bg-white p-4">
+              {prazoOperacional && (
+                <div className={`rounded-2xl border p-4 ${prazoOperacional.classes}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wide opacity-80">
+                        Prazo da operação
+                      </p>
+                      <strong className="mt-1 block text-2xl">{prazoOperacional.tempo}</strong>
+                    </div>
+
+                    <Timer size={20} />
+                  </div>
+
+                  <p className="mt-2 text-xs font-semibold">
+                    {prazoOperacional.descricao}
+                  </p>
+                </div>
+              )}
+
+              {esperaOperacional && (
+                <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4 text-orange-800">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wide">
+                        Tempo de espera
+                      </p>
+                      <strong className="mt-1 block text-2xl">{esperaOperacional.tempo}</strong>
+                    </div>
+
+                    <Timer size={20} />
+                  </div>
+
+                  <div className="mt-2 space-y-1 text-xs font-semibold">
+                    <p>{esperaOperacional.proximoAcrescimo}</p>
+                    <p>Espera acumulada: R$ {formatarValor(Number(tele.espera || 0))}</p>
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
 
           <LinhaTempoMotoboy tele={tele} />
 
@@ -2888,6 +2966,94 @@ function TeleCard({
   );
 }
 
+
+const LIMITE_OPERACAO_MS = 90 * 60 * 1000;
+const AVISO_AMARELO_MS = 60 * 60 * 1000;
+const AVISO_LARANJA_MS = 75 * 60 * 1000;
+const BLOCO_ESPERA_MS = 15 * 60 * 1000;
+
+function formatarDuracaoCronometro(totalSegundos: number) {
+  const segundosSeguros = Math.max(0, Math.floor(totalSegundos));
+  const horas = Math.floor(segundosSeguros / 3600);
+  const minutos = Math.floor((segundosSeguros % 3600) / 60);
+  const segundos = segundosSeguros % 60;
+
+  return [horas, minutos, segundos].map((parte) => String(parte).padStart(2, "0")).join(":");
+}
+
+function calcularPrazoOperacional(tele: any, agora: number) {
+  if (!tele.atribuidaAoMotoboyEm) return null;
+
+  const inicio = new Date(tele.atribuidaAoMotoboyEm).getTime();
+
+  if (!Number.isFinite(inicio)) return null;
+
+  const concluidaEm = tele.concluidaPeloMotoboyEm
+    ? new Date(tele.concluidaPeloMotoboyEm).getTime()
+    : null;
+
+  const final =
+    tele.status === "Entregue" && concluidaEm && Number.isFinite(concluidaEm)
+      ? concluidaEm
+      : agora;
+
+  const decorrido = Math.max(0, final - inicio);
+  const concluida = tele.status === "Entregue";
+
+  let classes = "border-emerald-200 bg-emerald-50 text-emerald-800";
+
+  if (decorrido >= LIMITE_OPERACAO_MS) {
+    classes = "border-red-300 bg-red-50 text-red-800";
+  } else if (decorrido >= AVISO_LARANJA_MS) {
+    classes = "border-orange-300 bg-orange-50 text-orange-800";
+  } else if (decorrido >= AVISO_AMARELO_MS) {
+    classes = "border-amber-300 bg-amber-50 text-amber-800";
+  }
+
+  let descricao: string;
+
+  if (concluida) {
+    descricao =
+      decorrido <= LIMITE_OPERACAO_MS
+        ? "Concluída dentro do prazo de 1h30."
+        : `Concluída com ${formatarDuracaoCronometro(
+            (decorrido - LIMITE_OPERACAO_MS) / 1000
+          )} de atraso.`;
+  } else if (decorrido < LIMITE_OPERACAO_MS) {
+    descricao = `Restam ${formatarDuracaoCronometro(
+      (LIMITE_OPERACAO_MS - decorrido) / 1000
+    )} para o limite.`;
+  } else {
+    descricao = `Prazo excedido em ${formatarDuracaoCronometro(
+      (decorrido - LIMITE_OPERACAO_MS) / 1000
+    )}.`;
+  }
+
+  return {
+    tempo: formatarDuracaoCronometro(decorrido / 1000),
+    descricao,
+    classes,
+  };
+}
+
+function calcularEsperaOperacional(tele: any, agora: number) {
+  if (!tele.esperaAtualIniciadaEm) return null;
+
+  const inicio = new Date(tele.esperaAtualIniciadaEm).getTime();
+
+  if (!Number.isFinite(inicio)) return null;
+
+  const decorrido = Math.max(0, agora - inicio);
+  const restanteNoBloco = BLOCO_ESPERA_MS - (decorrido % BLOCO_ESPERA_MS);
+
+  return {
+    tempo: formatarDuracaoCronometro(decorrido / 1000),
+    proximoAcrescimo: `Próximo acréscimo de R$ 5,00 em ${formatarDuracaoCronometro(
+      restanteNoBloco / 1000
+    )}`,
+  };
+}
+
 function SituacaoCobrancaBadge({ situacao }: { situacao: SituacaoCobranca }) {
   const configuracao = {
     pago: {
@@ -2942,3 +3108,4 @@ function LinhaValor({ label, valor }: any) {
     </div>
   );
 }
+ 
