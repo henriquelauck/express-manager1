@@ -22,15 +22,19 @@ import { gerarId } from "@/lib/utils/id";
 import { criarTelePeloOrquestrador } from "@/orchestrator";
 import type { Parada } from "@/types/Parada";
 import {
+  AlertTriangle,
   ArrowRight,
+  Bike,
   CheckCircle2,
   Clock3,
   FileText,
   Loader2,
   MapPinned,
+  Navigation,
   ReceiptText,
   Route,
   Send,
+  X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -75,6 +79,41 @@ type DadosNovaTeleIA = {
 
 type FormaCobrancaTele = "na_hora" | "semanal";
 
+type MotoboySugerido = {
+  id: string;
+  nome: string;
+  moto?: string | null;
+  placa?: string | null;
+  localizacaoAtualizadaEm?: string | null;
+  precisaoLocalizacao?: number | null;
+  entregasEmAndamento: number;
+  distanciaMetros: number;
+  distanciaKm: number;
+  duracaoMinutos: number;
+};
+
+type ResultadoSugestaoMotoboy = {
+  coleta: {
+    enderecoInformado?: string;
+    enderecoFormatado?: string;
+    latitude: number;
+    longitude: number;
+  };
+  sugestao: MotoboySugerido | null;
+  motoboys: MotoboySugerido[];
+  ignorados: {
+    id: string;
+    nome: string;
+    motivo: string;
+    localizacaoAtualizadaEm?: string | null;
+  }[];
+  criterio?: string;
+};
+
+function paradaPodeSerColeta(tipo: Parada["tipo"]) {
+  return tipo === "Coleta" || tipo === "Trocar" || tipo === "Entrega e coleta";
+}
+
 function formaCobrancaClienteParaTele(forma: string | undefined): FormaCobrancaTele {
   const mapa: Record<string, FormaCobrancaTele> = {
     NA_HORA: "na_hora",
@@ -115,6 +154,12 @@ export default function NovaTelePage() {
   const [calculandoRota, setCalculandoRota] = useState(false);
   const [rotaCalculada, setRotaCalculada] = useState<ResultadoRotaCalculada | null>(null);
   const [rotaSelecionadaId, setRotaSelecionadaId] = useState<number | null>(null);
+  const [modalSugestaoAberto, setModalSugestaoAberto] = useState(false);
+  const [carregandoSugestao, setCarregandoSugestao] = useState(false);
+  const [atribuindoMotoboyId, setAtribuindoMotoboyId] = useState<string | null>(null);
+  const [erroSugestao, setErroSugestao] = useState("");
+  const [teleCriadaId, setTeleCriadaId] = useState<string | null>(null);
+  const [resultadoSugestao, setResultadoSugestao] = useState<ResultadoSugestaoMotoboy | null>(null);
   const { paradas, setParadas, adicionarParada, removerParada } = useParadas();
 
   useEffect(() => {
@@ -287,7 +332,112 @@ export default function NovaTelePage() {
     }
   }
 
+  function obterEnderecoPrimeiraColeta() {
+    const primeiraColeta = paradas.find((parada) => paradaPodeSerColeta(parada.tipo)) ?? paradas[0];
+
+    return primeiraColeta?.endereco?.trim() || "";
+  }
+
+  async function buscarSugestaoMotoboy(enderecoColeta: string) {
+    setCarregandoSugestao(true);
+    setErroSugestao("");
+    setResultadoSugestao(null);
+
+    try {
+      const resposta = await fetch("/api/motoboys/sugestao-proximos", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          enderecoColeta,
+        }),
+      });
+
+      let dados: ResultadoSugestaoMotoboy | { erro?: string };
+
+      try {
+        dados = await resposta.json();
+      } catch {
+        throw new Error("O servidor retornou uma resposta inválida.");
+      }
+
+      if (!resposta.ok) {
+        throw new Error(
+          "erro" in dados && dados.erro
+            ? dados.erro
+            : "Não foi possível buscar os motoboys próximos."
+        );
+      }
+
+      setResultadoSugestao(dados as ResultadoSugestaoMotoboy);
+    } catch (erro) {
+      setErroSugestao(
+        erro instanceof Error ? erro.message : "Não foi possível buscar os motoboys próximos."
+      );
+    } finally {
+      setCarregandoSugestao(false);
+    }
+  }
+
+  async function atribuirMotoboySugerido(motoboy: MotoboySugerido) {
+    if (!teleCriadaId || atribuindoMotoboyId) {
+      return;
+    }
+
+    setAtribuindoMotoboyId(motoboy.id);
+    setErroSugestao("");
+
+    try {
+      const resposta = await fetch("/api/teles/atribuir-motoboy", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          teleId: teleCriadaId,
+          motoboyId: motoboy.id,
+        }),
+      });
+
+      let dados: { erro?: string; mensagem?: string };
+
+      try {
+        dados = await resposta.json();
+      } catch {
+        dados = {};
+      }
+
+      if (!resposta.ok) {
+        throw new Error(dados.erro || "Não foi possível enviar a tele para o motoboy.");
+      }
+
+      await recarregarDados();
+      setModalSugestaoAberto(false);
+      router.push("/teles");
+    } catch (erro) {
+      setErroSugestao(
+        erro instanceof Error ? erro.message : "Não foi possível enviar a tele para o motoboy."
+      );
+    } finally {
+      setAtribuindoMotoboyId(null);
+    }
+  }
+
+  function continuarSemMotoboy() {
+    if (atribuindoMotoboyId) {
+      return;
+    }
+
+    setModalSugestaoAberto(false);
+    router.push("/teles");
+  }
+
   async function criarTele() {
+    if (salvando) {
+      return;
+    }
+
     setSalvando(true);
 
     const resultado = await criarTelePeloOrquestrador({
@@ -311,10 +461,34 @@ export default function NovaTelePage() {
       console.warn("Avisos ao criar tele:", resultado.avisos);
     }
 
+    const teleCriada = resultado.dados;
+
+    if (!teleCriada?.id) {
+      alert(
+        "A tele foi criada, mas não foi possível abrir a sugestão de motoboy. Consulte a Central de Operações."
+      );
+      await recarregarDados();
+      setSalvando(false);
+      router.push("/teles");
+      return;
+    }
+
+    const enderecoPrimeiraColeta = obterEnderecoPrimeiraColeta();
+
     await recarregarDados();
 
+    setTeleCriadaId(teleCriada.id);
+    setModalSugestaoAberto(true);
     setSalvando(false);
-    router.push("/teles");
+
+    if (!enderecoPrimeiraColeta) {
+      setErroSugestao(
+        "A tele foi criada, mas não foi encontrado um endereço de coleta para calcular a proximidade."
+      );
+      return;
+    }
+
+    await buscarSugestaoMotoboy(enderecoPrimeiraColeta);
   }
 
   const retornoAtual = calcularRetorno(solicitante, paradas);
@@ -729,6 +903,199 @@ export default function NovaTelePage() {
           </div>
         </section>
       </div>
+
+      {modalSugestaoAberto && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="titulo-sugestao-motoboy"
+        >
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-5 sm:px-6">
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                  <Bike size={22} />
+                </div>
+
+                <div>
+                  <p className="text-sm font-semibold text-emerald-700">Tele criada com sucesso</p>
+                  <h2
+                    id="titulo-sugestao-motoboy"
+                    className="mt-1 text-xl font-bold text-slate-900"
+                  >
+                    Escolha o motoboy
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Ordenados pela distância real até a primeira coleta.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={continuarSemMotoboy}
+                disabled={Boolean(atribuindoMotoboyId)}
+                aria-label="Fechar e deixar sem motoboy"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="max-h-[62vh] overflow-y-auto p-5 sm:p-6">
+              {carregandoSugestao && (
+                <div className="flex min-h-52 flex-col items-center justify-center text-center">
+                  <Loader2 size={32} className="animate-spin text-emerald-600" />
+                  <p className="mt-4 font-semibold text-slate-800">Localizando os motoboys...</p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Calculando o trajeto de cada motoboy até a coleta.
+                  </p>
+                </div>
+              )}
+
+              {!carregandoSugestao && erroSugestao && (
+                <div className="mb-4 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800">
+                  <AlertTriangle size={20} className="mt-0.5 shrink-0" />
+                  <p className="text-sm leading-6">{erroSugestao}</p>
+                </div>
+              )}
+
+              {!carregandoSugestao && resultadoSugestao?.coleta?.enderecoFormatado && (
+                <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Primeira coleta
+                  </p>
+                  <p className="mt-1 text-sm font-medium text-slate-700">
+                    {resultadoSugestao.coleta.enderecoFormatado}
+                  </p>
+                </div>
+              )}
+
+              {!carregandoSugestao &&
+                resultadoSugestao &&
+                resultadoSugestao.motoboys.length === 0 && (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-center">
+                    <AlertTriangle size={28} className="mx-auto text-amber-600" />
+                    <h3 className="mt-3 font-bold text-slate-900">Nenhum motoboy disponível</h3>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      Não há motoboy online com localização atualizada nos últimos 5 minutos. A tele
+                      pode permanecer na Central sem atribuição.
+                    </p>
+                  </div>
+                )}
+
+              {!carregandoSugestao &&
+                resultadoSugestao &&
+                resultadoSugestao.motoboys.length > 0 && (
+                  <div className="space-y-3">
+                    {resultadoSugestao.motoboys.map((motoboy, index) => {
+                      const sugerido = resultadoSugestao.sugestao?.id === motoboy.id;
+                      const atribuindo = atribuindoMotoboyId === motoboy.id;
+
+                      return (
+                        <button
+                          key={motoboy.id}
+                          type="button"
+                          onClick={() => void atribuirMotoboySugerido(motoboy)}
+                          disabled={Boolean(atribuindoMotoboyId)}
+                          className={`w-full rounded-2xl border p-4 text-left transition disabled:cursor-wait disabled:opacity-60 ${
+                            sugerido
+                              ? "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-100"
+                              : "border-slate-200 bg-white hover:border-emerald-300 hover:bg-slate-50"
+                          }`}
+                        >
+                          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex min-w-0 items-start gap-3">
+                              <div
+                                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-bold ${
+                                  sugerido
+                                    ? "bg-emerald-600 text-white"
+                                    : "bg-slate-100 text-slate-600"
+                                }`}
+                              >
+                                {index + 1}
+                              </div>
+
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <strong className="text-slate-900">{motoboy.nome}</strong>
+
+                                  {sugerido && (
+                                    <span className="rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white">
+                                      Mais próximo
+                                    </span>
+                                  )}
+                                </div>
+
+                                <p className="mt-1 text-sm text-slate-500">
+                                  {[motoboy.moto, motoboy.placa].filter(Boolean).join(" • ") ||
+                                    "Motoboy online"}
+                                </p>
+
+                                <p className="mt-1 text-xs text-slate-400">
+                                  {motoboy.entregasEmAndamento}{" "}
+                                  {motoboy.entregasEmAndamento === 1
+                                    ? "tele em andamento"
+                                    : "teles em andamento"}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex shrink-0 items-center gap-4 sm:text-right">
+                              <div>
+                                <p className="flex items-center gap-1.5 font-bold text-slate-900 sm:justify-end">
+                                  <Navigation size={16} />
+                                  {motoboy.distanciaKm.toFixed(1)} km
+                                </p>
+                                <p className="mt-1 text-sm text-slate-500">
+                                  cerca de {motoboy.duracaoMinutos} min
+                                </p>
+                              </div>
+
+                              {atribuindo && (
+                                <Loader2 size={21} className="animate-spin text-emerald-600" />
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+            </div>
+
+            <div className="flex flex-col-reverse gap-3 border-t border-slate-100 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+              <button
+                type="button"
+                onClick={continuarSemMotoboy}
+                disabled={Boolean(atribuindoMotoboyId)}
+                className="min-h-12 rounded-xl border border-slate-200 bg-white px-5 font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-50"
+              >
+                Deixar sem motoboy
+              </button>
+
+              {resultadoSugestao?.sugestao && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    void atribuirMotoboySugerido(resultadoSugestao.sugestao as MotoboySugerido)
+                  }
+                  disabled={Boolean(atribuindoMotoboyId)}
+                  className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-60"
+                >
+                  {atribuindoMotoboyId === resultadoSugestao.sugestao.id ? (
+                    <Loader2 size={18} className="animate-spin" />
+                  ) : (
+                    <Send size={18} />
+                  )}
+                  Enviar para {resultadoSugestao.sugestao.nome}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </PageContainer>
   );
 }
