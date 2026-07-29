@@ -149,6 +149,10 @@ type Tele = {
   aceitaPeloMotoboyEm?: string | null;
   recusadaPeloMotoboyEm?: string | null;
   motivoRecusaMotoboy?: string | null;
+  espera?: number | string | null;
+  esperaAtualIniciadaEm?: string | null;
+  blocosEsperaAtual?: number | null;
+  esperaMinutosAcumulados?: number | null;
   total?: number | string | null;
   recebimento?: "PENDENTE" | "ESCRITORIO" | "MOTOBOY" | string | null;
   valorRecebido?: number | string | null;
@@ -1613,6 +1617,7 @@ function CardTele({
   onAbrirMapaParadaAtual: () => void;
 }) {
   const [agoraAceite, setAgoraAceite] = useState(() => Date.now());
+  const [agoraEspera, setAgoraEspera] = useState(() => Date.now());
   const expiracaoDisparadaRef = useRef(false);
 
   const estaAguardandoAceite =
@@ -1627,6 +1632,31 @@ function CardTele({
 
     return () => window.clearInterval(intervalo);
   }, [estaAguardandoAceite]);
+
+  const esperaAtiva =
+    Boolean(tele.esperaAtualIniciadaEm) &&
+    (tele.etapaMotoboy === "CHEGOU_NA_COLETA" ||
+      tele.etapaMotoboy === "CHEGOU_NA_ENTREGA");
+
+  useEffect(() => {
+    if (!esperaAtiva) return;
+
+    setAgoraEspera(Date.now());
+
+    const intervalo = window.setInterval(() => {
+      setAgoraEspera(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(intervalo);
+  }, [esperaAtiva, tele.esperaAtualIniciadaEm]);
+
+  const segundosEspera = esperaAtiva
+    ? calcularSegundosEspera(tele.esperaAtualIniciadaEm, agoraEspera)
+    : 0;
+
+  const blocosCompletosEspera = Math.floor(segundosEspera / (15 * 60));
+  const proximoBlocoEmSegundos = 15 * 60 - (segundosEspera % (15 * 60));
+  const valorEsperaPrevisto = blocosCompletosEspera * 5;
 
   const segundosRestantesAceite = estaAguardandoAceite
     ? calcularSegundosRestantesAceite(tele.atribuidaAoMotoboyEm, agoraAceite)
@@ -1890,6 +1920,41 @@ function CardTele({
                     {sugestaoGestor.parada.endereco}
                   </p>
                 )}
+              </div>
+            </div>
+          )}
+
+          {!concluida && tele.statusAceite === "ACEITA" && esperaAtiva && (
+            <div className="mt-5 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-orange-700">
+                    Tempo de espera
+                  </p>
+
+                  <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900">
+                    {formatarCronometroEspera(segundosEspera)}
+                  </p>
+
+                  <p className="mt-1 text-sm text-slate-600">
+                    {blocosCompletosEspera === 0
+                      ? `Próximo acréscimo de R$ 5,00 em ${formatarCronometroEspera(
+                          proximoBlocoEmSegundos
+                        )}`
+                      : `${blocosCompletosEspera} ${
+                          blocosCompletosEspera === 1 ? "bloco cobrado" : "blocos cobrados"
+                        } • ${formatarMoeda(valorEsperaPrevisto)}`}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
+                  <span className="block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Espera acumulada
+                  </span>
+                  <strong className="mt-1 block text-lg text-orange-700">
+                    {formatarMoeda(Number(tele.espera || 0))}
+                  </strong>
+                </div>
               </div>
             </div>
           )}
@@ -2161,6 +2226,34 @@ function formatarContagemAceite(segundos: number) {
   const restante = segundos % 60;
 
   return `${String(minutos).padStart(2, "0")}:${String(restante).padStart(2, "0")}`;
+}
+
+function calcularSegundosEspera(
+  esperaAtualIniciadaEm: string | null | undefined,
+  agora: number
+) {
+  if (!esperaAtualIniciadaEm) return 0;
+
+  const inicio = new Date(esperaAtualIniciadaEm).getTime();
+
+  if (!Number.isFinite(inicio)) return 0;
+
+  return Math.max(0, Math.floor((agora - inicio) / 1000));
+}
+
+function formatarCronometroEspera(segundosTotais: number) {
+  const horas = Math.floor(segundosTotais / 3600);
+  const minutos = Math.floor((segundosTotais % 3600) / 60);
+  const segundos = segundosTotais % 60;
+
+  if (horas > 0) {
+    return `${String(horas).padStart(2, "0")}:${String(minutos).padStart(
+      2,
+      "0"
+    )}:${String(segundos).padStart(2, "0")}`;
+  }
+
+  return `${String(minutos).padStart(2, "0")}:${String(segundos).padStart(2, "0")}`;
 }
 
 function dataBrasilISO(data: Date | string) {
