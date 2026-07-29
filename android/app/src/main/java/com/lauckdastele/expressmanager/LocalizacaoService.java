@@ -76,7 +76,6 @@ public class LocalizacaoService extends Service {
     private Ringtone toqueAlerta;
     private Handler handlerSomAlerta;
     private Runnable tarefaRepetirSom;
-    private boolean primeiraConsultaTeles = true;
 
     @Override
     public void onCreate() {
@@ -409,16 +408,15 @@ public class LocalizacaoService extends Service {
 
             boolean encontrouNova = false;
 
-            if (primeiraConsultaTeles) {
-                notificadas.clear();
-                notificadas.addAll(pendentesAtuais);
-                primeiraConsultaTeles = false;
-            } else {
-                for (String teleId : pendentesAtuais) {
-                    if (!notificadas.contains(teleId)) {
-                        encontrouNova = true;
-                        notificadas.add(teleId);
-                    }
+            /*
+             * Compara sempre as teles atuais com as já notificadas.
+             * Assim, uma tele encontrada logo na primeira consulta
+             * também gera som e notificação.
+             */
+            for (String teleId : pendentesAtuais) {
+                if (!notificadas.contains(teleId)) {
+                    encontrouNova = true;
+                    notificadas.add(teleId);
                 }
             }
 

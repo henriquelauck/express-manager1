@@ -287,10 +287,12 @@ public class LocalizacaoPlugin extends Plugin {
                     LocalizacaoService.ACAO_PARAR_SOM
             );
 
-            ContextCompat.startForegroundService(
-                    getContext(),
-                    intent
-            );
+            /*
+             * O serviço já está ativo em primeiro plano.
+             * Para enviar apenas o comando de parar o som, não devemos
+             * criar uma nova obrigação de startForegroundService().
+             */
+            getContext().startService(intent);
 
             JSObject resposta = new JSObject();
             resposta.put("parado", true);
