@@ -1621,13 +1621,26 @@ function CardTele({
   const teleBloqueadaPelaFila =
     tele.filaOperacionalAtiva === true && tele.bloqueadaPelaFila === true;
 
+  /*
+   * Depois de confirmar a chegada na última entrega, o item da fila
+   * já foi concluído. Sem etapas pendentes dessa tele, a única ação
+   * possível deve ser finalizar.
+   */
+  const deveFinalizarTele =
+    etapaAtual === "CHEGOU_NA_ENTREGA" && Number(tele.totalEtapasPendentesFila || 0) === 0;
+
   const acaoEtapa = teleBloqueadaPelaFila
     ? null
-    : obterAcaoEtapaMotoboy({
-        etapa: etapaAtual,
-        paradaAtual,
-        proximaParada,
-      });
+    : deveFinalizarTele
+      ? {
+          texto: "Finalizar tele",
+          proximaEtapa: "CONCLUIDA" as EtapaMotoboyTele,
+        }
+      : obterAcaoEtapaMotoboy({
+          etapa: etapaAtual,
+          paradaAtual,
+          proximaParada,
+        });
 
   const observacao = tele.observacaoGeral || tele.observacao;
 
