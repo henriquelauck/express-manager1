@@ -156,6 +156,8 @@ export async function PUT(request: Request) {
           },
           select: {
             id: true,
+            ordem: true,
+            tipo: true,
           },
         },
       },
@@ -169,9 +171,48 @@ export async function PUT(request: Request) {
       return respostaErro("Aceite a tele antes de atualizar o andamento.", 409);
     }
 
+    const itemFilaAtual = await prisma.itemFilaOperacionalMotoboy.findFirst({
+      where: {
+        motoboyId: usuario.motoboy.id,
+        status: {
+          in: ["PENDENTE", "EM_ANDAMENTO"],
+        },
+      },
+      orderBy: [
+        {
+          ordem: "asc",
+        },
+        {
+          createdAt: "asc",
+        },
+      ],
+      select: {
+        id: true,
+        teleId: true,
+        paradaId: true,
+        status: true,
+        ordem: true,
+      },
+    });
+
     if (novaEtapa) {
       if (!etapaValida(novaEtapa)) {
         return respostaErro("Etapa não permitida para o motoboy.", 400);
+      }
+
+      const finalizandoTele = novaEtapa === "CONCLUIDA";
+
+      if (!finalizandoTele) {
+        if (!itemFilaAtual) {
+          return respostaErro("Nenhuma etapa operacional foi liberada pelo gestor.", 409);
+        }
+
+        if (itemFilaAtual.teleId !== tele.id) {
+          return respostaErro(
+            "Esta tele está bloqueada. Conclua primeiro a etapa definida pelo gestor.",
+            409
+          );
+        }
       }
 
       const etapaAtual = tele.etapaMotoboy || "AGUARDANDO_INICIO_COLETA";
@@ -184,6 +225,28 @@ export async function PUT(request: Request) {
 
       if (totalParadas === 0) {
         return respostaErro("Esta tele não possui paradas cadastradas.", 409);
+      }
+
+      if (!finalizandoTele && itemFilaAtual) {
+        const indiceItemFila = tele.paradas.findIndex(
+          (parada) => parada.id === itemFilaAtual.paradaId
+        );
+
+        if (indiceItemFila < 0) {
+          return respostaErro(
+            "A etapa liberada não corresponde a uma parada válida desta tele.",
+            409
+          );
+        }
+
+        const indiceEsperado = novaEtapa === "EM_ROTA_ENTREGA" ? indiceAtual + 1 : indiceAtual;
+
+        if (indiceItemFila !== indiceEsperado) {
+          return respostaErro(
+            "A parada solicitada não é a próxima etapa definida pelo gestor.",
+            409
+          );
+        }
       }
 
       let proximaParada = indiceAtual;
@@ -244,30 +307,80 @@ export async function PUT(request: Request) {
         return respostaErro("Ainda existem paradas pendentes nesta tele.", 409);
       }
 
-      const dadosEtapa = dadosDaEtapa(novaEtapa);
+      if (finalizandoTele) {
+        const itensPendentesDaTele = await prisma.itemFilaOperacionalMotoboy.count({
+          where: {
+            motoboyId: usuario.motoboy.id,
+            teleId: tele.id,
+            status: {
+              in: ["PENDENTE", "EM_ANDAMENTO"],
+            },
+          },
+        });
 
-      const teleAtualizada = await prisma.tele.update({
-        where: {
-          id: tele.id,
-        },
-        data: {
-          etapaMotoboy: novaEtapa,
-          paradaAtualMotoboy: proximaParada,
-          ...dadosEtapa,
-        },
-        select: {
-          id: true,
-          status: true,
-          etapaMotoboy: true,
-          paradaAtualMotoboy: true,
-          rotaColetaIniciadaEm: true,
-          chegouNaColetaEm: true,
-          entregaIniciadaEm: true,
-          chegouNaEntregaEm: true,
-          concluidaPeloMotoboyEm: true,
-          dataTele: true,
-          updatedAt: true,
-        },
+        if (itensPendentesDaTele > 0) {
+          return respostaErro(
+            "Ainda existem etapas desta tele pendentes na fila definida pelo gestor.",
+            409
+          );
+        }
+      }
+
+      const dadosEtapa = dadosDaEtapa(novaEtapa);
+      const iniciouDeslocamento = novaEtapa === "EM_ROTA_COLETA" || novaEtapa === "EM_ROTA_ENTREGA";
+      const confirmouChegada =
+        novaEtapa === "CHEGOU_NA_COLETA" || novaEtapa === "CHEGOU_NA_ENTREGA";
+
+      const teleAtualizada = await prisma.$transaction(async (tx) => {
+        if (!finalizandoTele && itemFilaAtual) {
+          if (iniciouDeslocamento && itemFilaAtual.status === "PENDENTE") {
+            await tx.itemFilaOperacionalMotoboy.update({
+              where: {
+                id: itemFilaAtual.id,
+              },
+              data: {
+                status: "EM_ANDAMENTO",
+                iniciadaEm: new Date(),
+              },
+            });
+          }
+
+          if (confirmouChegada) {
+            await tx.itemFilaOperacionalMotoboy.update({
+              where: {
+                id: itemFilaAtual.id,
+              },
+              data: {
+                status: "CONCLUIDO",
+                concluidaEm: new Date(),
+              },
+            });
+          }
+        }
+
+        return tx.tele.update({
+          where: {
+            id: tele.id,
+          },
+          data: {
+            etapaMotoboy: novaEtapa,
+            paradaAtualMotoboy: proximaParada,
+            ...dadosEtapa,
+          },
+          select: {
+            id: true,
+            status: true,
+            etapaMotoboy: true,
+            paradaAtualMotoboy: true,
+            rotaColetaIniciadaEm: true,
+            chegouNaColetaEm: true,
+            entregaIniciadaEm: true,
+            chegouNaEntregaEm: true,
+            concluidaPeloMotoboyEm: true,
+            dataTele: true,
+            updatedAt: true,
+          },
+        });
       });
 
       return NextResponse.json({

@@ -168,6 +168,12 @@ enum EtapaMotoboyTele {
   CONCLUIDA
 }
 
+enum StatusItemFilaMotoboy {
+  PENDENTE
+  EM_ANDAMENTO
+  CONCLUIDO
+  CANCELADO
+}
 
 enum TipoTarefaGestor {
   MARCOS_MANUTENCOES
@@ -228,8 +234,9 @@ model Motoboy {
   appTokenHash     String?   @unique
   appTokenCriadoEm DateTime?
 
-  teles      Tele[]
-  movimentos MovimentoFinanceiroMotoboy[]
+  teles                Tele[]
+  movimentos           MovimentoFinanceiroMotoboy[]
+  itensFilaOperacional ItemFilaOperacionalMotoboy[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -288,7 +295,8 @@ model Tele {
 
   observacaoGeral String?
 
-  paradas TeleParada[]
+  paradas              TeleParada[]
+  itensFilaOperacional ItemFilaOperacionalMotoboy[]
 
   mensagensAtendimento MensagemAtendimento[]
 
@@ -301,7 +309,6 @@ model Tele {
   @@index([motoboyId, etapaMotoboy])
 }
 
-
 model TarefaGestor {
   id String @id @default(cuid())
 
@@ -312,8 +319,8 @@ model TarefaGestor {
   titulo    String
   descricao String
 
-  valor          Float @default(0)
-  quantidadeTeles Int   @default(0)
+  valor           Float    @default(0)
+  quantidadeTeles Int      @default(0)
   teleIds         String[] @default([])
 
   concluida   Boolean   @default(false)
@@ -409,10 +416,40 @@ model TeleParada {
 
   ordem Int @default(1)
 
+  itensFilaOperacional ItemFilaOperacionalMotoboy[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("Parada")
+}
+
+model ItemFilaOperacionalMotoboy {
+  id String @id @default(cuid())
+
+  motoboyId String
+  motoboy   Motoboy @relation(fields: [motoboyId], references: [id])
+
+  teleId String
+  tele   Tele   @relation(fields: [teleId], references: [id], onDelete: Cascade)
+
+  paradaId String
+  parada   TeleParada @relation(fields: [paradaId], references: [id], onDelete: Cascade)
+
+  ordem  Int
+  status StatusItemFilaMotoboy @default(PENDENTE)
+
+  iniciadaEm  DateTime?
+  concluidaEm DateTime?
+  canceladaEm DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([teleId, paradaId])
+  @@index([motoboyId, status, ordem])
+  @@index([teleId, status])
+  @@index([paradaId])
 }
 
 model ImportacaoPlanilha {

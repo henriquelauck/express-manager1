@@ -1,3 +1,566 @@
+===== app/api/motoboys/minhas-teles/route.ts =====
+import { prisma } from "@/lib/prisma";
+import { createHash, timingSafeEqual } from "crypto";
+import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
+
+const PRAZO_ACEITE_MS = 5 * 60_000;
+
+function respostaErro(mensagem: string, status: number) {
+  return NextResponse.json({ erro: mensagem }, { status });
+}
+
+function gerarHashToken(token: string) {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+function hashesIguais(hashA: string, hashB: string) {
+  try {
+    const bufferA = Buffer.from(hashA, "hex");
+    const bufferB = Buffer.from(hashB, "hex");
+
+    if (bufferA.length !== bufferB.length) {
+      return false;
+    }
+
+    return timingSafeEqual(bufferA, bufferB);
+  } catch {
+    return false;
+  }
+}
+
+async function obterMotoboyPorToken(request: Request) {
+  const autorizacao = request.headers.get("authorization") || "";
+  const [tipo, token] = autorizacao.trim().split(/\s+/, 2);
+
+  if (tipo?.toLowerCase() !== "bearer" || !token) {
+    return null;
+  }
+
+  const hashRecebido = gerarHashToken(token);
+
+  const motoboy = await prisma.motoboy.findFirst({
+    where: {
+      appTokenHash: hashRecebido,
+    },
+    select: {
+      id: true,
+      appTokenHash: true,
+    },
+  });
+
+  if (!motoboy || !motoboy.appTokenHash || !hashesIguais(hashRecebido, motoboy.appTokenHash)) {
+    return null;
+  }
+
+  return {
+    id: motoboy.id,
+  };
+}
+
+async function obterMotoboyPorCookie() {
+  const cookieStore = await cookies();
+  const userId = cookieStore.get("express_user_id")?.value;
+
+  if (!userId) {
+    return null;
+  }
+
+  const usuario = await prisma.user.findUnique({
+    where: {
+      id: userId,
+    },
+    select: {
+      role: true,
+      motoboy: {
+        select: {
+          id: true,
+        },
+      },
+    },
+  });
+
+  if (!usuario || usuario.role !== "MOTOBOY" || !usuario.motoboy) {
+    return null;
+  }
+
+  return usuario.motoboy;
+}
+
+async function obterMotoboyAutenticado(request: Request) {
+  const porToken = await obterMotoboyPorToken(request);
+
+  if (porToken) {
+    return porToken;
+  }
+
+  return obterMotoboyPorCookie();
+}
+
+function prioridadeStatusAceite(statusAceite: string) {
+  const prioridades: Record<string, number> = {
+    AGUARDANDO_ACEITE: 0,
+    ACEITA: 1,
+    NAO_ENVIADA: 2,
+    RECUSADA: 3,
+  };
+
+  return prioridades[statusAceite] ?? 4;
+}
+
+export async function GET(request: Request) {
+  try {
+    const motoboy = await obterMotoboyAutenticado(request);
+
+    if (!motoboy) {
+      return respostaErro("Acesso negado.", 403);
+    }
+
+    /*
+     * Compatibilidade com teles antigas:
+     * antes da implantação do aceite, algumas entregas foram concluídas,
+     * mas permaneceram com AGUARDANDO_ACEITE.
+     */
+    await prisma.tele.updateMany({
+      where: {
+        motoboyId: motoboy.id,
+        status: "ENTREGUE",
+        statusAceite: "AGUARDANDO_ACEITE",
+      },
+      data: {
+        statusAceite: "ACEITA",
+        etapaMotoboy: "CONCLUIDA",
+        ordemMotoboy: null,
+        motivoRecusaMotoboy: null,
+        recusadaPeloMotoboyEm: null,
+      },
+    });
+
+    const limiteExpiracao = new Date(Date.now() - PRAZO_ACEITE_MS);
+
+    /*
+     * Expira somente teles ainda não concluídas.
+     * Uma entrega já marcada como ENTREGUE nunca pode voltar para a Central.
+     */
+    await prisma.tele.updateMany({
+      where: {
+        motoboyId: motoboy.id,
+        statusAceite: "AGUARDANDO_ACEITE",
+        status: {
+          not: "ENTREGUE",
+        },
+        atribuidaAoMotoboyEm: {
+          lte: limiteExpiracao,
+        },
+      },
+      data: {
+        statusAceite: "RECUSADA",
+        etapaMotoboy: null,
+        ordemMotoboy: null,
+        aceitaPeloMotoboyEm: null,
+        recusadaPeloMotoboyEm: new Date(),
+        motivoRecusaMotoboy: "Prazo de aceite expirado",
+        motoboyId: null,
+        motoboyNome: "",
+        status: "AGUARDANDO_MOTOBOY",
+      },
+    });
+
+    const teles = await prisma.tele.findMany({
+      where: {
+        motoboyId: motoboy.id,
+        statusAceite: {
+          not: "RECUSADA",
+        },
+      },
+      include: {
+        paradas: {
+          orderBy: {
+            ordem: "asc",
+          },
+        },
+      },
+    });
+
+    const telesOrdenadas = [...teles].sort((teleA, teleB) => {
+      const prioridadeA = prioridadeStatusAceite(teleA.statusAceite);
+      const prioridadeB = prioridadeStatusAceite(teleB.statusAceite);
+
+      if (prioridadeA !== prioridadeB) {
+        return prioridadeA - prioridadeB;
+      }
+
+      if (teleA.statusAceite === "ACEITA" && teleB.statusAceite === "ACEITA") {
+        const ordemA = teleA.ordemMotoboy ?? Number.MAX_SAFE_INTEGER;
+        const ordemB = teleB.ordemMotoboy ?? Number.MAX_SAFE_INTEGER;
+
+        if (ordemA !== ordemB) {
+          return ordemA - ordemB;
+        }
+      }
+
+      if (
+        teleA.statusAceite === "AGUARDANDO_ACEITE" &&
+        teleB.statusAceite === "AGUARDANDO_ACEITE"
+      ) {
+        const atribuicaoA = teleA.atribuidaAoMotoboyEm?.getTime() ?? teleA.createdAt.getTime();
+        const atribuicaoB = teleB.atribuidaAoMotoboyEm?.getTime() ?? teleB.createdAt.getTime();
+
+        return atribuicaoA - atribuicaoB;
+      }
+
+      const dataA = teleA.dataTele?.getTime() ?? teleA.createdAt.getTime();
+      const dataB = teleB.dataTele?.getTime() ?? teleB.createdAt.getTime();
+
+      return dataB - dataA;
+    });
+
+    return NextResponse.json(
+      telesOrdenadas.map((tele) => ({
+        ...tele,
+        aguardandoAceite: tele.status !== "ENTREGUE" && tele.statusAceite === "AGUARDANDO_ACEITE",
+        aceitaPeloMotoboy: tele.statusAceite === "ACEITA",
+        posicaoNaFila:
+          tele.statusAceite === "ACEITA" && tele.status !== "ENTREGUE" ? tele.ordemMotoboy : null,
+      }))
+    );
+  } catch (erro) {
+    console.error("Erro ao carregar teles do motoboy:", erro);
+
+    return respostaErro("Não foi possível carregar suas teles.", 500);
+  }
+}
+
+===== app/api/motoboys/minhas-teles/status/route.ts =====
+import { prisma } from "@/lib/prisma";
+import type { EtapaMotoboyTele, StatusTele } from "@prisma/client";
+import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
+
+type BodyStatus = {
+  teleId?: string;
+  status?: string;
+  etapaMotoboy?: string;
+};
+
+const STATUS_PERMITIDOS: StatusTele[] = ["AGUARDANDO_COLETA", "EM_ROTA", "ENTREGUE"];
+
+const PROXIMO_STATUS: Partial<Record<StatusTele, StatusTele[]>> = {
+  AGUARDANDO_CLIENTE: ["AGUARDANDO_COLETA"],
+  AGUARDANDO_MOTOBOY: ["AGUARDANDO_COLETA"],
+  AGUARDANDO_COLETA: ["EM_ROTA"],
+  EM_ROTA: ["ENTREGUE"],
+  ENTREGUE: [],
+};
+
+const ETAPAS_PERMITIDAS: EtapaMotoboyTele[] = [
+  "AGUARDANDO_INICIO_COLETA",
+  "EM_ROTA_COLETA",
+  "CHEGOU_NA_COLETA",
+  "EM_ROTA_ENTREGA",
+  "CHEGOU_NA_ENTREGA",
+  "CONCLUIDA",
+];
+
+function respostaErro(mensagem: string, status: number) {
+  return NextResponse.json(
+    {
+      erro: mensagem,
+    },
+    {
+      status,
+    }
+  );
+}
+
+function statusValido(status: string): status is StatusTele {
+  return STATUS_PERMITIDOS.includes(status as StatusTele);
+}
+
+function etapaValida(etapa: string): etapa is EtapaMotoboyTele {
+  return ETAPAS_PERMITIDAS.includes(etapa as EtapaMotoboyTele);
+}
+
+function dadosDaEtapa(etapa: EtapaMotoboyTele): {
+  status?: StatusTele;
+  rotaColetaIniciadaEm?: Date;
+  chegouNaColetaEm?: Date;
+  entregaIniciadaEm?: Date;
+  chegouNaEntregaEm?: Date;
+  concluidaPeloMotoboyEm?: Date;
+} {
+  const agora = new Date();
+
+  if (etapa === "EM_ROTA_COLETA") {
+    return {
+      status: "AGUARDANDO_COLETA",
+      rotaColetaIniciadaEm: agora,
+    };
+  }
+
+  if (etapa === "CHEGOU_NA_COLETA") {
+    return {
+      status: "AGUARDANDO_COLETA",
+      chegouNaColetaEm: agora,
+    };
+  }
+
+  if (etapa === "EM_ROTA_ENTREGA") {
+    return {
+      status: "EM_ROTA",
+      entregaIniciadaEm: agora,
+    };
+  }
+
+  if (etapa === "CHEGOU_NA_ENTREGA") {
+    return {
+      status: "EM_ROTA",
+      chegouNaEntregaEm: agora,
+    };
+  }
+
+  if (etapa === "CONCLUIDA") {
+    return {
+      status: "ENTREGUE",
+      concluidaPeloMotoboyEm: agora,
+    };
+  }
+
+  return {
+    status: "AGUARDANDO_COLETA",
+  };
+}
+
+export async function PUT(request: Request) {
+  try {
+    const cookieStore = await cookies();
+    const userId = cookieStore.get("express_user_id")?.value;
+
+    if (!userId) {
+      return respostaErro("Não autenticado.", 401);
+    }
+
+    const usuario = await prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        id: true,
+        role: true,
+        motoboy: {
+          select: {
+            id: true,
+          },
+        },
+      },
+    });
+
+    if (!usuario || usuario.role !== "MOTOBOY" || !usuario.motoboy) {
+      return respostaErro("Acesso negado.", 403);
+    }
+
+    const body = (await request.json()) as BodyStatus;
+    const teleId = String(body.teleId || "").trim();
+    const novoStatus = String(body.status || "").trim();
+    const novaEtapa = String(body.etapaMotoboy || "").trim();
+
+    if (!teleId) {
+      return respostaErro("Informe a tele.", 400);
+    }
+
+    if (!novoStatus && !novaEtapa) {
+      return respostaErro("Informe o novo status ou a nova etapa.", 400);
+    }
+
+    const tele = await prisma.tele.findFirst({
+      where: {
+        id: teleId,
+        motoboyId: usuario.motoboy.id,
+      },
+      select: {
+        id: true,
+        status: true,
+        statusAceite: true,
+        etapaMotoboy: true,
+        paradaAtualMotoboy: true,
+        motoboyId: true,
+        paradas: {
+          orderBy: {
+            ordem: "asc",
+          },
+          select: {
+            id: true,
+          },
+        },
+      },
+    });
+
+    if (!tele) {
+      return respostaErro("Tele não encontrada ou não vinculada ao seu usuário.", 404);
+    }
+
+    if (tele.statusAceite !== "ACEITA") {
+      return respostaErro("Aceite a tele antes de atualizar o andamento.", 409);
+    }
+
+    if (novaEtapa) {
+      if (!etapaValida(novaEtapa)) {
+        return respostaErro("Etapa não permitida para o motoboy.", 400);
+      }
+
+      const etapaAtual = tele.etapaMotoboy || "AGUARDANDO_INICIO_COLETA";
+
+      const totalParadas = tele.paradas.length;
+      const indiceAtual = Math.max(
+        0,
+        Math.min(tele.paradaAtualMotoboy, Math.max(totalParadas - 1, 0))
+      );
+
+      if (totalParadas === 0) {
+        return respostaErro("Esta tele não possui paradas cadastradas.", 409);
+      }
+
+      let proximaParada = indiceAtual;
+
+      if (novaEtapa === etapaAtual) {
+        return NextResponse.json({
+          ok: true,
+          tele: {
+            id: tele.id,
+            status: tele.status,
+            etapaMotoboy: etapaAtual,
+            paradaAtualMotoboy: indiceAtual,
+          },
+        });
+      }
+
+      if (etapaAtual === "AGUARDANDO_INICIO_COLETA" && novaEtapa !== "EM_ROTA_COLETA") {
+        return respostaErro("Inicie primeiro a rota até a primeira parada.", 409);
+      }
+
+      if (etapaAtual === "EM_ROTA_COLETA" && novaEtapa !== "CHEGOU_NA_COLETA") {
+        return respostaErro("Confirme primeiro a chegada na primeira parada.", 409);
+      }
+
+      if (etapaAtual === "CHEGOU_NA_COLETA" && novaEtapa !== "EM_ROTA_ENTREGA") {
+        return respostaErro("Inicie a rota até a próxima parada.", 409);
+      }
+
+      if (etapaAtual === "EM_ROTA_ENTREGA" && novaEtapa !== "CHEGOU_NA_ENTREGA") {
+        return respostaErro("Confirme primeiro a chegada na parada atual.", 409);
+      }
+
+      if (etapaAtual === "CHEGOU_NA_ENTREGA") {
+        const temProximaParada = indiceAtual < totalParadas - 1;
+
+        if (temProximaParada && novaEtapa !== "EM_ROTA_ENTREGA") {
+          return respostaErro("Ainda existem paradas pendentes nesta tele.", 409);
+        }
+
+        if (!temProximaParada && novaEtapa !== "CONCLUIDA") {
+          return respostaErro("Esta é a última parada. Finalize a tele.", 409);
+        }
+      }
+
+      if (etapaAtual === "CONCLUIDA") {
+        return respostaErro("Esta tele já foi concluída.", 409);
+      }
+
+      if (novaEtapa === "EM_ROTA_ENTREGA") {
+        if (indiceAtual >= totalParadas - 1) {
+          return respostaErro("Não existe outra parada para iniciar.", 409);
+        }
+
+        proximaParada = indiceAtual + 1;
+      }
+
+      if (novaEtapa === "CONCLUIDA" && indiceAtual < totalParadas - 1) {
+        return respostaErro("Ainda existem paradas pendentes nesta tele.", 409);
+      }
+
+      const dadosEtapa = dadosDaEtapa(novaEtapa);
+
+      const teleAtualizada = await prisma.tele.update({
+        where: {
+          id: tele.id,
+        },
+        data: {
+          etapaMotoboy: novaEtapa,
+          paradaAtualMotoboy: proximaParada,
+          ...dadosEtapa,
+        },
+        select: {
+          id: true,
+          status: true,
+          etapaMotoboy: true,
+          paradaAtualMotoboy: true,
+          rotaColetaIniciadaEm: true,
+          chegouNaColetaEm: true,
+          entregaIniciadaEm: true,
+          chegouNaEntregaEm: true,
+          concluidaPeloMotoboyEm: true,
+          dataTele: true,
+          updatedAt: true,
+        },
+      });
+
+      return NextResponse.json({
+        ok: true,
+        tele: teleAtualizada,
+      });
+    }
+
+    if (!statusValido(novoStatus)) {
+      return respostaErro("Status não permitido para o motoboy.", 400);
+    }
+
+    if (tele.status === novoStatus) {
+      return NextResponse.json({
+        ok: true,
+        tele: {
+          id: tele.id,
+          status: tele.status,
+          etapaMotoboy: tele.etapaMotoboy,
+          paradaAtualMotoboy: tele.paradaAtualMotoboy,
+        },
+      });
+    }
+
+    const permitidos = PROXIMO_STATUS[tele.status] || [];
+
+    if (!permitidos.includes(novoStatus)) {
+      return respostaErro("Essa alteração de status não é permitida.", 409);
+    }
+
+    const teleAtualizada = await prisma.tele.update({
+      where: {
+        id: tele.id,
+      },
+      data: {
+        status: novoStatus,
+      },
+      select: {
+        id: true,
+        status: true,
+        etapaMotoboy: true,
+        paradaAtualMotoboy: true,
+        dataTele: true,
+        updatedAt: true,
+      },
+    });
+
+    return NextResponse.json({
+      ok: true,
+      tele: teleAtualizada,
+    });
+  } catch (erro) {
+    console.error("Erro ao atualizar andamento pelo motoboy:", erro);
+
+    return respostaErro("Não foi possível atualizar o andamento da tele.", 500);
+  }
+}
+
+===== app/motoboy/page.tsx =====
 "use client";
 
 import { Capacitor, registerPlugin } from "@capacitor/core";
@@ -112,17 +675,6 @@ type EtapaMotoboyTele =
   | "CHEGOU_NA_ENTREGA"
   | "CONCLUIDA";
 
-type ItemFilaMotoboy = {
-  id: string;
-  ordem: number;
-  posicao?: number | null;
-  status: "PENDENTE" | "EM_ANDAMENTO";
-  teleId: string;
-  paradaId: string;
-  iniciadaEm?: string | null;
-  parada: Parada;
-};
-
 type Tele = {
   id: string;
   solicitante?: string | null;
@@ -139,12 +691,6 @@ type Tele = {
   aceitaPeloMotoboy?: boolean;
   ordemMotoboy?: number | null;
   posicaoNaFila?: number | null;
-  filaOperacionalAtiva?: boolean;
-  etapaLiberadaPelaFila?: boolean;
-  bloqueadaPelaFila?: boolean;
-  totalEtapasPendentesFila?: number;
-  itemFilaAtual?: ItemFilaMotoboy | null;
-  proximaEtapaDaTele?: ItemFilaMotoboy | null;
   atribuidaAoMotoboyEm?: string | null;
   aceitaPeloMotoboyEm?: string | null;
   recusadaPeloMotoboyEm?: string | null;
@@ -1402,7 +1948,7 @@ export default function MotoboyPage() {
                   tele={tele}
                   miniMapa={undefined}
                   atualizando={teleAtualizando === tele.id}
-                  bloqueado={Boolean(teleAtualizando) || Boolean(tele.bloqueadaPelaFila)}
+                  bloqueado={Boolean(teleAtualizando)}
                   onAvancarEtapa={(etapa) => void avancarEtapaMotoboy(tele, etapa)}
                   onAceitar={() => {}}
                   onRecusar={() => {}}
@@ -1603,32 +2149,13 @@ function CardTele({
     0,
     Math.min(Number(tele.paradaAtualMotoboy || 0), Math.max(paradas.length - 1, 0))
   );
-
-  const indiceParadaLiberada = tele.itemFilaAtual?.paradaId
-    ? paradas.findIndex((parada) => parada.id === tele.itemFilaAtual?.paradaId)
-    : -1;
-
-  const indiceVisualAtual = indiceParadaLiberada >= 0 ? indiceParadaLiberada : indiceParadaAtual;
-
   const paradaAtual = paradas[indiceParadaAtual];
-  const paradaLiberada = indiceParadaLiberada >= 0 ? paradas[indiceParadaLiberada] : paradaAtual;
-
-  const proximaParada =
-    etapaAtual === "CHEGOU_NA_COLETA" || etapaAtual === "CHEGOU_NA_ENTREGA"
-      ? paradaLiberada
-      : paradas[indiceParadaAtual + 1];
-
-  const teleBloqueadaPelaFila =
-    tele.filaOperacionalAtiva === true && tele.bloqueadaPelaFila === true;
-
-  const acaoEtapa = teleBloqueadaPelaFila
-    ? null
-    : obterAcaoEtapaMotoboy({
-        etapa: etapaAtual,
-        paradaAtual,
-        proximaParada,
-      });
-
+  const proximaParada = paradas[indiceParadaAtual + 1];
+  const acaoEtapa = obterAcaoEtapaMotoboy({
+    etapa: etapaAtual,
+    paradaAtual,
+    proximaParada,
+  });
   const observacao = tele.observacaoGeral || tele.observacao;
 
   return (
@@ -1668,19 +2195,11 @@ function CardTele({
               </span>
             )}
 
-            {tele.statusAceite === "ACEITA" && tele.itemFilaAtual && !teleBloqueadaPelaFila && (
-              <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">
-                Etapa atual definida pelo gestor
+            {tele.statusAceite === "ACEITA" && typeof tele.posicaoNaFila === "number" && (
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                {tele.posicaoNaFila}ª na fila
               </span>
             )}
-
-            {tele.statusAceite === "ACEITA" &&
-              teleBloqueadaPelaFila &&
-              tele.proximaEtapaDaTele?.posicao && (
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                  Etapa {tele.proximaEtapaDaTele.posicao} da fila
-                </span>
-              )}
           </div>
 
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-500">
@@ -1743,10 +2262,7 @@ function CardTele({
             <div className="mt-5 space-y-3">
               {paradas.map((parada, indice) => {
                 const paradaAtiva =
-                  !concluida &&
-                  tele.statusAceite === "ACEITA" &&
-                  !teleBloqueadaPelaFila &&
-                  indice === indiceVisualAtual;
+                  !concluida && tele.statusAceite === "ACEITA" && indice === indiceParadaAtual;
 
                 const paradaConcluida =
                   concluida || (tele.statusAceite === "ACEITA" && indice < indiceParadaAtual);
@@ -1810,33 +2326,6 @@ function CardTele({
             </div>
           )}
 
-          {!concluida && tele.statusAceite === "ACEITA" && teleBloqueadaPelaFila && (
-            <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
-              <p className="text-xs font-bold uppercase tracking-wide text-amber-700">
-                Etapa bloqueada
-              </p>
-
-              <p className="mt-1 font-semibold text-slate-900">
-                Aguarde a ordem definida pelo gestor
-              </p>
-
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                Você deve concluir primeiro a etapa que está no topo da fila operacional. Esta tele
-                será liberada automaticamente quando chegar a vez dela.
-              </p>
-
-              {tele.proximaEtapaDaTele?.parada && (
-                <div className="mt-3 rounded-xl bg-white/80 px-3 py-3 text-sm text-slate-600">
-                  <strong className="text-slate-800">Próxima etapa desta tele:</strong>{" "}
-                  {rotuloCurtoTipoParada(tele.proximaEtapaDaTele.parada.tipo)}
-                  {tele.proximaEtapaDaTele.parada.cliente
-                    ? ` — ${tele.proximaEtapaDaTele.parada.cliente}`
-                    : ""}
-                </div>
-              )}
-            </div>
-          )}
-
           {!concluida && estaAguardandoAceite ? (
             <div className="mt-5 grid grid-cols-2 gap-3 sm:flex">
               <button
@@ -1870,7 +2359,6 @@ function CardTele({
           ) : (
             !concluida &&
             tele.statusAceite === "ACEITA" &&
-            !teleBloqueadaPelaFila &&
             acaoEtapa && (
               <div className="mt-5">
                 <div className="mb-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
@@ -1878,19 +2366,14 @@ function CardTele({
                     Etapa atual
                   </p>
                   <p className="mt-1 font-semibold text-slate-800">
-                    {rotuloEtapaMotoboy(
-                      etapaAtual,
-                      etapaAtual === "CHEGOU_NA_COLETA" || etapaAtual === "CHEGOU_NA_ENTREGA"
-                        ? paradaLiberada
-                        : paradaAtual
-                    )}
+                    {rotuloEtapaMotoboy(etapaAtual, paradaAtual)}
                   </p>
 
-                  {paradaLiberada && (
+                  {paradaAtual && (
                     <p className="mt-1 text-sm text-slate-500">
-                      Destino definido:{" "}
+                      Destino atual:{" "}
                       <strong className="text-slate-700">
-                        {tituloParada(paradaLiberada, indiceVisualAtual)}
+                        {tituloParada(paradaAtual, indiceParadaAtual)}
                       </strong>
                     </p>
                   )}
@@ -2322,3 +2805,61 @@ function formatarTempoLocalizacao(data: string) {
     timeZone: FUSO_BRASIL,
   });
 }
+
+===== app/api/maps/rota-motoboy OU ROTAS RELACIONADAS =====
+app\api\motoboys\fila-operacional\route.ts:166:            etapaMotoboy: true,
+app\api\motoboys\fila-operacional\route.ts:167:            paradaAtualMotoboy: true,
+app\api\motoboys\fila-operacional\route.ts:444:        ordemMotoboy: true,
+app\api\motoboys\fila-operacional\route.ts:445:        paradaAtualMotoboy: true,
+app\api\motoboys\fila-operacional\route.ts:466:          ordemMotoboy: "asc",
+app\api\motoboys\fila-operacional\route.ts:509:        const indiceAtual = Math.max(0, tele.paradaAtualMotoboy || 0);
+app\api\motoboys\localizacoes\route.ts:53:              ordemMotoboy: "asc",
+app\api\motoboys\localizacoes\route.ts:65:            etapaMotoboy: true,
+app\api\motoboys\localizacoes\route.ts:66:            ordemMotoboy: true,
+app\api\motoboys\localizacoes\route.ts:154:                etapaMotoboy: teleAtual.etapaMotoboy,
+app\api\motoboys\localizacoes\route.ts:155:                ordemMotoboy: teleAtual.ordemMotoboy,
+app\api\motoboys\minhas-teles\aceite\route.ts:74:        ordemMotoboy: true,
+app\api\motoboys\minhas-teles\aceite\route.ts:119:          etapaMotoboy: null,
+app\api\motoboys\minhas-teles\aceite\route.ts:120:          ordemMotoboy: null,
+app\api\motoboys\minhas-teles\aceite\route.ts:147:            ordemMotoboy: true,
+app\api\motoboys\minhas-teles\aceite\route.ts:151:        const proximaOrdemTele = Number(ultimaTeleDaFila._max.ordemMotoboy || 0) + 1;
+app\api\motoboys\minhas-teles\aceite\route.ts:159:            etapaMotoboy: "AGUARDANDO_INICIO_COLETA",
+app\api\motoboys\minhas-teles\aceite\route.ts:160:            ordemMotoboy: proximaOrdemTele,
+app\api\motoboys\minhas-teles\aceite\route.ts:219:        etapaMotoboy: null,
+app\api\motoboys\minhas-teles\aceite\route.ts:220:        ordemMotoboy: null,
+app\api\motoboys\minhas-teles\route.ts:131:        etapaMotoboy: "CONCLUIDA",
+app\api\motoboys\minhas-teles\route.ts:132:        ordemMotoboy: null,
+app\api\motoboys\minhas-teles\route.ts:157:        etapaMotoboy: null,
+app\api\motoboys\minhas-teles\route.ts:158:        ordemMotoboy: null,
+app\api\motoboys\minhas-teles\route.ts:193:        const ordemA = teleA.ordemMotoboy ?? Number.MAX_SAFE_INTEGER;
+app\api\motoboys\minhas-teles\route.ts:194:        const ordemB = teleB.ordemMotoboy ?? Number.MAX_SAFE_INTEGER;
+app\api\motoboys\minhas-teles\route.ts:223:          tele.statusAceite === "ACEITA" && tele.status !== "ENTREGUE" ? tele.ordemMotoboy : null,
+app\api\motoboys\minhas-teles\status\route.ts:2:import type { EtapaMotoboyTele, StatusTele } from "@prisma/client";
+app\api\motoboys\minhas-teles\status\route.ts:9:  etapaMotoboy?: string;
+app\api\motoboys\minhas-teles\status\route.ts:22:const ETAPAS_PERMITIDAS: EtapaMotoboyTele[] = [
+app\api\motoboys\minhas-teles\status\route.ts:25:  "CHEGOU_NA_COLETA",
+app\api\motoboys\minhas-teles\status\route.ts:27:  "CHEGOU_NA_ENTREGA",
+app\api\motoboys\minhas-teles\status\route.ts:46:function etapaValida(etapa: string): etapa is EtapaMotoboyTele {
+app\api\motoboys\minhas-teles\status\route.ts:47:  return ETAPAS_PERMITIDAS.includes(etapa as EtapaMotoboyTele);
+app\api\motoboys\minhas-teles\status\route.ts:50:function dadosDaEtapa(etapa: EtapaMotoboyTele): {
+app\api\motoboys\minhas-teles\status\route.ts:67:  if (etapa === "CHEGOU_NA_COLETA") {
+app\api\motoboys\minhas-teles\status\route.ts:81:  if (etapa === "CHEGOU_NA_ENTREGA") {
+app\api\motoboys\minhas-teles\status\route.ts:131:    const novaEtapa = String(body.etapaMotoboy || "").trim();
+app\api\motoboys\minhas-teles\status\route.ts:150:        etapaMotoboy: true,
+app\api\motoboys\minhas-teles\status\route.ts:151:        paradaAtualMotoboy: true,
+app\api\motoboys\minhas-teles\status\route.ts:177:      const etapaAtual = tele.etapaMotoboy || "AGUARDANDO_INICIO_COLETA";
+app\api\motoboys\minhas-teles\status\route.ts:182:        Math.min(tele.paradaAtualMotoboy, Math.max(totalParadas - 1, 0))
+app\api\motoboys\minhas-teles\status\route.ts:197:            etapaMotoboy: etapaAtual,
+app\api\motoboys\minhas-teles\status\route.ts:198:            paradaAtualMotoboy: indiceAtual,
+app\api\motoboys\minhas-teles\status\route.ts:207:      if (etapaAtual === "EM_ROTA_COLETA" && novaEtapa !== "CHEGOU_NA_COLETA") {
+app\api\motoboys\minhas-teles\status\route.ts:211:      if (etapaAtual === "CHEGOU_NA_COLETA" && novaEtapa !== "EM_ROTA_ENTREGA") {
+app\api\motoboys\minhas-teles\status\route.ts:215:      if (etapaAtual === "EM_ROTA_ENTREGA" && novaEtapa !== "CHEGOU_NA_ENTREGA") {
+app\api\motoboys\minhas-teles\status\route.ts:219:      if (etapaAtual === "CHEGOU_NA_ENTREGA") {
+app\api\motoboys\minhas-teles\status\route.ts:254:          etapaMotoboy: novaEtapa,
+app\api\motoboys\minhas-teles\status\route.ts:255:          paradaAtualMotoboy: proximaParada,
+app\api\motoboys\minhas-teles\status\route.ts:261:          etapaMotoboy: true,
+app\api\motoboys\minhas-teles\status\route.ts:262:          paradaAtualMotoboy: true,
+app\api\motoboys\minhas-teles\status\route.ts:289:          etapaMotoboy: tele.etapaMotoboy,
+app\api\motoboys\minhas-teles\status\route.ts:290:          paradaAtualMotoboy: tele.paradaAtualMotoboy,
+app\api\motoboys\minhas-teles\status\route.ts:311:        etapaMotoboy: true,
+app\api\motoboys\minhas-teles\status\route.ts:312:        paradaAtualMotoboy: true,

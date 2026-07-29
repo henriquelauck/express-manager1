@@ -165,21 +165,76 @@ export async function GET(request: Request) {
       },
     });
 
-    const teles = await prisma.tele.findMany({
-      where: {
-        motoboyId: motoboy.id,
-        statusAceite: {
-          not: "RECUSADA",
-        },
-      },
-      include: {
-        paradas: {
-          orderBy: {
-            ordem: "asc",
+    const [teles, itensFilaOperacional] = await Promise.all([
+      prisma.tele.findMany({
+        where: {
+          motoboyId: motoboy.id,
+          statusAceite: {
+            not: "RECUSADA",
           },
         },
-      },
-    });
+        include: {
+          paradas: {
+            orderBy: {
+              ordem: "asc",
+            },
+          },
+        },
+      }),
+      prisma.itemFilaOperacionalMotoboy.findMany({
+        where: {
+          motoboyId: motoboy.id,
+          status: {
+            in: ["PENDENTE", "EM_ANDAMENTO"],
+          },
+        },
+        orderBy: [
+          {
+            ordem: "asc",
+          },
+          {
+            createdAt: "asc",
+          },
+        ],
+        select: {
+          id: true,
+          ordem: true,
+          status: true,
+          teleId: true,
+          paradaId: true,
+          iniciadaEm: true,
+          parada: {
+            select: {
+              id: true,
+              ordem: true,
+              tipo: true,
+              cliente: true,
+              endereco: true,
+              contato: true,
+              observacao: true,
+            },
+          },
+          tele: {
+            select: {
+              id: true,
+              solicitante: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    const itemFilaAtual = itensFilaOperacional[0] || null;
+    const posicaoItemPorId = new Map(
+      itensFilaOperacional.map((item, indice) => [item.id, indice + 1])
+    );
+    const itensPorTele = new Map<string, typeof itensFilaOperacional>();
+
+    for (const item of itensFilaOperacional) {
+      const listaAtual = itensPorTele.get(item.teleId) || [];
+      listaAtual.push(item);
+      itensPorTele.set(item.teleId, listaAtual);
+    }
 
     const telesOrdenadas = [...teles].sort((teleA, teleB) => {
       const prioridadeA = prioridadeStatusAceite(teleA.statusAceite);
@@ -215,13 +270,52 @@ export async function GET(request: Request) {
     });
 
     return NextResponse.json(
-      telesOrdenadas.map((tele) => ({
-        ...tele,
-        aguardandoAceite: tele.status !== "ENTREGUE" && tele.statusAceite === "AGUARDANDO_ACEITE",
-        aceitaPeloMotoboy: tele.statusAceite === "ACEITA",
-        posicaoNaFila:
-          tele.statusAceite === "ACEITA" && tele.status !== "ENTREGUE" ? tele.ordemMotoboy : null,
-      }))
+      telesOrdenadas.map((tele) => {
+        const itensDaTele = itensPorTele.get(tele.id) || [];
+        const itemAtualDaTele = itemFilaAtual?.teleId === tele.id ? itemFilaAtual : null;
+
+        const filaOperacionalAtiva = itensFilaOperacional.length > 0;
+        const teleAceitaPendente = tele.statusAceite === "ACEITA" && tele.status !== "ENTREGUE";
+
+        return {
+          ...tele,
+          aguardandoAceite: tele.status !== "ENTREGUE" && tele.statusAceite === "AGUARDANDO_ACEITE",
+          aceitaPeloMotoboy: tele.statusAceite === "ACEITA",
+          posicaoNaFila:
+            tele.statusAceite === "ACEITA" && tele.status !== "ENTREGUE" ? tele.ordemMotoboy : null,
+
+          filaOperacionalAtiva,
+          etapaLiberadaPelaFila: !filaOperacionalAtiva || Boolean(itemAtualDaTele),
+          bloqueadaPelaFila: filaOperacionalAtiva && teleAceitaPendente && !itemAtualDaTele,
+          totalEtapasPendentesFila: itensDaTele.length,
+
+          itemFilaAtual: itemAtualDaTele
+            ? {
+                id: itemAtualDaTele.id,
+                ordem: itemAtualDaTele.ordem,
+                posicao: posicaoItemPorId.get(itemAtualDaTele.id) || 1,
+                status: itemAtualDaTele.status,
+                teleId: itemAtualDaTele.teleId,
+                paradaId: itemAtualDaTele.paradaId,
+                iniciadaEm: itemAtualDaTele.iniciadaEm,
+                parada: itemAtualDaTele.parada,
+              }
+            : null,
+
+          proximaEtapaDaTele:
+            itensDaTele.length > 0
+              ? {
+                  id: itensDaTele[0].id,
+                  ordem: itensDaTele[0].ordem,
+                  posicao: posicaoItemPorId.get(itensDaTele[0].id) || null,
+                  status: itensDaTele[0].status,
+                  teleId: itensDaTele[0].teleId,
+                  paradaId: itensDaTele[0].paradaId,
+                  parada: itensDaTele[0].parada,
+                }
+              : null,
+        };
+      })
     );
   } catch (erro) {
     console.error("Erro ao carregar teles do motoboy:", erro);

@@ -135,7 +135,7 @@ export async function PUT(request: Request) {
 
     if (acao === "ACEITAR") {
       const teleAceita = await prisma.$transaction(async (tx) => {
-        const ultimaDaFila = await tx.tele.aggregate({
+        const ultimaTeleDaFila = await tx.tele.aggregate({
           where: {
             motoboyId: usuario.motoboy!.id,
             statusAceite: "ACEITA",
@@ -148,16 +148,16 @@ export async function PUT(request: Request) {
           },
         });
 
-        const proximaOrdem = Number(ultimaDaFila._max.ordemMotoboy || 0) + 1;
+        const proximaOrdemTele = Number(ultimaTeleDaFila._max.ordemMotoboy || 0) + 1;
 
-        return tx.tele.update({
+        const teleAtualizada = await tx.tele.update({
           where: {
             id: teleId,
           },
           data: {
             statusAceite: "ACEITA",
             etapaMotoboy: "AGUARDANDO_INICIO_COLETA",
-            ordemMotoboy: proximaOrdem,
+            ordemMotoboy: proximaOrdemTele,
             aceitaPeloMotoboyEm: new Date(),
             recusadaPeloMotoboyEm: null,
             motivoRecusaMotoboy: null,
@@ -172,6 +172,35 @@ export async function PUT(request: Request) {
             },
           },
         });
+
+        const ultimoItemDaFila = await tx.itemFilaOperacionalMotoboy.aggregate({
+          where: {
+            motoboyId: usuario.motoboy!.id,
+            status: {
+              in: ["PENDENTE", "EM_ANDAMENTO"],
+            },
+          },
+          _max: {
+            ordem: true,
+          },
+        });
+
+        const primeiraOrdemItem = Number(ultimoItemDaFila._max.ordem || 0) + 1;
+
+        if (teleAtualizada.paradas.length > 0) {
+          await tx.itemFilaOperacionalMotoboy.createMany({
+            data: teleAtualizada.paradas.map((parada, indice) => ({
+              motoboyId: usuario.motoboy!.id,
+              teleId: teleAtualizada.id,
+              paradaId: parada.id,
+              ordem: primeiraOrdemItem + indice,
+              status: "PENDENTE",
+            })),
+            skipDuplicates: true,
+          });
+        }
+
+        return teleAtualizada;
       });
 
       return NextResponse.json({
