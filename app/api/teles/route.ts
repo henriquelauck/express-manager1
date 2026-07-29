@@ -161,6 +161,9 @@ function formatarTeleParaTela(tele: any) {
     valorBase: tele.valorBase,
     retorno: tele.retorno,
     espera: tele.espera,
+    esperaAtualIniciadaEm: tele.esperaAtualIniciadaEm,
+    blocosEsperaAtual: tele.blocosEsperaAtual,
+    esperaMinutosAcumulados: tele.esperaMinutosAcumulados,
     total: tele.total,
 
     recebido: Number(tele.valorRecebido || 0) >= Number(tele.total || 0) - 0.009,
@@ -188,7 +191,7 @@ function formatarTeleParaTela(tele: any) {
     contato: primeiraParada?.contato || "",
     observacao: primeiraParada?.observacao || "",
     valor: tele.total.toFixed(2).replace(".", ","),
-    esperaMinutos: 0,
+    esperaMinutos: Number(tele.esperaMinutosAcumulados || 0),
   };
 }
 
