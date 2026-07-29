@@ -1,3 +1,7 @@
+﻿===== app\(dashboard)\page.tsx =====
+ARQUIVO NAO ENCONTRADO
+
+===== app\page.tsx =====
 "use client";
 
 import PageContainer from "@/components/ui/PageContainer";
@@ -5,41 +9,26 @@ import PageHeader from "@/components/ui/PageHeader";
 import { useExpressManager } from "@/context/ExpressManagerContext";
 import type { Tele } from "@/types/Tele";
 import {
+  Bell,
   Bike,
   Calendar,
-  CheckCircle2,
   ChevronRight,
   CircleAlert,
   ExternalLink,
   FileText,
   Fuel,
   Heart,
-  ListTodo,
-  Loader2,
   MapPin,
+  MessageCircle,
   Package,
   Plus,
+  Search,
   Trophy,
   Truck,
   User,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
-
-type TarefaGestor = {
-  id: string;
-  tipo: "MARCOS_MANUTENCOES" | "SAVECELL_PENDENCIAS";
-  dataReferencia: string;
-  titulo: string;
-  descricao: string;
-  valor: number;
-  quantidadeTeles: number;
-  teleIds: string[];
-  concluida: boolean;
-  concluidaEm?: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
 
 type MotoboyOnline = {
   id: string;
@@ -62,94 +51,6 @@ export default function Dashboard() {
   const [motoboysOnline, setMotoboysOnline] = useState<MotoboyOnline[]>([]);
   const [carregandoMotoboysOnline, setCarregandoMotoboysOnline] = useState(true);
   const [erroMotoboysOnline, setErroMotoboysOnline] = useState("");
-  const [tarefasGestor, setTarefasGestor] = useState<TarefaGestor[]>([]);
-  const [carregandoTarefas, setCarregandoTarefas] = useState(true);
-  const [erroTarefas, setErroTarefas] = useState("");
-  const [tarefaConcluindo, setTarefaConcluindo] = useState<string | null>(null);
-
-  async function carregarTarefasGestor(mostrarCarregamento = false) {
-    if (mostrarCarregamento) {
-      setCarregandoTarefas(true);
-    }
-
-    try {
-      const resposta = await fetch("/api/tarefas-gestor", {
-        cache: "no-store",
-      });
-
-      if (!resposta.ok) {
-        let mensagem = "Não foi possível carregar as tarefas do gestor.";
-
-        try {
-          const dadosErro = await resposta.json();
-          mensagem = dadosErro?.erro || mensagem;
-        } catch {}
-
-        throw new Error(mensagem);
-      }
-
-      const dados = await resposta.json();
-
-      setTarefasGestor(Array.isArray(dados) ? dados : []);
-      setErroTarefas("");
-    } catch (erro) {
-      setErroTarefas(
-        erro instanceof Error ? erro.message : "Não foi possível carregar as tarefas do gestor."
-      );
-    } finally {
-      setCarregandoTarefas(false);
-    }
-  }
-
-  async function concluirTarefaGestor(tarefaId: string) {
-    if (tarefaConcluindo) {
-      return;
-    }
-
-    setTarefaConcluindo(tarefaId);
-    setErroTarefas("");
-
-    try {
-      const resposta = await fetch("/api/tarefas-gestor", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          tarefaId,
-        }),
-      });
-
-      if (!resposta.ok) {
-        let mensagem = "Não foi possível concluir a tarefa.";
-
-        try {
-          const dadosErro = await resposta.json();
-          mensagem = dadosErro?.erro || mensagem;
-        } catch {}
-
-        throw new Error(mensagem);
-      }
-
-      setTarefasGestor((atuais) => atuais.filter((tarefa) => tarefa.id !== tarefaId));
-    } catch (erro) {
-      setErroTarefas(erro instanceof Error ? erro.message : "Não foi possível concluir a tarefa.");
-    } finally {
-      setTarefaConcluindo(null);
-    }
-  }
-
-  useEffect(() => {
-    void carregarTarefasGestor(true);
-
-    const intervaloTarefas = window.setInterval(() => {
-      void carregarTarefasGestor();
-    }, 60000);
-
-    return () => {
-      window.clearInterval(intervaloTarefas);
-    };
-  }, []);
 
   useEffect(() => {
     let ativo = true;
@@ -236,12 +137,6 @@ export default function Dashboard() {
   const inicioDosSeteDias = new Date(hoje);
   inicioDosSeteDias.setDate(hoje.getDate() - 6);
 
-  const inicioDaSemana = new Date(hoje);
-  inicioDaSemana.setDate(hoje.getDate() - hoje.getDay());
-
-  const fimDaSemana = new Date(inicioDaSemana);
-  fimDaSemana.setDate(inicioDaSemana.getDate() + 6);
-
   const telesHoje = teles.filter(
     (tele) => dataOperacionalDaTele(tele).getTime() === hoje.getTime()
   );
@@ -307,50 +202,7 @@ export default function Dashboard() {
     )
   )
     .sort((a, b) => b.total - a.total)
-    .slice(0, 10);
-
-  const rankingMotoboysSemana = Object.values(
-    teles
-      .filter((tele) => {
-        const data = dataOperacionalDaTele(tele);
-
-        return Boolean(tele.motoboy) && data >= inicioDaSemana && data <= fimDaSemana;
-      })
-      .reduce<
-        Record<
-          string,
-          {
-            nome: string;
-            quantidade: number;
-            totalBruto: number;
-            totalLiquido: number;
-          }
-        >
-      >((acc, tele) => {
-        const nome = String(tele.motoboy || "").trim();
-
-        if (!nome) {
-          return acc;
-        }
-
-        if (!acc[nome]) {
-          acc[nome] = {
-            nome,
-            quantidade: 0,
-            totalBruto: 0,
-            totalLiquido: 0,
-          };
-        }
-
-        const valor = valorDaTele(tele);
-
-        acc[nome].quantidade += 1;
-        acc[nome].totalBruto += valor;
-        acc[nome].totalLiquido += valor * 0.8;
-
-        return acc;
-      }, {})
-  ).sort((a, b) => b.totalBruto - a.totalBruto);
+    .slice(0, 3);
 
   const contasAReceber = teles
     .filter((tele) => !tele.recebimento || tele.recebimento === "pendente")
@@ -363,11 +215,22 @@ export default function Dashboard() {
 
   return (
     <PageContainer>
-      <div className="mb-8">
+      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-5 mb-8">
         <PageHeader
           titulo="Olá, Henrique! 👋"
           descricao="Aqui está o resumo da sua operação hoje."
         />
+
+        <div className="hidden md:flex items-center gap-5">
+          <div className="w-[330px] h-16 bg-white rounded-2xl shadow-sm flex items-center px-6 gap-3">
+            <Search className="text-slate-500" />
+            <span className="text-slate-500">Buscar...</span>
+          </div>
+
+          <CircleButton icon={<MessageCircle />} />
+          <CircleButton icon={<Bell />} alert />
+          <div className="w-16 h-16 rounded-full bg-slate-300" />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-6">
@@ -407,45 +270,7 @@ export default function Dashboard() {
       </div>
 
       <div className="mb-6">
-        <Panel title="Tarefas do gestor">
-          {carregandoTarefas ? (
-            <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-sm text-slate-500">
-              <Loader2 size={18} className="animate-spin" />
-              Carregando tarefas...
-            </div>
-          ) : erroTarefas ? (
-            <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">
-              {erroTarefas}
-            </div>
-          ) : tarefasGestor.length === 0 ? (
-            <div className="flex min-h-36 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-5 text-center">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-emerald-600 shadow-sm">
-                <CheckCircle2 size={22} />
-              </div>
-              <strong className="mt-3 text-sm text-slate-700">Nenhuma tarefa pendente</strong>
-              <p className="mt-1 text-xs leading-5 text-slate-500">
-                Após as 19h, as tarefas do Marcos Moto Peças e da SaveCell aparecerão aqui quando
-                forem necessárias.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-              {tarefasGestor.map((tarefa) => (
-                <TarefaGestorCard
-                  key={tarefa.id}
-                  tarefa={tarefa}
-                  concluindo={tarefaConcluindo === tarefa.id}
-                  bloqueado={Boolean(tarefaConcluindo)}
-                  onConcluir={() => void concluirTarefaGestor(tarefa.id)}
-                />
-              ))}
-            </div>
-          )}
-        </Panel>
-      </div>
-
-      <div className="mb-6">
-        <Panel title="Motoboys online">
+        <Panel title="Motoboys online" button="Atualização automática">
           {carregandoMotoboysOnline ? (
             <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center text-sm text-slate-500">
               Carregando posições dos motoboys...
@@ -473,7 +298,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
-        <Panel title="Teles em andamento">
+        <Panel title="Teles em andamento" button="Ver todas">
           <div className="space-y-3">
             {telesEmAndamento.slice(0, 5).map((tele) => (
               <TeleEmAndamento
@@ -503,7 +328,7 @@ export default function Dashboard() {
           </Link>
         </Panel>
 
-        <Panel title="Faturamento dos últimos 7 dias">
+        <Panel title="Faturamento dos últimos 7 dias" button="7 dias">
           <div className="flex flex-col gap-5">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div>
@@ -575,8 +400,8 @@ export default function Dashboard() {
         </Panel>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <Panel title="Próximas coletas">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <Panel title="Próximas coletas" button="Ver todas">
           <div className="space-y-3">
             {proximasColetas.map(({ tele, coleta }) => (
               <Collect
@@ -608,7 +433,7 @@ export default function Dashboard() {
           )}
         </Panel>
 
-        <Panel title="Top 10 clientes">
+        <Panel title="Top clientes" button="Ranking geral">
           <div className="space-y-2">
             {topClientes.map((cliente, index) => (
               <Client
@@ -630,30 +455,7 @@ export default function Dashboard() {
           )}
         </Panel>
 
-        <Panel title="Ranking semanal dos motoboys">
-          <div className="space-y-2">
-            {rankingMotoboysSemana.map((motoboy, index) => (
-              <MotoboyRanking
-                key={motoboy.nome}
-                position={index + 1}
-                name={motoboy.nome}
-                quantity={motoboy.quantidade}
-                gross={`R$ ${formatarValor(motoboy.totalBruto)}`}
-                net={`R$ ${formatarValor(motoboy.totalLiquido)}`}
-              />
-            ))}
-          </div>
-
-          {rankingMotoboysSemana.length === 0 && (
-            <EmptyPanel
-              icon={<Bike size={22} />}
-              title="Ranking semanal vazio"
-              text="Os motoboys com teles nesta semana aparecerão aqui."
-            />
-          )}
-        </Panel>
-
-        <Panel title="Avisos importantes">
+        <Panel title="Avisos importantes" button="Resumo">
           <div className="space-y-3">
             <Notice
               icon={<Calendar size={21} />}
@@ -707,115 +509,6 @@ export default function Dashboard() {
         <Plus size={34} />
       </Link>
     </PageContainer>
-  );
-}
-
-function TarefaGestorCard({
-  tarefa,
-  concluindo,
-  bloqueado,
-  onConcluir,
-}: {
-  tarefa: TarefaGestor;
-  concluindo: boolean;
-  bloqueado: boolean;
-  onConcluir: () => void;
-}) {
-  const dataTarefa = new Date(tarefa.dataReferencia);
-  const hoje = new Date();
-
-  const dataTarefaBrasil = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(dataTarefa);
-
-  const hojeBrasil = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(hoje);
-
-  const atrasada = dataTarefaBrasil < hojeBrasil;
-
-  const estilo =
-    tarefa.tipo === "MARCOS_MANUTENCOES"
-      ? {
-          icone: "bg-blue-100 text-blue-700",
-          borda: "border-blue-200",
-          fundo: "bg-blue-50/40",
-        }
-      : {
-          icone: "bg-violet-100 text-violet-700",
-          borda: "border-violet-200",
-          fundo: "bg-violet-50/40",
-        };
-
-  return (
-    <article className={`rounded-2xl border p-5 ${estilo.borda} ${estilo.fundo}`}>
-      <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex min-w-0 items-start gap-3">
-          <div
-            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${estilo.icone}`}
-          >
-            <ListTodo size={21} />
-          </div>
-
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <strong className="text-sm text-slate-900">{tarefa.titulo}</strong>
-
-              {atrasada && (
-                <span className="rounded-full bg-red-100 px-2.5 py-1 text-[11px] font-semibold text-red-700">
-                  Atrasada
-                </span>
-              )}
-            </div>
-
-            <p className="mt-2 text-sm leading-6 text-slate-600">{tarefa.descricao}</p>
-
-            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-slate-500">
-              <span>
-                {tarefa.quantidadeTeles} {tarefa.quantidadeTeles === 1 ? "tele" : "teles"}
-              </span>
-              <span>
-                Referência:{" "}
-                {dataTarefa.toLocaleDateString("pt-BR", {
-                  timeZone: "America/Sao_Paulo",
-                })}
-              </span>
-              <span className="font-semibold text-slate-700">
-                R${" "}
-                {Number(tarefa.valor || 0)
-                  .toFixed(2)
-                  .replace(".", ",")}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={onConcluir}
-          disabled={bloqueado}
-          className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-60"
-        >
-          {concluindo ? (
-            <>
-              <Loader2 size={17} className="animate-spin" />
-              Concluindo...
-            </>
-          ) : (
-            <>
-              <CheckCircle2 size={17} />
-              Marcar como concluída
-            </>
-          )}
-        </button>
-      </div>
-    </article>
   );
 }
 
@@ -927,6 +620,19 @@ function formatarAtualizacaoMotoboy(motoboy: MotoboyOnline) {
   });
 }
 
+function CircleButton({ icon, alert }: any) {
+  return (
+    <div className="relative w-16 h-16 bg-white rounded-full shadow-sm flex items-center justify-center">
+      {icon}
+      {alert && (
+        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-6 h-6 rounded-full flex items-center justify-center">
+          3
+        </span>
+      )}
+    </div>
+  );
+}
+
 type CardTone = "emerald" | "blue" | "orange" | "violet";
 
 type CardProps = {
@@ -999,11 +705,12 @@ function Card({ title, value, icon, description, tone }: CardProps) {
   );
 }
 
-function Panel({ title, children }: { title: string; children: ReactNode }) {
+function Panel({ title, button, children }: any) {
   return (
-    <div className="rounded-3xl bg-white p-6 shadow-sm">
-      <div className="mb-5">
+    <div className="bg-white rounded-3xl p-6 shadow-sm">
+      <div className="flex justify-between items-center mb-5">
         <h2 className="text-xl font-bold">{title}</h2>
+        <button className="border border-slate-200 rounded-xl px-4 py-2 text-sm">{button}</button>
       </div>
       {children}
     </div>
@@ -1171,42 +878,6 @@ function Client({ position, name, quantity, value }: ClientProps) {
   );
 }
 
-type MotoboyRankingProps = {
-  position: number;
-  name: string;
-  quantity: number;
-  gross: string;
-  net: string;
-};
-
-function MotoboyRanking({ position, name, quantity, gross, net }: MotoboyRankingProps) {
-  const destaque = position === 1;
-
-  return (
-    <div className="flex items-center gap-3 rounded-2xl px-2 py-3 transition hover:bg-slate-50">
-      <span
-        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-bold ${
-          destaque ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600"
-        }`}
-      >
-        {position}
-      </span>
-
-      <div className="min-w-0 flex-1">
-        <strong className="block truncate text-sm text-slate-900">{name}</strong>
-        <p className="mt-0.5 text-xs text-slate-500">
-          {quantity} {quantity === 1 ? "tele" : "teles"} na semana
-        </p>
-      </div>
-
-      <div className="text-right">
-        <strong className="block text-sm text-slate-900">{gross}</strong>
-        <p className="mt-0.5 text-[11px] font-semibold text-emerald-700">Líquido {net}</p>
-      </div>
-    </div>
-  );
-}
-
 type NoticeTone = "emerald" | "orange" | "blue" | "violet";
 
 type NoticeProps = {
@@ -1250,3 +921,5 @@ function EmptyPanel({ icon, title, text }: { icon: ReactNode; title: string; tex
     </div>
   );
 }
+
+

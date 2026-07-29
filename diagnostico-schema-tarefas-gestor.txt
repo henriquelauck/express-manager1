@@ -1,3 +1,4 @@
+﻿===== prisma\schema.prisma =====
 generator client {
   provider = "prisma-client-js"
 }
@@ -168,14 +169,6 @@ enum EtapaMotoboyTele {
   CONCLUIDA
 }
 
-
-enum TipoTarefaGestor {
-  MARCOS_MANUTENCOES
-  SAVECELL_PENDENCIAS
-  FECHAMENTO_SEXTA_ESPECIAIS
-  FECHAMENTO_SABADO_DEMAIS
-}
-
 model User {
   id        String  @id @default(cuid())
   nome      String
@@ -299,32 +292,6 @@ model Tele {
   @@index([motoboyId, statusAceite, ordemMotoboy])
   @@index([statusAceite, atribuidaAoMotoboyEm])
   @@index([motoboyId, etapaMotoboy])
-}
-
-
-model TarefaGestor {
-  id String @id @default(cuid())
-
-  tipo TipoTarefaGestor
-
-  dataReferencia DateTime
-
-  titulo    String
-  descricao String
-
-  valor          Float @default(0)
-  quantidadeTeles Int   @default(0)
-  teleIds         String[] @default([])
-
-  concluida   Boolean   @default(false)
-  concluidaEm DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([tipo, dataReferencia])
-  @@index([concluida, dataReferencia])
-  @@index([tipo, concluida])
 }
 
 model FechamentoFinanceiro {
@@ -661,3 +628,4 @@ model MensagemAtendimento {
   @@index([autor, enviadaEm])
   @@index([direcao, enviadaEm])
 }
+

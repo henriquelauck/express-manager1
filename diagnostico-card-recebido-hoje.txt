@@ -1,3 +1,4 @@
+﻿===== app\motoboy\page.tsx =====
 "use client";
 
 import { Capacitor, registerPlugin } from "@capacitor/core";
@@ -133,10 +134,6 @@ type Tele = {
   recusadaPeloMotoboyEm?: string | null;
   motivoRecusaMotoboy?: string | null;
   total?: number | string | null;
-  recebimento?: "PENDENTE" | "ESCRITORIO" | "MOTOBOY" | string | null;
-  valorRecebido?: number | string | null;
-  dataRecebimento?: string | null;
-  motoboyRecebedor?: string | null;
   dataTele?: string | null;
   createdAt?: string | null;
   criadoEm?: string | null;
@@ -911,27 +908,6 @@ export default function MotoboyPage() {
 
   const liquidoHoje = brutoHoje * 0.8;
 
-  const recebidoHoje = useMemo(() => {
-    const hoje = dataBrasilISO(new Date());
-    const nomeMotoboy = normalizarTexto(usuario?.nome || "");
-
-    return teles.reduce((total, tele) => {
-      const recebidoPeloMotoboy = String(tele.recebimento || "").toUpperCase() === "MOTOBOY";
-
-      const dataRecebimento = tele.dataRecebimento ? dataBrasilISO(tele.dataRecebimento) : "";
-
-      const nomeRecebedor = normalizarTexto(tele.motoboyRecebedor || "");
-
-      const pertenceAoMotoboy = !nomeRecebedor || !nomeMotoboy || nomeRecebedor === nomeMotoboy;
-
-      if (!recebidoPeloMotoboy || dataRecebimento !== hoje || !pertenceAoMotoboy) {
-        return total;
-      }
-
-      return total + Number(tele.valorRecebido || 0);
-    }, 0);
-  }, [teles, usuario?.nome]);
-
   const brutoSemana = useMemo(
     () => telesSemana.reduce((total, tele) => total + Number(tele.total || 0), 0),
     [telesSemana]
@@ -1206,7 +1182,7 @@ export default function MotoboyPage() {
           </div>
         )}
 
-        <section className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-5">
+        <section className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
           <CardResumo
             titulo="Entregas hoje"
             valor={String(telesHoje.length)}
@@ -1235,14 +1211,6 @@ export default function MotoboyPage() {
             subtitulo="80% do bruto"
             icone={<WalletCards size={21} />}
             destaque="verde"
-          />
-
-          <CardResumo
-            titulo="Recebido hoje"
-            valor={formatarMoeda(recebidoHoje)}
-            subtitulo="Pagamentos recebidos de clientes"
-            icone={<CircleDollarSign size={21} />}
-            destaque="azul"
           />
         </section>
 
@@ -1452,13 +1420,12 @@ function CardResumo({
   valor: string;
   subtitulo: string;
   icone: React.ReactNode;
-  destaque?: "padrao" | "verde" | "laranja" | "azul";
+  destaque?: "padrao" | "verde" | "laranja";
 }) {
   const estilos = {
     padrao: "bg-slate-100 text-slate-700",
     verde: "bg-emerald-100 text-emerald-700",
     laranja: "bg-orange-100 text-orange-700",
-    azul: "bg-blue-100 text-blue-700",
   };
 
   return (
@@ -2141,14 +2108,6 @@ function tituloTipoParada(tipo?: string | null) {
   return tipo ? mapa[tipo] || tipo : "";
 }
 
-function normalizarTexto(valor: string) {
-  return String(valor || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .toLowerCase();
-}
-
 function formatarStatus(status: string) {
   const mapa: Record<string, string> = {
     AGUARDANDO_CLIENTE: "Aguardando cliente",
@@ -2242,3 +2201,4 @@ function formatarTempoLocalizacao(data: string) {
     timeZone: FUSO_BRASIL,
   });
 }
+
