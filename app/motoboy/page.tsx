@@ -155,6 +155,7 @@ type Tele = {
   esperaMinutosAcumulados?: number | null;
   total?: number | string | null;
   recebimento?: "PENDENTE" | "ESCRITORIO" | "MOTOBOY" | string | null;
+  formaCobranca?: "NA_HORA" | "SEMANAL" | "QUINZENAL" | "MENSAL" | string | null;
   valorRecebido?: number | string | null;
   dataRecebimento?: string | null;
   motoboyRecebedor?: string | null;
@@ -962,6 +963,66 @@ export default function MotoboyPage() {
     }
   }
 
+  async function registrarPagamentoRecebidoPeloMotoboy(tele: Tele) {
+    if (teleAtualizando) return;
+
+    const total = Number(tele.total || 0);
+    const valorRecebidoAtual = Number(tele.valorRecebido || 0);
+    const saldoPendente = Math.max(total - valorRecebidoAtual, 0);
+
+    if (saldoPendente <= 0.009) {
+      setErro("Esta tele não possui saldo pendente.");
+      return;
+    }
+
+    const confirmou = window.confirm(
+      `Confirmar o recebimento de ${formatarMoeda(
+        saldoPendente
+      )} do cliente? O valor ficará registrado como recebido por você.`
+    );
+
+    if (!confirmou) return;
+
+    setTeleAtualizando(tele.id);
+    setErro("");
+
+    try {
+      const resposta = await fetch("/api/teles", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: tele.id,
+          valorRecebido: total,
+          recebimento: "motoboy",
+          motoboyRecebedor: usuario?.nome || null,
+        }),
+      });
+
+      if (!resposta.ok) {
+        let mensagem = "Não foi possível registrar o recebimento.";
+
+        try {
+          const dadosErro = await resposta.json();
+          mensagem = dadosErro?.erro || mensagem;
+        } catch {}
+
+        throw new Error(mensagem);
+      }
+
+      await carregarDados(true);
+    } catch (erroPagamento) {
+      setErro(
+        erroPagamento instanceof Error
+          ? erroPagamento.message
+          : "Não foi possível registrar o recebimento."
+      );
+    } finally {
+      setTeleAtualizando(null);
+    }
+  }
+
   const telesHoje = useMemo(() => {
     const hoje = dataBrasilISO(new Date());
 
@@ -1433,6 +1494,7 @@ export default function MotoboyPage() {
                   onRecusar={() => void responderAceite(tele, "RECUSAR")}
                   onExpirarAceite={() => void expirarAceiteAutomaticamente(tele)}
                   onAbrirMapaParadaAtual={() => {}}
+                  onRegistrarPagamento={() => {}}
                 />
               ))}
             </div>
@@ -1467,6 +1529,9 @@ export default function MotoboyPage() {
                   onRecusar={() => {}}
                   onExpirarAceite={() => {}}
                   onAbrirMapaParadaAtual={() => abrirRotaParaParadaAtual(tele)}
+                  onRegistrarPagamento={() =>
+                    void registrarPagamentoRecebidoPeloMotoboy(tele)
+                  }
                 />
               ))}
             </div>
@@ -1503,6 +1568,7 @@ export default function MotoboyPage() {
                   onRecusar={() => {}}
                   onExpirarAceite={() => {}}
                   onAbrirMapaParadaAtual={() => {}}
+                  onRegistrarPagamento={() => {}}
                 />
               ))}
             </div>
@@ -1604,6 +1670,7 @@ function CardTele({
   onRecusar,
   onExpirarAceite,
   onAbrirMapaParadaAtual,
+  onRegistrarPagamento,
 }: {
   tele: Tele;
   miniMapa?: EstadoMiniMapa;
@@ -1615,6 +1682,7 @@ function CardTele({
   onRecusar: () => void;
   onExpirarAceite: () => void;
   onAbrirMapaParadaAtual: () => void;
+  onRegistrarPagamento: () => void;
 }) {
   const [agoraAceite, setAgoraAceite] = useState(() => Date.now());
   const [agoraEspera, setAgoraEspera] = useState(() => Date.now());
@@ -1724,6 +1792,19 @@ function CardTele({
       });
 
   const observacao = tele.observacaoGeral || tele.observacao;
+
+  const totalTele = Number(tele.total || 0);
+  const valorRecebido = Number(tele.valorRecebido || 0);
+  const saldoPendente = Math.max(totalTele - valorRecebido, 0);
+  const cobrancaNaHora = String(tele.formaCobranca || "").toUpperCase() === "NA_HORA";
+  const estaNoLocal =
+    etapaAtual === "CHEGOU_NA_COLETA" || etapaAtual === "CHEGOU_NA_ENTREGA";
+  const precisaCobrar =
+    !concluida &&
+    tele.statusAceite === "ACEITA" &&
+    cobrancaNaHora &&
+    estaNoLocal &&
+    saldoPendente > 0.009;
 
   return (
     <article className="p-5 sm:p-6">
@@ -1920,6 +2001,35 @@ function CardTele({
                     {sugestaoGestor.parada.endereco}
                   </p>
                 )}
+              </div>
+            </div>
+          )}
+
+          {precisaCobrar && (
+            <div className="mt-5 rounded-2xl border border-amber-300 bg-amber-50 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-amber-700">
+                    Cobrança necessária
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-slate-700">
+                    Esta tele deve ser cobrada no local antes de continuar.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={onRegistrarPagamento}
+                  disabled={bloqueado}
+                  className="flex h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 font-bold text-white transition hover:bg-amber-600 disabled:cursor-wait disabled:opacity-60"
+                >
+                  {atualizando ? (
+                    <Loader2 size={18} className="animate-spin" />
+                  ) : (
+                    <CircleDollarSign size={18} />
+                  )}
+                  Precisa cobrar {formatarMoeda(saldoPendente)}
+                </button>
               </div>
             </div>
           )}
