@@ -174,6 +174,7 @@ export async function PUT(request: Request) {
     const itemFilaAtual = await prisma.itemFilaOperacionalMotoboy.findFirst({
       where: {
         motoboyId: usuario.motoboy.id,
+        teleId: tele.id,
         status: {
           in: ["PENDENTE", "EM_ANDAMENTO"],
         },
