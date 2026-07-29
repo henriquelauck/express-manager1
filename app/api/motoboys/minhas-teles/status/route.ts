@@ -28,6 +28,29 @@ const ETAPAS_PERMITIDAS: EtapaMotoboyTele[] = [
   "CONCLUIDA",
 ];
 
+const MINUTOS_POR_BLOCO_ESPERA = 15;
+const VALOR_POR_BLOCO_ESPERA = 5;
+
+function calcularEsperaEncerrada({
+  inicio,
+  blocosJaCobrados,
+  agora,
+}: {
+  inicio: Date;
+  blocosJaCobrados: number;
+  agora: Date;
+}) {
+  const milissegundos = Math.max(0, agora.getTime() - inicio.getTime());
+  const minutosDecorridos = Math.floor(milissegundos / 60_000);
+  const blocosCompletos = Math.floor(minutosDecorridos / MINUTOS_POR_BLOCO_ESPERA);
+  const novosBlocos = Math.max(0, blocosCompletos - blocosJaCobrados);
+
+  return {
+    minutosDecorridos,
+    valorAcrescentar: novosBlocos * VALOR_POR_BLOCO_ESPERA,
+  };
+}
+
 function respostaErro(mensagem: string, status: number) {
   return NextResponse.json(
     {
@@ -150,6 +173,11 @@ export async function PUT(request: Request) {
         etapaMotoboy: true,
         paradaAtualMotoboy: true,
         motoboyId: true,
+        espera: true,
+        total: true,
+        esperaAtualIniciadaEm: true,
+        blocosEsperaAtual: true,
+        esperaMinutosAcumulados: true,
         paradas: {
           orderBy: {
             ordem: "asc",
@@ -327,10 +355,41 @@ export async function PUT(request: Request) {
         }
       }
 
+      const agora = new Date();
       const dadosEtapa = dadosDaEtapa(novaEtapa);
       const iniciouDeslocamento = novaEtapa === "EM_ROTA_COLETA" || novaEtapa === "EM_ROTA_ENTREGA";
       const confirmouChegada =
         novaEtapa === "CHEGOU_NA_COLETA" || novaEtapa === "CHEGOU_NA_ENTREGA";
+
+      const iniciandoEspera = novaEtapa === "CHEGOU_NA_COLETA" || novaEtapa === "CHEGOU_NA_ENTREGA";
+
+      const encerrandoEspera =
+        (etapaAtual === "CHEGOU_NA_COLETA" && novaEtapa === "EM_ROTA_ENTREGA") ||
+        (etapaAtual === "CHEGOU_NA_ENTREGA" &&
+          (novaEtapa === "EM_ROTA_ENTREGA" || novaEtapa === "CONCLUIDA"));
+
+      let esperaAtualizada = tele.espera;
+      let totalAtualizado = tele.total;
+      let minutosAcumuladosAtualizados = tele.esperaMinutosAcumulados;
+      let esperaAtualIniciadaEm: Date | null | undefined;
+      let blocosEsperaAtual: number | undefined;
+
+      if (iniciandoEspera) {
+        esperaAtualIniciadaEm = agora;
+        blocosEsperaAtual = 0;
+      } else if (encerrandoEspera && tele.esperaAtualIniciadaEm) {
+        const fechamentoEspera = calcularEsperaEncerrada({
+          inicio: tele.esperaAtualIniciadaEm,
+          blocosJaCobrados: tele.blocosEsperaAtual,
+          agora,
+        });
+
+        esperaAtualizada += fechamentoEspera.valorAcrescentar;
+        totalAtualizado += fechamentoEspera.valorAcrescentar;
+        minutosAcumuladosAtualizados += fechamentoEspera.minutosDecorridos;
+        esperaAtualIniciadaEm = null;
+        blocosEsperaAtual = 0;
+      }
 
       const teleAtualizada = await prisma.$transaction(async (tx) => {
         if (!finalizandoTele && itemFilaAtual) {
@@ -367,6 +426,15 @@ export async function PUT(request: Request) {
             etapaMotoboy: novaEtapa,
             paradaAtualMotoboy: proximaParada,
             ...dadosEtapa,
+            ...(esperaAtualIniciadaEm !== undefined ? { esperaAtualIniciadaEm } : {}),
+            ...(blocosEsperaAtual !== undefined ? { blocosEsperaAtual } : {}),
+            ...(encerrandoEspera
+              ? {
+                  espera: esperaAtualizada,
+                  total: totalAtualizado,
+                  esperaMinutosAcumulados: minutosAcumuladosAtualizados,
+                }
+              : {}),
           },
           select: {
             id: true,
@@ -378,6 +446,11 @@ export async function PUT(request: Request) {
             entregaIniciadaEm: true,
             chegouNaEntregaEm: true,
             concluidaPeloMotoboyEm: true,
+            espera: true,
+            total: true,
+            esperaAtualIniciadaEm: true,
+            blocosEsperaAtual: true,
+            esperaMinutosAcumulados: true,
             dataTele: true,
             updatedAt: true,
           },

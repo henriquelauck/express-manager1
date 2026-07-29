@@ -4,6 +4,67 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 const PRAZO_ACEITE_MS = 5 * 60_000;
+const MINUTOS_POR_BLOCO_ESPERA = 15;
+const VALOR_POR_BLOCO_ESPERA = 5;
+
+async function atualizarEsperasAtivas(motoboyId: string) {
+  const agora = new Date();
+
+  const telesComEsperaAtiva = await prisma.tele.findMany({
+    where: {
+      motoboyId,
+      statusAceite: "ACEITA",
+      status: {
+        not: "ENTREGUE",
+      },
+      esperaAtualIniciadaEm: {
+        not: null,
+      },
+    },
+    select: {
+      id: true,
+      esperaAtualIniciadaEm: true,
+      blocosEsperaAtual: true,
+    },
+  });
+
+  await Promise.all(
+    telesComEsperaAtiva.map(async (tele) => {
+      if (!tele.esperaAtualIniciadaEm) {
+        return;
+      }
+
+      const minutosDecorridos = Math.floor(
+        Math.max(0, agora.getTime() - tele.esperaAtualIniciadaEm.getTime()) / 60_000
+      );
+
+      const blocosCompletos = Math.floor(minutosDecorridos / MINUTOS_POR_BLOCO_ESPERA);
+      const novosBlocos = Math.max(0, blocosCompletos - tele.blocosEsperaAtual);
+
+      if (novosBlocos === 0) {
+        return;
+      }
+
+      const valorAcrescentar = novosBlocos * VALOR_POR_BLOCO_ESPERA;
+
+      await prisma.tele.updateMany({
+        where: {
+          id: tele.id,
+          blocosEsperaAtual: tele.blocosEsperaAtual,
+        },
+        data: {
+          blocosEsperaAtual: blocosCompletos,
+          espera: {
+            increment: valorAcrescentar,
+          },
+          total: {
+            increment: valorAcrescentar,
+          },
+        },
+      });
+    })
+  );
+}
 
 function respostaErro(mensagem: string, status: number) {
   return NextResponse.json({ erro: mensagem }, { status });
@@ -114,6 +175,13 @@ export async function GET(request: Request) {
     if (!motoboy) {
       return respostaErro("Acesso negado.", 403);
     }
+
+    /*
+     * Atualiza os blocos completos das esperas que continuam ativas.
+     * Como o painel consulta esta rota periodicamente, o acréscimo fica
+     * persistido logo após completar 15, 30, 45 minutos e assim por diante.
+     */
+    await atualizarEsperasAtivas(motoboy.id);
 
     /*
      * Compatibilidade com teles antigas:
