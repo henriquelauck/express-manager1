@@ -46,6 +46,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class LocalizacaoService extends Service {
 
@@ -72,6 +73,8 @@ public class LocalizacaoService extends Service {
     private FusedLocationProviderClient clienteLocalizacao;
     private LocationCallback callbackLocalizacao;
     private ExecutorService executorRede;
+    private ExecutorService executorConsultaTeles;
+    private final AtomicBoolean consultaTelesEmAndamento = new AtomicBoolean(false);
     private Handler handlerConsultaTeles;
     private Runnable tarefaConsultaTeles;
     private Ringtone toqueAlerta;
@@ -92,6 +95,7 @@ private static final long INTERVALO_SINAL_VIDA_MS = 30000L;
         criarCanalNovasTeles();
 
         executorRede = Executors.newSingleThreadExecutor();
+        executorConsultaTeles = Executors.newSingleThreadExecutor();
         handlerConsultaTeles = new Handler(Looper.getMainLooper());
         handlerSomAlerta = new Handler(Looper.getMainLooper());
         handlerSinalVida = new Handler(Looper.getMainLooper());
@@ -453,24 +457,42 @@ private void buscarUltimaLocalizacaoConhecida() {
     }
 
     private void consultarNovasTeles() {
-        if (executorRede == null || executorRede.isShutdown()) {
+        if (
+                executorConsultaTeles == null
+                        || executorConsultaTeles.isShutdown()
+        ) {
             return;
         }
 
-        executorRede.execute(() -> {
-            String token = obterToken();
+        /*
+         * A consulta de novas teles usa um executor próprio.
+         *
+         * Antes, localização, sinal de vida e novas teles dividiam a mesma
+         * fila de rede. Em conexão lenta, os envios de localização podiam
+         * se acumular e impedir a consulta de teles por vários minutos.
+         */
+        if (!consultaTelesEmAndamento.compareAndSet(false, true)) {
+            Log.d(
+                    TAG,
+                    "Consulta de teles anterior ainda está em andamento."
+            );
+            return;
+        }
 
-            if (token == null || token.trim().isEmpty()) {
-                Log.e(
-                        TAG,
-                        "Consulta de teles não realizada: token não encontrado."
-                );
-                return;
-            }
-
+        executorConsultaTeles.execute(() -> {
             HttpURLConnection conexao = null;
 
             try {
+                String token = obterToken();
+
+                if (token == null || token.trim().isEmpty()) {
+                    Log.e(
+                            TAG,
+                            "Consulta de teles não realizada: token não encontrado."
+                    );
+                    return;
+                }
+
                 URL url = new URL(URL_MINHAS_TELES);
 
                 conexao = (HttpURLConnection) url.openConnection();
@@ -514,6 +536,8 @@ private void buscarUltimaLocalizacaoConhecida() {
                 if (conexao != null) {
                     conexao.disconnect();
                 }
+
+                consultaTelesEmAndamento.set(false);
             }
         });
     }
@@ -1072,6 +1096,12 @@ if (
         if (executorRede != null) {
             executorRede.shutdownNow();
         }
+
+        if (executorConsultaTeles != null) {
+            executorConsultaTeles.shutdownNow();
+        }
+
+        consultaTelesEmAndamento.set(false);
 
         Log.d(TAG, "Serviço de localização encerrado.");
 
