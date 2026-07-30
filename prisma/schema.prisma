@@ -192,6 +192,7 @@ model User {
   motoboy Motoboy?
 
   mensagensAtendimento MensagemAtendimento[]
+  inscricoesPush       InscricaoPushGestor[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -349,6 +350,27 @@ model NotificacaoGestor {
   @@index([teleId, createdAt])
   @@index([motoboyId, createdAt])
   @@index([tipo, createdAt])
+}
+
+model InscricaoPushGestor {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  endpoint String @unique
+  p256dh   String
+  auth     String
+
+  userAgent String?
+  ativa     Boolean @default(true)
+
+  ultimoUsoEm DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId, ativa])
+  @@index([ativa, updatedAt])
 }
 
 model TarefaGestor {
