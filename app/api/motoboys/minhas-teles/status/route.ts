@@ -336,14 +336,99 @@ export async function PUT(request: Request) {
       let proximaParada = indiceAtual;
 
       if (novaEtapa === etapaAtual) {
+        const retomandoRota =
+          (etapaAtual === "EM_ROTA_COLETA" || etapaAtual === "EM_ROTA_ENTREGA") &&
+          itemFilaAtual?.status === "PENDENTE";
+
+        if (!retomandoRota) {
+          return NextResponse.json({
+            ok: true,
+            tele: {
+              id: tele.id,
+              status: tele.status,
+              etapaMotoboy: etapaAtual,
+              paradaAtualMotoboy: indiceAtual,
+            },
+          });
+        }
+
+        const retomada = await prisma.$transaction(async (tx) => {
+          await tx.itemFilaOperacionalMotoboy.updateMany({
+            where: {
+              motoboyId: usuario.motoboy!.id,
+              status: "EM_ANDAMENTO",
+              id: {
+                not: itemFilaAtual.id,
+              },
+            },
+            data: {
+              status: "PENDENTE",
+              iniciadaEm: null,
+            },
+          });
+
+          await tx.itemFilaOperacionalMotoboy.update({
+            where: {
+              id: itemFilaAtual.id,
+            },
+            data: {
+              status: "EM_ANDAMENTO",
+              iniciadaEm: new Date(),
+            },
+          });
+
+          const teleAtualizada = await tx.tele.findUniqueOrThrow({
+            where: {
+              id: tele.id,
+            },
+            select: {
+              id: true,
+              status: true,
+              etapaMotoboy: true,
+              paradaAtualMotoboy: true,
+              rotaColetaIniciadaEm: true,
+              chegouNaColetaEm: true,
+              entregaIniciadaEm: true,
+              chegouNaEntregaEm: true,
+              concluidaPeloMotoboyEm: true,
+              espera: true,
+              total: true,
+              esperaAtualIniciadaEm: true,
+              blocosEsperaAtual: true,
+              esperaMinutosAcumulados: true,
+              dataTele: true,
+              updatedAt: true,
+            },
+          });
+
+          const notificacao = {
+            tipo: "ROTA_RETOMADA",
+            titulo: "Rota retomada",
+            mensagem: `${usuario.motoboy!.nome} retomou a rota da tele de ${tele.solicitante}.`,
+            teleId: tele.id,
+            motoboyId: usuario.motoboy!.id,
+          };
+
+          await tx.notificacaoGestor.create({
+            data: notificacao,
+          });
+
+          return {
+            teleAtualizada,
+            notificacao,
+          };
+        });
+
+        await enviarPushGestorSemBloquear({
+          titulo: retomada.notificacao.titulo,
+          mensagem: retomada.notificacao.mensagem,
+          teleId: retomada.notificacao.teleId,
+          tag: `rota-retomada-${retomada.notificacao.teleId}`,
+        });
+
         return NextResponse.json({
           ok: true,
-          tele: {
-            id: tele.id,
-            status: tele.status,
-            etapaMotoboy: etapaAtual,
-            paradaAtualMotoboy: indiceAtual,
-          },
+          tele: retomada.teleAtualizada,
         });
       }
 
