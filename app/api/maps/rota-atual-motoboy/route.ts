@@ -192,45 +192,69 @@ export async function GET(request: Request) {
      * A rota principal do gestor deve seguir a mesma fila
      * operacional organizada manualmente.
      */
-    const itemFilaAtual = await prisma.itemFilaOperacionalMotoboy.findFirst({
+    const selecaoItemFila = {
+      id: true,
+      ordem: true,
+      status: true,
+      teleId: true,
+      paradaId: true,
+      parada: {
+        select: {
+          id: true,
+          ordem: true,
+          tipo: true,
+          cliente: true,
+          endereco: true,
+        },
+      },
+      tele: {
+        select: {
+          id: true,
+          solicitante: true,
+          etapaMotoboy: true,
+        },
+      },
+    } as const;
+
+    /*
+     * O mapa deve seguir primeiro a etapa realmente iniciada pelo motoboy.
+     * A ordem PENDENTE continua sendo apenas a sugestão do gestor.
+     */
+    const itemEmAndamento = await prisma.itemFilaOperacionalMotoboy.findFirst({
       where: {
         motoboyId,
-        status: {
-          in: ["PENDENTE", "EM_ANDAMENTO"],
-        },
+        status: "EM_ANDAMENTO",
       },
       orderBy: [
         {
-          ordem: "asc",
+          iniciadaEm: "desc",
         },
         {
-          createdAt: "asc",
+          updatedAt: "desc",
         },
       ],
-      select: {
-        id: true,
-        ordem: true,
-        status: true,
-        teleId: true,
-        paradaId: true,
-        parada: {
-          select: {
-            id: true,
-            ordem: true,
-            tipo: true,
-            cliente: true,
-            endereco: true,
-          },
-        },
-        tele: {
-          select: {
-            id: true,
-            solicitante: true,
-            etapaMotoboy: true,
-          },
-        },
-      },
+      select: selecaoItemFila,
     });
+
+    const itemPendenteSugerido = itemEmAndamento
+      ? null
+      : await prisma.itemFilaOperacionalMotoboy.findFirst({
+          where: {
+            motoboyId,
+            status: "PENDENTE",
+          },
+          orderBy: [
+            {
+              ordem: "asc",
+            },
+            {
+              createdAt: "asc",
+            },
+          ],
+          select: selecaoItemFila,
+        });
+
+    const itemFilaAtual = itemEmAndamento || itemPendenteSugerido;
 
     let teleId: string | null = null;
     let solicitante: string | null = null;
