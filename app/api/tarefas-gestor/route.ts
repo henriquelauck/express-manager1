@@ -21,8 +21,8 @@ function normalizarTexto(valor: string) {
   return String(valor || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .toLowerCase();
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
 }
 
 function partesDataBrasil(data = new Date()) {
@@ -218,7 +218,7 @@ async function gerarTarefasDoDia() {
   });
 
   const telesMarcos = telesDoDia.filter((tele) =>
-    normalizarTexto(tele.solicitante).includes("marcos moto pecas")
+    normalizarTexto(tele.solicitante).includes("marcosmotopecas")
   );
 
   if (telesMarcos.length > 0) {
@@ -266,7 +266,7 @@ async function gerarTarefasDoDia() {
   const { inicio: inicioSemana, fim: fimSemana } = intervaloSemanaBrasil(agora);
 
   if (diaSemana === "Fri" && hora >= 15) {
-    const clientesEspeciais = ["oha botanica", "add cliches", "hardware"];
+    const clientesEspeciais = ["ohabotanica", "addcliches", "hardware"];
 
     const telesEspeciais = await prisma.tele.findMany({
       where: {
@@ -318,7 +318,7 @@ async function gerarTarefasDoDia() {
   }
 
   if (diaSemana === "Sat" && hora >= 16) {
-    const clientesExcluidos = ["oha botanica", "add cliches", "hardware"];
+    const clientesExcluidos = ["ohabotanica", "addcliches", "hardware"];
 
     const telesDemaisClientes = await prisma.tele.findMany({
       where: {
