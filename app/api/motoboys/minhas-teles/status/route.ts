@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { enviarPushGestorSemBloquear } from "@/lib/notificacoesPush";
 import type { EtapaMotoboyTele, StatusTele } from "@prisma/client";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
@@ -510,26 +511,36 @@ export async function PUT(request: Request) {
           },
         });
 
-        const notificacao = dadosNotificacaoEtapa({
-          etapa: novaEtapa,
-          motoboyNome: usuario.motoboy!.nome,
-          solicitante: tele.solicitante,
-        });
+        const notificacao = {
+          ...dadosNotificacaoEtapa({
+            etapa: novaEtapa,
+            motoboyNome: usuario.motoboy!.nome,
+            solicitante: tele.solicitante,
+          }),
+          teleId: tele.id,
+          motoboyId: usuario.motoboy!.id,
+        };
 
         await tx.notificacaoGestor.create({
-          data: {
-            ...notificacao,
-            teleId: tele.id,
-            motoboyId: usuario.motoboy!.id,
-          },
+          data: notificacao,
         });
 
-        return teleAtualizada;
+        return {
+          teleAtualizada,
+          notificacao,
+        };
+      });
+
+      await enviarPushGestorSemBloquear({
+        titulo: teleAtualizada.notificacao.titulo,
+        mensagem: teleAtualizada.notificacao.mensagem,
+        teleId: teleAtualizada.notificacao.teleId,
+        tag: `${teleAtualizada.notificacao.tipo.toLowerCase()}-${teleAtualizada.notificacao.teleId}`,
       });
 
       return NextResponse.json({
         ok: true,
-        tele: teleAtualizada,
+        tele: teleAtualizada.teleAtualizada,
       });
     }
 
@@ -573,22 +584,34 @@ export async function PUT(request: Request) {
         },
       });
 
+      const notificacao = {
+        tipo: "STATUS_TELE_ATUALIZADO",
+        titulo: "Status da tele atualizado",
+        mensagem: `${usuario.motoboy!.nome} atualizou a tele de ${tele.solicitante} para ${novoStatus}.`,
+        teleId: tele.id,
+        motoboyId: usuario.motoboy!.id,
+      };
+
       await tx.notificacaoGestor.create({
-        data: {
-          tipo: "STATUS_TELE_ATUALIZADO",
-          titulo: "Status da tele atualizado",
-          mensagem: `${usuario.motoboy!.nome} atualizou a tele de ${tele.solicitante} para ${novoStatus}.`,
-          teleId: tele.id,
-          motoboyId: usuario.motoboy!.id,
-        },
+        data: notificacao,
       });
 
-      return atualizada;
+      return {
+        atualizada,
+        notificacao,
+      };
+    });
+
+    await enviarPushGestorSemBloquear({
+      titulo: teleAtualizada.notificacao.titulo,
+      mensagem: teleAtualizada.notificacao.mensagem,
+      teleId: teleAtualizada.notificacao.teleId,
+      tag: `status-tele-${teleAtualizada.notificacao.teleId}`,
     });
 
     return NextResponse.json({
       ok: true,
-      tele: teleAtualizada,
+      tele: teleAtualizada.atualizada,
     });
   } catch (erro) {
     console.error("Erro ao atualizar andamento pelo motoboy:", erro);
