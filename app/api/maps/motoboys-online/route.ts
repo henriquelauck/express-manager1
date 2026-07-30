@@ -213,34 +213,6 @@ export async function GET(request: Request) {
           latitude: true,
           longitude: true,
           localizacaoAtualizadaEm: true,
-          teles: {
-            where: {
-              statusAceite: "ACEITA",
-              status: {
-                not: "ENTREGUE",
-              },
-            },
-            orderBy: [
-              {
-                ordemMotoboy: "asc",
-              },
-              {
-                aceitaPeloMotoboyEm: "asc",
-              },
-            ],
-            take: 1,
-            select: {
-              etapaMotoboy: true,
-              paradas: {
-                orderBy: {
-                  ordem: "asc",
-                },
-                select: {
-                  endereco: true,
-                },
-              },
-            },
-          },
         },
       });
 
@@ -251,10 +223,56 @@ export async function GET(request: Request) {
       ) {
         const origemLatitude = motoboySelecionado.latitude as number;
         const origemLongitude = motoboySelecionado.longitude as number;
-        const teleAtual = motoboySelecionado.teles[0] || null;
-        const destinoEndereco = teleAtual
-          ? destinoDaEtapa(teleAtual.etapaMotoboy, teleAtual.paradas)
-          : null;
+
+        const itemEmAndamento = await prisma.itemFilaOperacionalMotoboy.findFirst({
+          where: {
+            motoboyId: motoboySelecionado.id,
+            status: "EM_ANDAMENTO",
+          },
+          orderBy: [
+            {
+              iniciadaEm: "desc",
+            },
+            {
+              updatedAt: "desc",
+            },
+          ],
+          select: {
+            parada: {
+              select: {
+                endereco: true,
+              },
+            },
+          },
+        });
+
+        const itemPendenteSugerido = itemEmAndamento
+          ? null
+          : await prisma.itemFilaOperacionalMotoboy.findFirst({
+              where: {
+                motoboyId: motoboySelecionado.id,
+                status: "PENDENTE",
+              },
+              orderBy: [
+                {
+                  ordem: "asc",
+                },
+                {
+                  createdAt: "asc",
+                },
+              ],
+              select: {
+                parada: {
+                  select: {
+                    endereco: true,
+                  },
+                },
+              },
+            });
+
+        const destinoEndereco = String(
+          itemEmAndamento?.parada.endereco || itemPendenteSugerido?.parada.endereco || ""
+        ).trim() || null;
 
         parametros.append("markers", `color:blue|label:M|${origemLatitude},${origemLongitude}`);
 
