@@ -70,6 +70,58 @@ function etapaValida(etapa: string): etapa is EtapaMotoboyTele {
   return ETAPAS_PERMITIDAS.includes(etapa as EtapaMotoboyTele);
 }
 
+function dadosNotificacaoEtapa({
+  etapa,
+  motoboyNome,
+  solicitante,
+}: {
+  etapa: EtapaMotoboyTele;
+  motoboyNome: string;
+  solicitante: string;
+}) {
+  const dados: Record<
+    EtapaMotoboyTele,
+    {
+      tipo: string;
+      titulo: string;
+      mensagem: string;
+    }
+  > = {
+    AGUARDANDO_INICIO_COLETA: {
+      tipo: "AGUARDANDO_INICIO_COLETA",
+      titulo: "Tele pronta para iniciar",
+      mensagem: `${motoboyNome} está com a tele de ${solicitante} pronta para iniciar.`,
+    },
+    EM_ROTA_COLETA: {
+      tipo: "ROTA_COLETA_INICIADA",
+      titulo: "Rota até a coleta iniciada",
+      mensagem: `${motoboyNome} iniciou a rota até a coleta da tele de ${solicitante}.`,
+    },
+    CHEGOU_NA_COLETA: {
+      tipo: "CHEGOU_NA_COLETA",
+      titulo: "Motoboy chegou na coleta",
+      mensagem: `${motoboyNome} chegou na coleta da tele de ${solicitante}.`,
+    },
+    EM_ROTA_ENTREGA: {
+      tipo: "ROTA_ENTREGA_INICIADA",
+      titulo: "Rota até a entrega iniciada",
+      mensagem: `${motoboyNome} iniciou a rota até a próxima entrega da tele de ${solicitante}.`,
+    },
+    CHEGOU_NA_ENTREGA: {
+      tipo: "CHEGOU_NA_ENTREGA",
+      titulo: "Motoboy chegou na entrega",
+      mensagem: `${motoboyNome} chegou na entrega da tele de ${solicitante}.`,
+    },
+    CONCLUIDA: {
+      tipo: "TELE_CONCLUIDA",
+      titulo: "Tele concluída",
+      mensagem: `${motoboyNome} concluiu a tele de ${solicitante}.`,
+    },
+  };
+
+  return dados[etapa];
+}
+
 function dadosDaEtapa(etapa: EtapaMotoboyTele): {
   status?: StatusTele;
   rotaColetaIniciadaEm?: Date;
@@ -139,6 +191,7 @@ export async function PUT(request: Request) {
         motoboy: {
           select: {
             id: true,
+            nome: true,
           },
         },
       },
@@ -168,6 +221,7 @@ export async function PUT(request: Request) {
       },
       select: {
         id: true,
+        solicitante: true,
         status: true,
         statusAceite: true,
         etapaMotoboy: true,
@@ -418,7 +472,7 @@ export async function PUT(request: Request) {
           }
         }
 
-        return tx.tele.update({
+        const teleAtualizada = await tx.tele.update({
           where: {
             id: tele.id,
           },
@@ -455,6 +509,22 @@ export async function PUT(request: Request) {
             updatedAt: true,
           },
         });
+
+        const notificacao = dadosNotificacaoEtapa({
+          etapa: novaEtapa,
+          motoboyNome: usuario.motoboy!.nome,
+          solicitante: tele.solicitante,
+        });
+
+        await tx.notificacaoGestor.create({
+          data: {
+            ...notificacao,
+            teleId: tele.id,
+            motoboyId: usuario.motoboy!.id,
+          },
+        });
+
+        return teleAtualizada;
       });
 
       return NextResponse.json({
@@ -485,21 +555,35 @@ export async function PUT(request: Request) {
       return respostaErro("Essa alteração de status não é permitida.", 409);
     }
 
-    const teleAtualizada = await prisma.tele.update({
-      where: {
-        id: tele.id,
-      },
-      data: {
-        status: novoStatus,
-      },
-      select: {
-        id: true,
-        status: true,
-        etapaMotoboy: true,
-        paradaAtualMotoboy: true,
-        dataTele: true,
-        updatedAt: true,
-      },
+    const teleAtualizada = await prisma.$transaction(async (tx) => {
+      const atualizada = await tx.tele.update({
+        where: {
+          id: tele.id,
+        },
+        data: {
+          status: novoStatus,
+        },
+        select: {
+          id: true,
+          status: true,
+          etapaMotoboy: true,
+          paradaAtualMotoboy: true,
+          dataTele: true,
+          updatedAt: true,
+        },
+      });
+
+      await tx.notificacaoGestor.create({
+        data: {
+          tipo: "STATUS_TELE_ATUALIZADO",
+          titulo: "Status da tele atualizado",
+          mensagem: `${usuario.motoboy!.nome} atualizou a tele de ${tele.solicitante} para ${novoStatus}.`,
+          teleId: tele.id,
+          motoboyId: usuario.motoboy!.id,
+        },
+      });
+
+      return atualizada;
     });
 
     return NextResponse.json({
