@@ -140,6 +140,8 @@ type Tele = {
   ordemMotoboy?: number | null;
   posicaoNaFila?: number | null;
   filaOperacionalAtiva?: boolean;
+  rotaAtiva?: boolean;
+  aguardandoRetomada?: boolean;
   etapaLiberadaPelaFila?: boolean;
   bloqueadaPelaFila?: boolean;
   totalEtapasPendentesFila?: number;
@@ -1780,16 +1782,21 @@ function CardTele({
   const deveFinalizarTele =
     etapaAtual === "CHEGOU_NA_ENTREGA" && Number(tele.totalEtapasPendentesFila || 0) === 0;
 
-  const acaoEtapa = deveFinalizarTele
+  const acaoEtapa = tele.aguardandoRetomada
     ? {
-        texto: "Finalizar tele",
-        proximaEtapa: "CONCLUIDA" as EtapaMotoboyTele,
+        texto: "Retomar rota",
+        proximaEtapa: etapaAtual as EtapaMotoboyTele,
       }
-    : obterAcaoEtapaMotoboy({
-        etapa: etapaAtual,
-        paradaAtual,
-        proximaParada,
-      });
+    : deveFinalizarTele
+      ? {
+          texto: "Finalizar tele",
+          proximaEtapa: "CONCLUIDA" as EtapaMotoboyTele,
+        }
+      : obterAcaoEtapaMotoboy({
+          etapa: etapaAtual,
+          paradaAtual,
+          proximaParada,
+        });
 
   const observacao = tele.observacaoGeral || tele.observacao;
 
@@ -1840,6 +1847,18 @@ function CardTele({
                 {aceiteExpirado
                   ? "Tempo esgotado"
                   : `Aceitar em ${formatarContagemAceite(segundosRestantesAceite)}`}
+              </span>
+            )}
+
+            {tele.rotaAtiva && (
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
+                Rota ativa
+              </span>
+            )}
+
+            {tele.aguardandoRetomada && (
+              <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-bold text-orange-700">
+                Aguardando retomada
               </span>
             )}
 
@@ -2069,6 +2088,18 @@ function CardTele({
             </div>
           )}
 
+          {!concluida && tele.aguardandoRetomada && (
+            <div className="mt-5 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-orange-700">
+                Rota temporariamente pausada
+              </p>
+              <p className="mt-2 text-sm leading-6 text-slate-700">
+                Você iniciou outra rota. Toque em “Retomar rota” quando voltar para esta tele.
+                A outra rota ficará aguardando automaticamente.
+              </p>
+            </div>
+          )}
+
           {!concluida && estaAguardandoAceite ? (
             <div className="mt-5 grid grid-cols-2 gap-3 sm:flex">
               <button
@@ -2133,9 +2164,11 @@ function CardTele({
                     onClick={() => onAvancarEtapa(acaoEtapa.proximaEtapa)}
                     disabled={bloqueado}
                     className={`flex h-12 w-full items-center justify-center gap-2 rounded-xl px-5 font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto ${
-                      acaoEtapa.proximaEtapa === "CONCLUIDA"
-                        ? "bg-emerald-600 hover:bg-emerald-700"
-                        : "bg-slate-900 hover:bg-slate-800"
+                      tele.aguardandoRetomada
+                        ? "bg-orange-600 hover:bg-orange-700"
+                        : acaoEtapa.proximaEtapa === "CONCLUIDA"
+                          ? "bg-emerald-600 hover:bg-emerald-700"
+                          : "bg-slate-900 hover:bg-slate-800"
                     }`}
                   >
                     {atualizando ? (
@@ -2145,7 +2178,9 @@ function CardTele({
                       </>
                     ) : (
                       <>
-                        {acaoEtapa.proximaEtapa === "CONCLUIDA" ? (
+                        {tele.aguardandoRetomada ? (
+                          <RefreshCw size={18} />
+                        ) : acaoEtapa.proximaEtapa === "CONCLUIDA" ? (
                           <CheckCircle2 size={18} />
                         ) : (
                           <Route size={18} />
