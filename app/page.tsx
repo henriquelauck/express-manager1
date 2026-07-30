@@ -1,6 +1,7 @@
 "use client";
 
 import PageContainer from "@/components/ui/PageContainer";
+import NotificacoesGestor from "@/components/notificacoes/NotificacoesGestor";
 import PageHeader from "@/components/ui/PageHeader";
 import { useExpressManager } from "@/context/ExpressManagerContext";
 import type { Tele } from "@/types/Tele";
@@ -365,11 +366,13 @@ export default function Dashboard() {
 
   return (
     <PageContainer>
-      <div className="mb-8">
+      <div className="mb-8 flex items-start justify-between gap-4">
         <PageHeader
           titulo="Olá, Henrique! 👋"
           descricao="Aqui está o resumo da sua operação hoje."
         />
+
+        <NotificacoesGestor />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-6 mb-6">
