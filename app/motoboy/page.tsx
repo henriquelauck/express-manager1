@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   ChevronRight,
   CircleDollarSign,
+  Download,
   Clock3,
   Loader2,
   LocateFixed,
@@ -80,9 +81,42 @@ type CredenciaisNativasPlugin = {
   removerToken(): Promise<{ removido: boolean }>;
 };
 
+type VersaoAplicativo = {
+  versionCode: number;
+  versionName: string;
+  obrigatoria: boolean;
+  mensagem: string;
+  apkUrl: string;
+};
+
+type AtualizacaoNativaPlugin = {
+  obterVersaoInstalada(): Promise<{
+    versionCode: number;
+    versionName: string;
+    packageName: string;
+  }>;
+  verificarPermissaoInstalacao(): Promise<{
+    permitido: boolean;
+    precisaAbrirConfiguracoes: boolean;
+  }>;
+  abrirPermissaoInstalacao(): Promise<{
+    aberto: boolean;
+    permitido?: boolean;
+  }>;
+  baixarEInstalar(opcoes: {
+    apkUrl: string;
+    nomeArquivo: string;
+  }): Promise<{
+    baixado: boolean;
+    instaladorAberto: boolean;
+  }>;
+};
+
 const LocalizacaoNativa = registerPlugin<LocalizacaoNativaPlugin>("LocalizacaoNativa");
 
 const CredenciaisNativas = registerPlugin<CredenciaisNativasPlugin>("CredenciaisNativas");
+
+const AtualizacaoNativa = registerPlugin<AtualizacaoNativaPlugin>("AtualizacaoNativa");
 
 function executandoNoAppAndroid() {
   return (
@@ -186,6 +220,12 @@ export default function MotoboyPage() {
     useState<EstadoPermissoesLocalizacao | null>(null);
   const [verificandoPermissoes, setVerificandoPermissoes] = useState(false);
   const [abrindoConfiguracoes, setAbrindoConfiguracoes] = useState(false);
+  const [atualizacaoDisponivel, setAtualizacaoDisponivel] =
+    useState<VersaoAplicativo | null>(null);
+  const [versaoInstalada, setVersaoInstalada] = useState<string | null>(null);
+  const [verificandoAtualizacao, setVerificandoAtualizacao] = useState(false);
+  const [baixandoAtualizacao, setBaixandoAtualizacao] = useState(false);
+  const [erroAtualizacaoApp, setErroAtualizacaoApp] = useState("");
 
   const watchIdRef = useRef<number | null>(null);
   const ultimaPosicaoRef = useRef<{
@@ -236,6 +276,85 @@ export default function MotoboyPage() {
       );
     } finally {
       setAbrindoConfiguracoes(false);
+    }
+  }
+
+  async function verificarAtualizacaoDoAplicativo() {
+    if (!executandoNoAppAndroid() || verificandoAtualizacao) {
+      return;
+    }
+
+    setVerificandoAtualizacao(true);
+    setErroAtualizacaoApp("");
+
+    try {
+      const [instalada, respostaVersao] = await Promise.all([
+        AtualizacaoNativa.obterVersaoInstalada(),
+        fetch("/api/app-motoboy/versao", {
+          cache: "no-store",
+        }),
+      ]);
+
+      setVersaoInstalada(instalada.versionName || String(instalada.versionCode));
+
+      if (!respostaVersao.ok) {
+        throw new Error("Não foi possível verificar a versão mais recente.");
+      }
+
+      const disponivel = (await respostaVersao.json()) as VersaoAplicativo;
+
+      if (
+        Number.isFinite(Number(disponivel.versionCode)) &&
+        Number(disponivel.versionCode) > Number(instalada.versionCode)
+      ) {
+        setAtualizacaoDisponivel(disponivel);
+      } else {
+        setAtualizacaoDisponivel(null);
+      }
+    } catch (erroVerificacao) {
+      console.error("Não foi possível verificar atualização:", erroVerificacao);
+    } finally {
+      setVerificandoAtualizacao(false);
+    }
+  }
+
+  async function iniciarAtualizacaoDoAplicativo() {
+    if (
+      !executandoNoAppAndroid() ||
+      !atualizacaoDisponivel ||
+      baixandoAtualizacao
+    ) {
+      return;
+    }
+
+    setBaixandoAtualizacao(true);
+    setErroAtualizacaoApp("");
+
+    try {
+      const permissao =
+        await AtualizacaoNativa.verificarPermissaoInstalacao();
+
+      if (!permissao.permitido) {
+        await AtualizacaoNativa.abrirPermissaoInstalacao();
+
+        setErroAtualizacaoApp(
+          'Ative "Permitir desta fonte" e volte ao Express Manager. Depois toque novamente em "Baixar atualização".'
+        );
+        return;
+      }
+
+      await AtualizacaoNativa.baixarEInstalar({
+        apkUrl: atualizacaoDisponivel.apkUrl,
+        nomeArquivo: `express-manager-motoboy-${atualizacaoDisponivel.versionName}.apk`,
+      });
+    } catch (erroDownload) {
+      setErroAtualizacaoApp(
+        erroDownload instanceof Error
+          ? erroDownload.message
+          : "Não foi possível baixar ou instalar a atualização."
+      );
+    } finally {
+      setBaixandoAtualizacao(false);
     }
   }
 
@@ -303,6 +422,7 @@ export default function MotoboyPage() {
     void carregarDados();
     void carregarPresenca();
     void verificarPermissoesLocalizacao();
+    void verificarAtualizacaoDoAplicativo();
 
     const intervaloAtualizacao = window.setInterval(() => {
       void carregarTelesAutomaticamente();
@@ -311,6 +431,7 @@ export default function MotoboyPage() {
     const verificarAoRetornar = () => {
       if (document.visibilityState === "visible") {
         void verificarPermissoesLocalizacao();
+        void verificarAtualizacaoDoAplicativo();
       }
     };
 
@@ -1183,6 +1304,63 @@ export default function MotoboyPage() {
             </div>
           </div>
         </header>
+
+        {executandoNoAppAndroid() && atualizacaoDisponivel && (
+          <section className="mt-5 overflow-hidden rounded-3xl border border-blue-300 bg-blue-50 shadow-sm">
+            <div className="p-5 sm:p-6">
+              <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-white">
+                    <Download size={23} />
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-semibold text-blue-700">
+                      Atualização disponível
+                    </p>
+
+                    <h2 className="mt-1 text-xl font-bold text-slate-900">
+                      Express Manager {atualizacaoDisponivel.versionName}
+                    </h2>
+
+                    <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-700">
+                      {atualizacaoDisponivel.mensagem}
+                    </p>
+
+                    <p className="mt-2 text-xs text-slate-500">
+                      Versão instalada: {versaoInstalada || "não identificada"}
+                    </p>
+
+                    {erroAtualizacaoApp && (
+                      <div className="mt-4 rounded-2xl border border-amber-200 bg-white px-4 py-3 text-sm leading-6 text-amber-800">
+                        {erroAtualizacaoApp}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => void iniciarAtualizacaoDoAplicativo()}
+                  disabled={baixandoAtualizacao}
+                  className="flex h-12 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60 md:w-auto"
+                >
+                  {baixandoAtualizacao ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      Baixando...
+                    </>
+                  ) : (
+                    <>
+                      <Download size={18} />
+                      Baixar atualização
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
 
         {executandoNoAppAndroid() &&
           permissoesLocalizacao &&
