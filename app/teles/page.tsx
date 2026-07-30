@@ -107,6 +107,21 @@ const statusOptions: StatusTele[] = [
   "Entregue",
 ];
 
+function dataHojeBrasilISO(data = new Date()) {
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(data);
+
+  const ano = partes.find((parte) => parte.type === "year")?.value;
+  const mes = partes.find((parte) => parte.type === "month")?.value;
+  const dia = partes.find((parte) => parte.type === "day")?.value;
+
+  return `${ano}-${mes}-${dia}`;
+}
+
 type SituacaoCobranca = "pago" | "pago_parcial" | "fim_semana" | "precisa_cobrar";
 
 type RecebedorPagamento = "escritorio" | "motoboy";
@@ -128,7 +143,7 @@ export default function TelesPage() {
   const [clienteFiltro, setClienteFiltro] = useState("todos");
   const [modalEdicaoAberto, setModalEdicaoAberto] = useState(false);
   const [teleEditando, setTeleEditando] = useState<any>(null);
-  const [dataFiltro, setDataFiltro] = useState(new Date().toISOString().split("T")[0]);
+  const [dataFiltro, setDataFiltro] = useState(() => dataHojeBrasilISO());
   const [teleArrastandoId, setTeleArrastandoId] = useState<string | null>(null);
   const [statusSobrevoado, setStatusSobrevoado] = useState<StatusTele | null>(null);
   const [telePagamento, setTelePagamento] = useState<Tele | null>(null);
@@ -909,7 +924,7 @@ ${linkMaps}`
   const filtrosSecundariosAtivos = motoboyFiltro !== "todos" || clienteFiltro !== "todos";
 
   function limparFiltros() {
-    setDataFiltro(new Date().toISOString().split("T")[0]);
+    setDataFiltro(dataHojeBrasilISO());
     setMotoboyFiltro("todos");
     setClienteFiltro("todos");
   }
@@ -3108,4 +3123,3 @@ function LinhaValor({ label, valor }: any) {
     </div>
   );
 }
- 
