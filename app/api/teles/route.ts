@@ -615,6 +615,9 @@ export async function PATCH(request: Request) {
         id: true,
         solicitante: true,
         total: true,
+        valorRecebido: true,
+        recebimento: true,
+        motoboyId: true,
       },
     });
 
@@ -668,6 +671,28 @@ export async function PATCH(request: Request) {
         valorRecebido,
         motoboyRecebedor,
       });
+
+      const valorAnterior = Number(teleAtual.valorRecebido || 0);
+      const valorNovoRecebido = Math.max(0, valorRecebido - valorAnterior);
+      const pagamentoRecebidoPeloMotoboy =
+        recebimentoTela === "motoboy" &&
+        valorNovoRecebido > 0.009 &&
+        Boolean(motoboyRecebedor);
+
+      if (pagamentoRecebidoPeloMotoboy) {
+        await tx.notificacaoGestor.create({
+          data: {
+            tipo: "PAGAMENTO_RECEBIDO_MOTOBOY",
+            titulo: "Pagamento recebido pelo motoboy",
+            mensagem: `${motoboyRecebedor} recebeu ${new Intl.NumberFormat("pt-BR", {
+              style: "currency",
+              currency: "BRL",
+            }).format(valorNovoRecebido)} da tele de ${teleAtual.solicitante}.`,
+            teleId: teleAtual.id,
+            motoboyId: teleAtual.motoboyId,
+          },
+        });
+      }
 
       return teleAtualizada;
     });
