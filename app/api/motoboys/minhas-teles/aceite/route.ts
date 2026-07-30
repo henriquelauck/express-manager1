@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { enviarPushGestorSemBloquear } from "@/lib/notificacoesPush";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
@@ -201,23 +202,35 @@ export async function PUT(request: Request) {
           });
         }
 
+        const notificacao = {
+          tipo: "TELE_ACEITA",
+          titulo: "Tele aceita",
+          mensagem: `${usuario.motoboy!.nome} aceitou a tele de ${teleAtual.solicitante}.`,
+          teleId: teleAtualizada.id,
+          motoboyId: usuario.motoboy!.id,
+        };
+
         await tx.notificacaoGestor.create({
-          data: {
-            tipo: "TELE_ACEITA",
-            titulo: "Tele aceita",
-            mensagem: `${usuario.motoboy!.nome} aceitou a tele de ${teleAtual.solicitante}.`,
-            teleId: teleAtualizada.id,
-            motoboyId: usuario.motoboy!.id,
-          },
+          data: notificacao,
         });
 
-        return teleAtualizada;
+        return {
+          teleAtualizada,
+          notificacao,
+        };
+      });
+
+      await enviarPushGestorSemBloquear({
+        titulo: teleAceita.notificacao.titulo,
+        mensagem: teleAceita.notificacao.mensagem,
+        teleId: teleAceita.notificacao.teleId,
+        tag: `tele-aceita-${teleAceita.notificacao.teleId}`,
       });
 
       return NextResponse.json({
         ok: true,
         acao: "ACEITAR",
-        tele: teleAceita,
+        tele: teleAceita.teleAtualizada,
       });
     }
 
@@ -246,25 +259,37 @@ export async function PUT(request: Request) {
         },
       });
 
+      const notificacao = {
+        tipo: "TELE_RECUSADA",
+        titulo: "Tele recusada",
+        mensagem: `${usuario.motoboy!.nome} recusou a tele de ${teleAtual.solicitante}${
+          motivo ? `: ${motivo}` : "."
+        }`,
+        teleId: teleAtualizada.id,
+        motoboyId: usuario.motoboy!.id,
+      };
+
       await tx.notificacaoGestor.create({
-        data: {
-          tipo: "TELE_RECUSADA",
-          titulo: "Tele recusada",
-          mensagem: `${usuario.motoboy!.nome} recusou a tele de ${teleAtual.solicitante}${
-            motivo ? `: ${motivo}` : "."
-          }`,
-          teleId: teleAtualizada.id,
-          motoboyId: usuario.motoboy!.id,
-        },
+        data: notificacao,
       });
 
-      return teleAtualizada;
+      return {
+        teleAtualizada,
+        notificacao,
+      };
+    });
+
+    await enviarPushGestorSemBloquear({
+      titulo: teleRecusada.notificacao.titulo,
+      mensagem: teleRecusada.notificacao.mensagem,
+      teleId: teleRecusada.notificacao.teleId,
+      tag: `tele-recusada-${teleRecusada.notificacao.teleId}`,
     });
 
     return NextResponse.json({
       ok: true,
       acao: "RECUSAR",
-      tele: teleRecusada,
+      tele: teleRecusada.teleAtualizada,
     });
   } catch (erro) {
     console.error("Erro ao aceitar ou recusar tele:", erro);
