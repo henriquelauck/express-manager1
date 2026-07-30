@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { enviarPushGestorSemBloquear } from "@/lib/notificacoesPush";
 import type { StatusTele as StatusTeleBanco, TipoMovimentoFinanceiro } from "@prisma/client";
 import { NextResponse } from "next/server";
 
@@ -641,7 +642,7 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const tele = await prisma.$transaction(async (tx) => {
+    const resultado = await prisma.$transaction(async (tx) => {
       const teleAtualizada = await tx.tele.update({
         where: {
           id: body.id,
@@ -679,25 +680,48 @@ export async function PATCH(request: Request) {
         valorNovoRecebido > 0.009 &&
         Boolean(motoboyRecebedor);
 
+      let notificacaoPush: {
+        titulo: string;
+        mensagem: string;
+        teleId: string;
+        tag: string;
+      } | null = null;
+
       if (pagamentoRecebidoPeloMotoboy) {
+        const notificacao = {
+          tipo: "PAGAMENTO_RECEBIDO_MOTOBOY",
+          titulo: "Pagamento recebido pelo motoboy",
+          mensagem: `${motoboyRecebedor} recebeu ${new Intl.NumberFormat("pt-BR", {
+            style: "currency",
+            currency: "BRL",
+          }).format(valorNovoRecebido)} da tele de ${teleAtual.solicitante}.`,
+          teleId: teleAtual.id,
+          motoboyId: teleAtual.motoboyId,
+        };
+
         await tx.notificacaoGestor.create({
-          data: {
-            tipo: "PAGAMENTO_RECEBIDO_MOTOBOY",
-            titulo: "Pagamento recebido pelo motoboy",
-            mensagem: `${motoboyRecebedor} recebeu ${new Intl.NumberFormat("pt-BR", {
-              style: "currency",
-              currency: "BRL",
-            }).format(valorNovoRecebido)} da tele de ${teleAtual.solicitante}.`,
-            teleId: teleAtual.id,
-            motoboyId: teleAtual.motoboyId,
-          },
+          data: notificacao,
         });
+
+        notificacaoPush = {
+          titulo: notificacao.titulo,
+          mensagem: notificacao.mensagem,
+          teleId: notificacao.teleId,
+          tag: `pagamento-motoboy-${notificacao.teleId}-${Date.now()}`,
+        };
       }
 
-      return teleAtualizada;
+      return {
+        teleAtualizada,
+        notificacaoPush,
+      };
     });
 
-    return NextResponse.json(formatarTeleParaTela(tele));
+    if (resultado.notificacaoPush) {
+      await enviarPushGestorSemBloquear(resultado.notificacaoPush);
+    }
+
+    return NextResponse.json(formatarTeleParaTela(resultado.teleAtualizada));
   } catch (error: any) {
     return NextResponse.json(
       {
