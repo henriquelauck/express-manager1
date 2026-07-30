@@ -448,7 +448,26 @@ export async function PUT(request: Request) {
 
       const teleAtualizada = await prisma.$transaction(async (tx) => {
         if (!finalizandoTele && itemFilaAtual) {
-          if (iniciouDeslocamento && itemFilaAtual.status === "PENDENTE") {
+          if (iniciouDeslocamento) {
+            /*
+             * Mantém somente uma rota ativa por motoboy.
+             * Ao iniciar outra etapa, qualquer item anterior em andamento
+             * volta para pendente e poderá ser retomado depois.
+             */
+            await tx.itemFilaOperacionalMotoboy.updateMany({
+              where: {
+                motoboyId: usuario.motoboy!.id,
+                status: "EM_ANDAMENTO",
+                id: {
+                  not: itemFilaAtual.id,
+                },
+              },
+              data: {
+                status: "PENDENTE",
+                iniciadaEm: null,
+              },
+            });
+
             await tx.itemFilaOperacionalMotoboy.update({
               where: {
                 id: itemFilaAtual.id,
