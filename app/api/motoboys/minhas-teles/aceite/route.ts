@@ -67,6 +67,7 @@ export async function PUT(request: Request) {
       },
       select: {
         id: true,
+        solicitante: true,
         motoboyId: true,
         motoboyNome: true,
         status: true,
@@ -200,6 +201,16 @@ export async function PUT(request: Request) {
           });
         }
 
+        await tx.notificacaoGestor.create({
+          data: {
+            tipo: "TELE_ACEITA",
+            titulo: "Tele aceita",
+            mensagem: `${usuario.motoboy!.nome} aceitou a tele de ${teleAtual.solicitante}.`,
+            teleId: teleAtualizada.id,
+            motoboyId: usuario.motoboy!.id,
+          },
+        });
+
         return teleAtualizada;
       });
 
@@ -210,28 +221,44 @@ export async function PUT(request: Request) {
       });
     }
 
-    const teleRecusada = await prisma.tele.update({
-      where: {
-        id: teleId,
-      },
-      data: {
-        statusAceite: "RECUSADA",
-        etapaMotoboy: null,
-        ordemMotoboy: null,
-        aceitaPeloMotoboyEm: null,
-        recusadaPeloMotoboyEm: new Date(),
-        motivoRecusaMotoboy: motivo || null,
-        motoboyId: null,
-        motoboyNome: "",
-        status: "AGUARDANDO_MOTOBOY",
-      },
-      include: {
-        paradas: {
-          orderBy: {
-            ordem: "asc",
+    const teleRecusada = await prisma.$transaction(async (tx) => {
+      const teleAtualizada = await tx.tele.update({
+        where: {
+          id: teleId,
+        },
+        data: {
+          statusAceite: "RECUSADA",
+          etapaMotoboy: null,
+          ordemMotoboy: null,
+          aceitaPeloMotoboyEm: null,
+          recusadaPeloMotoboyEm: new Date(),
+          motivoRecusaMotoboy: motivo || null,
+          motoboyId: null,
+          motoboyNome: "",
+          status: "AGUARDANDO_MOTOBOY",
+        },
+        include: {
+          paradas: {
+            orderBy: {
+              ordem: "asc",
+            },
           },
         },
-      },
+      });
+
+      await tx.notificacaoGestor.create({
+        data: {
+          tipo: "TELE_RECUSADA",
+          titulo: "Tele recusada",
+          mensagem: `${usuario.motoboy!.nome} recusou a tele de ${teleAtual.solicitante}${
+            motivo ? `: ${motivo}` : "."
+          }`,
+          teleId: teleAtualizada.id,
+          motoboyId: usuario.motoboy!.id,
+        },
+      });
+
+      return teleAtualizada;
     });
 
     return NextResponse.json({
