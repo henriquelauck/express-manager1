@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, CheckCheck, Loader2, X } from "lucide-react";
+import { Bell, BellOff, BellRing, CheckCheck, Loader2, Smartphone, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -31,6 +31,47 @@ type RespostaNotificacoes = {
   notificacoes: NotificacaoGestor[];
   quantidadeNaoLidas: number;
 };
+
+
+type EstadoPush =
+  | "verificando"
+  | "indisponivel"
+  | "instalar"
+  | "bloqueado"
+  | "inativo"
+  | "ativo"
+  | "erro";
+
+type NavigatorComStandalone = Navigator & {
+  standalone?: boolean;
+};
+
+function converterChaveVapid(chaveBase64: string) {
+  const preenchimento = "=".repeat((4 - (chaveBase64.length % 4)) % 4);
+  const base64 = (chaveBase64 + preenchimento)
+    .replace(/-/g, "+")
+    .replace(/_/g, "/");
+
+  const bruto = window.atob(base64);
+  const resultado = new Uint8Array(bruto.length);
+
+  for (let indice = 0; indice < bruto.length; indice += 1) {
+    resultado[indice] = bruto.charCodeAt(indice);
+  }
+
+  return resultado;
+}
+
+function estaEmModoAplicativo() {
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (navigator as NavigatorComStandalone).standalone === true
+  );
+}
+
+function ehIphoneOuIpad() {
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
 
 function formatarHorario(data: string) {
   const dataConvertida = new Date(data);
@@ -97,6 +138,9 @@ export default function NotificacoesGestor() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [marcandoTodas, setMarcandoTodas] = useState(false);
+  const [estadoPush, setEstadoPush] = useState<EstadoPush>("verificando");
+  const [mensagemPush, setMensagemPush] = useState("");
+  const [processandoPush, setProcessandoPush] = useState(false);
   const painelRef = useRef<HTMLDivElement | null>(null);
   const carregandoRef = useRef(false);
 
@@ -167,6 +211,207 @@ export default function NotificacoesGestor() {
       document.removeEventListener("mousedown", aoClicarFora);
     };
   }, []);
+
+  const verificarEstadoPush = useCallback(async () => {
+    if (
+      !("serviceWorker" in navigator) ||
+      !("PushManager" in window) ||
+      !("Notification" in window)
+    ) {
+      setEstadoPush("indisponivel");
+      setMensagemPush("Este navegador não oferece suporte a notificações push.");
+      return;
+    }
+
+    if (ehIphoneOuIpad() && !estaEmModoAplicativo()) {
+      setEstadoPush("instalar");
+      setMensagemPush(
+        "No iPhone, adicione o Express Manager à Tela de Início e abra pelo ícone."
+      );
+      return;
+    }
+
+    if (Notification.permission === "denied") {
+      setEstadoPush("bloqueado");
+      setMensagemPush(
+        "As notificações estão bloqueadas nos ajustes deste aparelho."
+      );
+      return;
+    }
+
+    try {
+      const registro = await navigator.serviceWorker.ready;
+      const inscricao = await registro.pushManager.getSubscription();
+
+      if (inscricao) {
+        setEstadoPush("ativo");
+        setMensagemPush("Este aparelho está autorizado a receber notificações.");
+      } else {
+        setEstadoPush("inativo");
+        setMensagemPush("Ative para receber alertas mesmo com o sistema fechado.");
+      }
+    } catch (erroVerificacao) {
+      console.error("Erro ao verificar notificações push:", erroVerificacao);
+      setEstadoPush("erro");
+      setMensagemPush("Não foi possível verificar este aparelho.");
+    }
+  }, []);
+
+  useEffect(() => {
+    void verificarEstadoPush();
+  }, [verificarEstadoPush]);
+
+  async function ativarNotificacoesPush() {
+    if (processandoPush) {
+      return;
+    }
+
+    setProcessandoPush(true);
+    setMensagemPush("");
+
+    try {
+      if (
+        !("serviceWorker" in navigator) ||
+        !("PushManager" in window) ||
+        !("Notification" in window)
+      ) {
+        throw new Error("Este navegador não oferece suporte a notificações push.");
+      }
+
+      if (ehIphoneOuIpad() && !estaEmModoAplicativo()) {
+        setEstadoPush("instalar");
+        setMensagemPush(
+          "Abra pelo ícone da Tela de Início para ativar as notificações no iPhone."
+        );
+        return;
+      }
+
+      const permissao = await Notification.requestPermission();
+
+      if (permissao !== "granted") {
+        setEstadoPush(permissao === "denied" ? "bloqueado" : "inativo");
+        setMensagemPush(
+          permissao === "denied"
+            ? "A permissão foi bloqueada. Libere-a nos Ajustes do iPhone."
+            : "A permissão de notificações não foi concedida."
+        );
+        return;
+      }
+
+      const respostaConfiguracao = await fetch(
+        "/api/notificacoes-gestor/inscricao-push",
+        {
+          cache: "no-store",
+        }
+      );
+
+      if (!respostaConfiguracao.ok) {
+        throw new Error("Não foi possível carregar a chave de notificações.");
+      }
+
+      const configuracao = await respostaConfiguracao.json();
+      const chavePublica = String(configuracao?.chavePublica || "").trim();
+
+      if (!chavePublica) {
+        throw new Error("A chave pública VAPID não está configurada.");
+      }
+
+      const registro = await navigator.serviceWorker.ready;
+      let inscricao = await registro.pushManager.getSubscription();
+
+      if (!inscricao) {
+        inscricao = await registro.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: converterChaveVapid(chavePublica),
+        });
+      }
+
+      const respostaSalvar = await fetch(
+        "/api/notificacoes-gestor/inscricao-push",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            inscricao: inscricao.toJSON(),
+          }),
+        }
+      );
+
+      if (!respostaSalvar.ok) {
+        let mensagem = "Não foi possível registrar este aparelho.";
+
+        try {
+          const dadosErro = await respostaSalvar.json();
+          mensagem = dadosErro?.erro || mensagem;
+        } catch {}
+
+        throw new Error(mensagem);
+      }
+
+      setEstadoPush("ativo");
+      setMensagemPush("Notificações ativadas neste aparelho.");
+    } catch (erroAtivacao) {
+      console.error("Erro ao ativar notificações push:", erroAtivacao);
+      setEstadoPush("erro");
+      setMensagemPush(
+        erroAtivacao instanceof Error
+          ? erroAtivacao.message
+          : "Não foi possível ativar as notificações."
+      );
+    } finally {
+      setProcessandoPush(false);
+    }
+  }
+
+  async function desativarNotificacoesPush() {
+    if (processandoPush) {
+      return;
+    }
+
+    setProcessandoPush(true);
+    setMensagemPush("");
+
+    try {
+      const registro = await navigator.serviceWorker.ready;
+      const inscricao = await registro.pushManager.getSubscription();
+
+      if (inscricao) {
+        const resposta = await fetch(
+          "/api/notificacoes-gestor/inscricao-push",
+          {
+            method: "DELETE",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              endpoint: inscricao.endpoint,
+            }),
+          }
+        );
+
+        if (!resposta.ok) {
+          throw new Error("Não foi possível desativar este aparelho no servidor.");
+        }
+
+        await inscricao.unsubscribe();
+      }
+
+      setEstadoPush("inativo");
+      setMensagemPush("Notificações desativadas neste aparelho.");
+    } catch (erroDesativacao) {
+      console.error("Erro ao desativar notificações push:", erroDesativacao);
+      setEstadoPush("erro");
+      setMensagemPush(
+        erroDesativacao instanceof Error
+          ? erroDesativacao.message
+          : "Não foi possível desativar as notificações."
+      );
+    } finally {
+      setProcessandoPush(false);
+    }
+  }
 
   async function marcarComoLida(notificacao: NotificacaoGestor) {
     if (notificacao.lida) {
@@ -279,6 +524,93 @@ export default function NotificacoesGestor() {
             >
               <X size={17} />
             </button>
+          </div>
+
+          <div className="border-b border-slate-200 bg-white px-4 py-4">
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+                  {estadoPush === "ativo" ? (
+                    <BellRing size={19} />
+                  ) : estadoPush === "bloqueado" ? (
+                    <BellOff size={19} />
+                  ) : (
+                    <Smartphone size={19} />
+                  )}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <strong className="text-sm text-slate-900">
+                    Notificações neste aparelho
+                  </strong>
+
+                  <p className="mt-1 text-xs leading-5 text-slate-600">
+                    {estadoPush === "verificando"
+                      ? "Verificando compatibilidade..."
+                      : mensagemPush}
+                  </p>
+
+                  {estadoPush === "instalar" && (
+                    <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs leading-5 text-blue-700">
+                      No Safari, toque em <strong>Compartilhar</strong>, depois em{" "}
+                      <strong>Adicionar à Tela de Início</strong>. Abra pelo novo ícone e
+                      volte a este sino.
+                    </div>
+                  )}
+
+                  {estadoPush !== "verificando" &&
+                    estadoPush !== "indisponivel" &&
+                    estadoPush !== "instalar" &&
+                    estadoPush !== "bloqueado" && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void (estadoPush === "ativo"
+                            ? desativarNotificacoesPush()
+                            : ativarNotificacoesPush())
+                        }
+                        disabled={processandoPush}
+                        className={`mt-3 flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 text-xs font-semibold text-white transition disabled:cursor-wait disabled:opacity-60 ${
+                          estadoPush === "ativo"
+                            ? "bg-slate-700 hover:bg-slate-800"
+                            : "bg-emerald-600 hover:bg-emerald-700"
+                        }`}
+                      >
+                        {processandoPush ? (
+                          <Loader2 size={15} className="animate-spin" />
+                        ) : estadoPush === "ativo" ? (
+                          <BellOff size={15} />
+                        ) : (
+                          <BellRing size={15} />
+                        )}
+
+                        {processandoPush
+                          ? "Processando..."
+                          : estadoPush === "ativo"
+                            ? "Desativar neste aparelho"
+                            : "Ativar notificações"}
+                      </button>
+                    )}
+
+                  {estadoPush === "bloqueado" && (
+                    <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-700">
+                      No iPhone, abra <strong>Ajustes → Notificações → Express Manager</strong>{" "}
+                      e permita os alertas.
+                    </p>
+                  )}
+
+                  {estadoPush === "erro" && (
+                    <button
+                      type="button"
+                      onClick={() => void verificarEstadoPush()}
+                      className="mt-3 rounded-xl bg-slate-700 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-slate-800"
+                    >
+                      Verificar novamente
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
