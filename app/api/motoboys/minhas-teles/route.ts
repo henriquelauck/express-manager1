@@ -368,11 +368,29 @@ export async function GET(request: Request) {
         /*
          * Cada tele controla sua própria sequência de paradas.
          * Uma tele anterior não bloqueia o início de outra tele.
+         *
+         * Quando existe item EM_ANDAMENTO, ele representa a rota realmente
+         * ativa. Caso contrário, o primeiro PENDENTE continua sendo apenas
+         * a próxima sugestão para essa tele.
          */
-        const itemAtualDaTele = itensDaTele[0] || null;
+        const itemEmAndamentoDaTele =
+          itensDaTele.find((item) => item.status === "EM_ANDAMENTO") || null;
+
+        const itemAtualDaTele = itemEmAndamentoDaTele || itensDaTele[0] || null;
 
         const filaOperacionalAtiva = itensDaTele.length > 0;
         const teleAceitaPendente = tele.statusAceite === "ACEITA" && tele.status !== "ENTREGUE";
+
+        const etapaEmDeslocamento =
+          tele.etapaMotoboy === "EM_ROTA_COLETA" ||
+          tele.etapaMotoboy === "EM_ROTA_ENTREGA";
+
+        const rotaAtiva = Boolean(itemEmAndamentoDaTele);
+        const aguardandoRetomada =
+          teleAceitaPendente &&
+          etapaEmDeslocamento &&
+          !rotaAtiva &&
+          Boolean(itemAtualDaTele);
 
         /*
          * Depois que a última entrega da tele foi confirmada, o item da fila
@@ -392,6 +410,8 @@ export async function GET(request: Request) {
             tele.statusAceite === "ACEITA" && tele.status !== "ENTREGUE" ? tele.ordemMotoboy : null,
 
           filaOperacionalAtiva,
+          rotaAtiva,
+          aguardandoRetomada,
           finalizacaoLiberadaPelaFila,
           etapaLiberadaPelaFila:
             !filaOperacionalAtiva || Boolean(itemAtualDaTele) || finalizacaoLiberadaPelaFila,
