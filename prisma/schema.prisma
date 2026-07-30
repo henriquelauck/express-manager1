@@ -237,6 +237,7 @@ model Motoboy {
   teles                Tele[]
   movimentos           MovimentoFinanceiroMotoboy[]
   itensFilaOperacional ItemFilaOperacionalMotoboy[]
+  notificacoesGestor   NotificacaoGestor[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -277,24 +278,24 @@ model Tele {
   concluidaPeloMotoboyEm DateTime?
 
   valorBase Float @default(0)
-retorno   Float @default(0)
+  retorno   Float @default(0)
 
-/*
- * Valor acumulado cobrado por espera.
- * Cada bloco completo de 15 minutos adicionará R$ 5.
- */
-espera Float @default(0)
+  /**
+   * Valor acumulado cobrado por espera.
+   * Cada bloco completo de 15 minutos adicionará R$ 5.
+   */
+  espera Float @default(0)
 
-/*
- * Controle do cronômetro ativo.
- * O horário fica salvo no banco, então fechar ou bloquear
- * o celular não reinicia a contagem.
- */
-esperaAtualIniciadaEm  DateTime?
-blocosEsperaAtual      Int       @default(0)
-esperaMinutosAcumulados Int      @default(0)
+  /**
+   * Controle do cronômetro ativo.
+   * O horário fica salvo no banco, então fechar ou bloquear
+   * o celular não reinicia a contagem.
+   */
+  esperaAtualIniciadaEm   DateTime?
+  blocosEsperaAtual       Int       @default(0)
+  esperaMinutosAcumulados Int       @default(0)
 
-total Float @default(0)
+  total Float @default(0)
 
   distanciaKm  Float?
   tempoMinutos Int?
@@ -314,6 +315,7 @@ total Float @default(0)
   itensFilaOperacional ItemFilaOperacionalMotoboy[]
 
   mensagensAtendimento MensagemAtendimento[]
+  notificacoesGestor   NotificacaoGestor[]
 
   dataTele  DateTime @default(now())
   createdAt DateTime @default(now())
@@ -322,6 +324,31 @@ total Float @default(0)
   @@index([motoboyId, statusAceite, ordemMotoboy])
   @@index([statusAceite, atribuidaAoMotoboyEm])
   @@index([motoboyId, etapaMotoboy])
+}
+
+model NotificacaoGestor {
+  id String @id @default(cuid())
+
+  tipo     String
+  titulo   String
+  mensagem String
+
+  teleId String?
+  tele   Tele?   @relation(fields: [teleId], references: [id], onDelete: SetNull)
+
+  motoboyId String?
+  motoboy   Motoboy? @relation(fields: [motoboyId], references: [id], onDelete: SetNull)
+
+  lida   Boolean   @default(false)
+  lidaEm DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([lida, createdAt])
+  @@index([teleId, createdAt])
+  @@index([motoboyId, createdAt])
+  @@index([tipo, createdAt])
 }
 
 model TarefaGestor {
