@@ -142,11 +142,26 @@ function calcularValorBaseSugerido(valorSugerido: number, possuiRetorno: boolean
   return valorSugerido - (possuiRetorno ? 5 : 0);
 }
 
+function dataHojeBrasilISO(data = new Date()) {
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(data);
+
+  const ano = partes.find((parte) => parte.type === "year")?.value;
+  const mes = partes.find((parte) => parte.type === "month")?.value;
+  const dia = partes.find((parte) => parte.type === "day")?.value;
+
+  return `${ano}-${mes}-${dia}`;
+}
+
 export default function NovaTelePage() {
   const router = useRouter();
   const { clientes, teles, recarregarDados } = useExpressManager();
   const [solicitante, setSolicitante] = useState("");
-  const [dataTele, setDataTele] = useState(new Date().toISOString().split("T")[0]);
+  const [dataTele, setDataTele] = useState(() => dataHojeBrasilISO());
   const [valorBase, setValorBase] = useState("14,00");
   const [observacaoGeral, setObservacaoGeral] = useState("");
   const [formaCobranca, setFormaCobranca] = useState<FormaCobrancaTele>("semanal");
