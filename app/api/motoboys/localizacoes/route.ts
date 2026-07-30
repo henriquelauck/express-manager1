@@ -41,46 +41,53 @@ export async function GET() {
         precisaoLocalizacao: true,
         onlineDesde: true,
         localizacaoAtualizadaEm: true,
-        teles: {
+        itensFilaOperacional: {
           where: {
-            statusAceite: "ACEITA",
             status: {
-              not: "ENTREGUE",
+              in: ["PENDENTE", "EM_ANDAMENTO"],
             },
           },
           orderBy: [
             {
-              ordemMotoboy: "asc",
+              ordem: "asc",
             },
             {
-              aceitaPeloMotoboyEm: "asc",
+              createdAt: "asc",
             },
           ],
-          take: 1,
           select: {
             id: true,
-            solicitante: true,
+            ordem: true,
             status: true,
-            statusAceite: true,
-            etapaMotoboy: true,
-            ordemMotoboy: true,
-            aceitaPeloMotoboyEm: true,
-            rotaColetaIniciadaEm: true,
-            chegouNaColetaEm: true,
-            entregaIniciadaEm: true,
-            chegouNaEntregaEm: true,
-            paradas: {
-              orderBy: {
-                ordem: "asc",
-              },
+            iniciadaEm: true,
+            updatedAt: true,
+            tele: {
               select: {
                 id: true,
-                ordem: true,
-                tipo: true,
-                cliente: true,
-                endereco: true,
-                contato: true,
-                observacao: true,
+                solicitante: true,
+                status: true,
+                statusAceite: true,
+                etapaMotoboy: true,
+                ordemMotoboy: true,
+                aceitaPeloMotoboyEm: true,
+                rotaColetaIniciadaEm: true,
+                chegouNaColetaEm: true,
+                entregaIniciadaEm: true,
+                chegouNaEntregaEm: true,
+                paradas: {
+                  orderBy: {
+                    ordem: "asc",
+                  },
+                  select: {
+                    id: true,
+                    ordem: true,
+                    tipo: true,
+                    cliente: true,
+                    endereco: true,
+                    contato: true,
+                    observacao: true,
+                  },
+                },
               },
             },
           },
@@ -116,7 +123,26 @@ export async function GET() {
     return NextResponse.json(
       motoboys.map((motoboy) => {
         const atualizadaEm = motoboy.localizacaoAtualizadaEm;
-        const teleAtual = motoboy.teles[0] || null;
+
+        const itemEmAndamento =
+          motoboy.itensFilaOperacional
+            .filter((item) => item.status === "EM_ANDAMENTO")
+            .sort((itemA, itemB) => {
+              const inicioA = itemA.iniciadaEm?.getTime() ?? 0;
+              const inicioB = itemB.iniciadaEm?.getTime() ?? 0;
+
+              if (inicioA !== inicioB) {
+                return inicioB - inicioA;
+              }
+
+              return itemB.updatedAt.getTime() - itemA.updatedAt.getTime();
+            })[0] || null;
+
+        const itemPendenteSugerido =
+          motoboy.itensFilaOperacional.find((item) => item.status === "PENDENTE") || null;
+
+        const itemAtual = itemEmAndamento || itemPendenteSugerido;
+        const teleAtual = itemAtual?.tele || null;
 
         const segundosSemAtualizar = atualizadaEm
           ? Math.max(0, Math.floor((agora - atualizadaEm.getTime()) / 1000))
@@ -159,6 +185,9 @@ export async function GET() {
                 entregaIniciadaEm: teleAtual.entregaIniciadaEm,
                 chegouNaEntregaEm: teleAtual.chegouNaEntregaEm,
                 paradas: teleAtual.paradas,
+                itemFilaId: itemAtual?.id || null,
+                itemFilaStatus: itemAtual?.status || null,
+                rotaAtiva: itemAtual?.status === "EM_ANDAMENTO",
               }
             : null,
         };
