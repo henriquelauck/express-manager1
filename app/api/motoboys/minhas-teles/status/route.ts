@@ -323,7 +323,16 @@ export async function PUT(request: Request) {
           );
         }
 
-        const indiceEsperado = novaEtapa === "EM_ROTA_ENTREGA" ? indiceAtual + 1 : indiceAtual;
+        const retomandoEtapaAtual =
+          novaEtapa === etapaAtual &&
+          (etapaAtual === "EM_ROTA_COLETA" || etapaAtual === "EM_ROTA_ENTREGA") &&
+          itemFilaAtual.status === "PENDENTE";
+
+        const indiceEsperado = retomandoEtapaAtual
+          ? indiceAtual
+          : novaEtapa === "EM_ROTA_ENTREGA"
+            ? indiceAtual + 1
+            : indiceAtual;
 
         if (indiceItemFila !== indiceEsperado) {
           return respostaErro(
