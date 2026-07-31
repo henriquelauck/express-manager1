@@ -247,6 +247,7 @@ model Motoboy {
 }
 
 model Tele {
+  orcamento Boolean @default(false)
   id String @id @default(cuid())
 
   clienteId String?
