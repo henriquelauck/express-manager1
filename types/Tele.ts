@@ -22,6 +22,7 @@ export type EtapaMotoboyTele =
   | "CONCLUIDA";
 
 export type Tele = {
+  orcamento?: boolean;
   id: string;
 
   solicitante: string;

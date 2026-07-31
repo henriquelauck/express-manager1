@@ -22,6 +22,7 @@ import {
   Phone,
   Plus,
   RotateCcw,
+  ReceiptText,
   Send,
   Timer,
   Trash2,
@@ -904,9 +905,22 @@ ${linkMaps}`
     }
   }
 
+  const orcamentosFiltrados = teles.filter(
+    (tele: Tele) =>
+      tele.orcamento && ehDaDataSelecionada(tele) && ehDoClienteSelecionado(tele)
+  );
+
   const telesFiltradas = teles.filter(
     (tele: Tele) =>
-      ehDaDataSelecionada(tele) && ehDoMotoboySelecionado(tele) && ehDoClienteSelecionado(tele)
+      !tele.orcamento &&
+      ehDaDataSelecionada(tele) &&
+      ehDoMotoboySelecionado(tele) &&
+      ehDoClienteSelecionado(tele)
+  );
+
+  const totalOrcamentos = orcamentosFiltrados.reduce(
+    (total: number, tele: Tele) => total + converterValor(tele.valor),
+    0
   );
 
   const totalFiltrado = telesFiltradas.reduce(
@@ -1067,6 +1081,134 @@ ${linkMaps}`
               ))}
             </select>
           </div>
+        </div>
+      </section>
+
+      <section className="mb-6 overflow-hidden rounded-3xl border border-amber-200 bg-amber-50/40 shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-amber-200 bg-amber-100/60 px-5 py-5 md:flex-row md:items-center md:justify-between md:px-6">
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-500 text-white">
+              <ReceiptText size={21} />
+            </div>
+
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-lg font-bold text-slate-900">Orçamentos</h2>
+                <span className="rounded-full bg-amber-500 px-3 py-1 text-xs font-bold text-white">
+                  {orcamentosFiltrados.length}
+                </span>
+              </div>
+              <p className="mt-1 text-sm text-amber-900/70">
+                Registros ainda não confirmados. Não entram na operação nem no financeiro.
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-amber-200 bg-white px-4 py-3 text-right">
+            <span className="block text-xs font-medium text-slate-500">Valor orçado</span>
+            <strong className="mt-1 block text-lg text-amber-700">
+              R$ {formatarValor(totalOrcamentos)}
+            </strong>
+          </div>
+        </div>
+
+        <div className="p-5 md:p-6">
+          {orcamentosFiltrados.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-amber-300 bg-white/70 px-5 py-8 text-center">
+              <p className="font-semibold text-slate-700">Nenhum orçamento nesta data.</p>
+              <p className="mt-1 text-sm text-slate-500">
+                Use o botão Orçamento na página Nova Tele para criar um registro.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+              {orcamentosFiltrados.map((tele: Tele) => {
+                const paradas = getParadas(tele);
+
+                return (
+                  <article
+                    key={tele.id}
+                    className="overflow-hidden rounded-3xl border border-amber-200 bg-white shadow-sm"
+                  >
+                    <div className="border-b border-amber-100 bg-amber-50/70 p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <span className="inline-flex rounded-lg bg-amber-500 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
+                            Orçamento
+                          </span>
+                          <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                            {tele.solicitante}
+                          </p>
+                          <h3 className="mt-1 break-words font-bold text-slate-900">
+                            {resumoDaRota(paradas)}
+                          </h3>
+                        </div>
+
+                        <strong className="shrink-0 whitespace-nowrap text-lg text-amber-700">
+                          R$ {tele.valor}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 p-4">
+                      {paradas.map((parada: Parada, index: number) => (
+                        <div
+                          key={parada.id || `${tele.id}-${index}`}
+                          className="rounded-2xl border border-slate-100 bg-slate-50 p-3"
+                        >
+                          <div className="flex items-start gap-3">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">
+                              {index + 1}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                {parada.tipo}
+                              </p>
+                              <p className="mt-1 font-semibold text-slate-800">
+                                {parada.cliente || parada.nomeCliente || "Local não informado"}
+                              </p>
+                              <p className="mt-1 break-words text-sm text-slate-500">
+                                {parada.endereco || "Endereço não informado"}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 border-t border-amber-100 bg-amber-50/50 p-4">
+                      <button
+                        type="button"
+                        onClick={() => gerarOrcamento(tele)}
+                        className="flex h-11 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
+                      >
+                        <MessageCircle size={16} />
+                        Enviar
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => editarTele(tele.id)}
+                        className="flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                      >
+                        <Pencil size={16} />
+                        Editar
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => solicitarExclusao(tele)}
+                        className="flex h-11 items-center justify-center gap-2 rounded-xl border border-red-200 bg-white text-sm font-semibold text-red-700 transition hover:bg-red-50"
+                      >
+                        <Trash2 size={16} />
+                        Excluir
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
         </div>
       </section>
 
@@ -1624,10 +1766,10 @@ ${linkMaps}`
 
               <div className="min-w-0 flex-1">
                 <h2 id="titulo-excluir-tele" className="text-xl font-bold text-slate-900">
-                  Excluir esta tele?
+                  Excluir {teleParaExcluir.orcamento ? "este orçamento" : "esta tele"}?
                 </h2>
                 <p className="mt-1 text-sm leading-6 text-slate-600">
-                  Esta ação remove definitivamente a operação e não poderá ser desfeita.
+                  Esta ação remove definitivamente {teleParaExcluir.orcamento ? "o orçamento" : "a operação"} e não poderá ser desfeita.
                 </p>
               </div>
 
@@ -1645,7 +1787,7 @@ ${linkMaps}`
             <div className="space-y-4 p-5 md:p-6">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Tele selecionada
+                  {teleParaExcluir.orcamento ? "Orçamento selecionado" : "Tele selecionada"}
                 </p>
 
                 <div className="mt-3 flex items-start justify-between gap-4">
@@ -1662,22 +1804,31 @@ ${linkMaps}`
                 </div>
 
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <StatusBadge status={teleParaExcluir.status} />
+                  {teleParaExcluir.orcamento ? (
+                    <span className="rounded-lg bg-amber-500 px-2.5 py-1 text-xs font-bold text-white">
+                      ORÇAMENTO
+                    </span>
+                  ) : (
+                    <StatusBadge status={teleParaExcluir.status} />
+                  )}
 
                   <span className="rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-slate-500">
                     {getParadas(teleParaExcluir).length}{" "}
                     {getParadas(teleParaExcluir).length === 1 ? "parada" : "paradas"}
                   </span>
 
-                  <span className="rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-slate-500">
-                    {teleParaExcluir.motoboy || "Sem motoboy"}
-                  </span>
+                  {!teleParaExcluir.orcamento && (
+                    <span className="rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-slate-500">
+                      {teleParaExcluir.motoboy || "Sem motoboy"}
+                    </span>
+                  )}
                 </div>
               </div>
 
               <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
-                Confirme somente depois de verificar que esta não é uma tele válida ou necessária
-                para os fechamentos.
+                {teleParaExcluir.orcamento
+                  ? "Confirme somente se este orçamento não for mais necessário."
+                  : "Confirme somente depois de verificar que esta não é uma tele válida ou necessária para os fechamentos."}
               </div>
 
               {erroExclusao && (
@@ -1694,7 +1845,7 @@ ${linkMaps}`
                 disabled={excluindoTele}
                 className="h-12 rounded-xl border border-slate-200 bg-white px-6 font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-50"
               >
-                Manter tele
+                {teleParaExcluir.orcamento ? "Manter orçamento" : "Manter tele"}
               </button>
 
               <button
@@ -1728,9 +1879,13 @@ ${linkMaps}`
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-600">
                   Central de Operações
                 </p>
-                <h2 className="mt-1 text-2xl font-bold text-slate-900">Editar tele</h2>
+                <h2 className="mt-1 text-2xl font-bold text-slate-900">
+                  {teleEditando.orcamento ? "Editar orçamento" : "Editar tele"}
+                </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Atualize a operação, as paradas e os dados de recebimento.
+                  {teleEditando.orcamento
+                    ? "Atualize os dados e as paradas do orçamento."
+                    : "Atualize a operação, as paradas e os dados de recebimento."}
                 </p>
               </div>
 
@@ -1781,38 +1936,50 @@ ${linkMaps}`
                     placeholder="0,00"
                   />
 
-                  <div>
-                    <label className="text-sm font-medium text-slate-600">
-                      Motoboy responsável
-                    </label>
-                    <select
-                      value={teleEditando.motoboy || ""}
-                      onChange={(event) => atualizarTeleEditando("motoboy", event.target.value)}
-                      className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                    >
-                      <option value="">Sem motoboy definido</option>
-                      {motoboys.map((motoboy: Motoboy) => (
-                        <option key={motoboy.id || motoboy.nome} value={motoboy.nome}>
-                          {motoboy.nome}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  {!teleEditando.orcamento && (
+                    <>
+                      <div>
+                        <label className="text-sm font-medium text-slate-600">
+                          Motoboy responsável
+                        </label>
+                        <select
+                          value={teleEditando.motoboy || ""}
+                          onChange={(event) => atualizarTeleEditando("motoboy", event.target.value)}
+                          className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                        >
+                          <option value="">Sem motoboy definido</option>
+                          {motoboys.map((motoboy: Motoboy) => (
+                            <option key={motoboy.id || motoboy.nome} value={motoboy.nome}>
+                              {motoboy.nome}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
-                  <div>
-                    <label className="text-sm font-medium text-slate-600">Status da operação</label>
-                    <select
-                      value={teleEditando.status}
-                      onChange={(event) => atualizarTeleEditando("status", event.target.value)}
-                      className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                    >
-                      {statusOptions.map((status) => (
-                        <option key={status} value={status}>
-                          {status}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                      <div>
+                        <label className="text-sm font-medium text-slate-600">
+                          Status da operação
+                        </label>
+                        <select
+                          value={teleEditando.status}
+                          onChange={(event) => atualizarTeleEditando("status", event.target.value)}
+                          className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                        >
+                          {statusOptions.map((status) => (
+                            <option key={status} value={status}>
+                              {status}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </>
+                  )}
+
+                  {teleEditando.orcamento && (
+                    <div className="md:col-span-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                      Este registro continuará como orçamento, sem motoboy e fora da operação.
+                    </div>
+                  )}
                 </div>
               </section>
 
@@ -1908,103 +2075,106 @@ ${linkMaps}`
                 </div>
               </section>
 
+              {!teleEditando.orcamento && (
               <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-                <div className="flex items-center gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
-                    <WalletCards size={19} />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-900">Financeiro</h3>
-                    <p className="text-xs text-slate-500">
-                      Defina cobrança, recebimento e responsável pelo valor.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-5 p-5 md:grid-cols-2">
-                  <div>
-                    <label className="text-sm font-medium text-slate-600">Forma de cobrança</label>
-                    <select
-                      value={teleEditando.formaCobranca || "na_hora"}
-                      onChange={(event) =>
-                        atualizarTeleEditando("formaCobranca", event.target.value)
-                      }
-                      className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                    >
-                      <option value="na_hora">Cobrar na hora</option>
-                      <option value="semanal">Fechamento semanal</option>
-                      <option value="quinzenal">Fechamento quinzenal</option>
-                      <option value="mensal">Fechamento mensal</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-medium text-slate-600">
-                      Situação do recebimento
-                    </label>
-                    <select
-                      value={teleEditando.recebimento || "pendente"}
-                      onChange={(event) => {
-                        const novoRecebimento = event.target.value;
-
-                        setTeleEditando((teleAtual: any) => ({
-                          ...teleAtual,
-                          recebimento: novoRecebimento,
-                          valorRecebido:
-                            novoRecebimento === "pendente"
-                              ? ""
-                              : teleAtual.valorRecebido || teleAtual.valor,
-                          motoboyRecebedor:
-                            novoRecebimento === "motoboy"
-                              ? teleAtual.motoboyRecebedor || teleAtual.motoboy || ""
-                              : "",
-                        }));
-                      }}
-                      className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                    >
-                      <option value="pendente">Pagamento pendente</option>
-                      <option value="escritorio">Recebido no escritório</option>
-                      <option value="motoboy">Recebido pelo motoboy</option>
-                    </select>
-                  </div>
-
-                  <InputModal
-                    label="Valor recebido"
-                    value={teleEditando.valorRecebido || ""}
-                    onChange={(value: string) => atualizarTeleEditando("valorRecebido", value)}
-                    placeholder="0,00"
-                    disabled={teleEditando.recebimento === "pendente"}
-                  />
-
-                  {teleEditando.recebimento === "motoboy" ? (
+                  <div className="flex items-center gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-4">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                      <WalletCards size={19} />
+                    </div>
                     <div>
-                      <label className="text-sm font-medium text-slate-600">
-                        Motoboy recebedor
-                      </label>
+                      <h3 className="font-bold text-slate-900">Financeiro</h3>
+                      <p className="text-xs text-slate-500">
+                        Defina cobrança, recebimento e responsável pelo valor.
+                      </p>
+                    </div>
+                  </div>
+  
+                  <div className="grid grid-cols-1 gap-5 p-5 md:grid-cols-2">
+                    <div>
+                      <label className="text-sm font-medium text-slate-600">Forma de cobrança</label>
                       <select
-                        value={teleEditando.motoboyRecebedor || ""}
+                        value={teleEditando.formaCobranca || "na_hora"}
                         onChange={(event) =>
-                          atualizarTeleEditando("motoboyRecebedor", event.target.value)
+                          atualizarTeleEditando("formaCobranca", event.target.value)
                         }
                         className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
                       >
-                        <option value="">Selecionar motoboy</option>
-                        {motoboys.map((motoboy: Motoboy) => (
-                          <option key={motoboy.id || motoboy.nome} value={motoboy.nome}>
-                            {motoboy.nome}
-                          </option>
-                        ))}
+                        <option value="na_hora">Cobrar na hora</option>
+                        <option value="semanal">Fechamento semanal</option>
+                        <option value="quinzenal">Fechamento quinzenal</option>
+                        <option value="mensal">Fechamento mensal</option>
                       </select>
                     </div>
-                  ) : (
-                    <div className="flex min-h-20 items-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 text-sm text-slate-500">
-                      {teleEditando.recebimento === "pendente"
-                        ? "O valor continuará pendente para o fechamento."
-                        : "O recebimento ficará registrado no escritório."}
+  
+                    <div>
+                      <label className="text-sm font-medium text-slate-600">
+                        Situação do recebimento
+                      </label>
+                      <select
+                        value={teleEditando.recebimento || "pendente"}
+                        onChange={(event) => {
+                          const novoRecebimento = event.target.value;
+  
+                          setTeleEditando((teleAtual: any) => ({
+                            ...teleAtual,
+                            recebimento: novoRecebimento,
+                            valorRecebido:
+                              novoRecebimento === "pendente"
+                                ? ""
+                                : teleAtual.valorRecebido || teleAtual.valor,
+                            motoboyRecebedor:
+                              novoRecebimento === "motoboy"
+                                ? teleAtual.motoboyRecebedor || teleAtual.motoboy || ""
+                                : "",
+                          }));
+                        }}
+                        className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                      >
+                        <option value="pendente">Pagamento pendente</option>
+                        <option value="escritorio">Recebido no escritório</option>
+                        <option value="motoboy">Recebido pelo motoboy</option>
+                      </select>
                     </div>
-                  )}
-                </div>
-              </section>
+  
+                    <InputModal
+                      label="Valor recebido"
+                      value={teleEditando.valorRecebido || ""}
+                      onChange={(value: string) => atualizarTeleEditando("valorRecebido", value)}
+                      placeholder="0,00"
+                      disabled={teleEditando.recebimento === "pendente"}
+                    />
+  
+                    {teleEditando.recebimento === "motoboy" ? (
+                      <div>
+                        <label className="text-sm font-medium text-slate-600">
+                          Motoboy recebedor
+                        </label>
+                        <select
+                          value={teleEditando.motoboyRecebedor || ""}
+                          onChange={(event) =>
+                            atualizarTeleEditando("motoboyRecebedor", event.target.value)
+                          }
+                          className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                        >
+                          <option value="">Selecionar motoboy</option>
+                          {motoboys.map((motoboy: Motoboy) => (
+                            <option key={motoboy.id || motoboy.nome} value={motoboy.nome}>
+                              {motoboy.nome}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div className="flex min-h-20 items-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 text-sm text-slate-500">
+                        {teleEditando.recebimento === "pendente"
+                          ? "O valor continuará pendente para o fechamento."
+                          : "O recebimento ficará registrado no escritório."}
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )}
+
             </div>
 
             <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:justify-end md:px-7">
