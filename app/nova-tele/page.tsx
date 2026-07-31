@@ -166,6 +166,7 @@ export default function NovaTelePage() {
   const [observacaoGeral, setObservacaoGeral] = useState("");
   const [formaCobranca, setFormaCobranca] = useState<FormaCobrancaTele>("semanal");
   const [salvando, setSalvando] = useState(false);
+  const [salvandoOrcamento, setSalvandoOrcamento] = useState(false);
   const [calculandoRota, setCalculandoRota] = useState(false);
   const [rotaCalculada, setRotaCalculada] = useState<ResultadoRotaCalculada | null>(null);
   const [rotaSelecionadaId, setRotaSelecionadaId] = useState<number | null>(null);
@@ -504,6 +505,93 @@ export default function NovaTelePage() {
     }
 
     await buscarSugestaoMotoboy(enderecoPrimeiraColeta);
+  }
+
+  async function criarOrcamento() {
+    if (salvando || salvandoOrcamento) {
+      return;
+    }
+
+    if (!solicitante.trim()) {
+      alert("Selecione o cliente solicitante.");
+      return;
+    }
+
+    if (!dataTele) {
+      alert("Informe a data do orçamento.");
+      return;
+    }
+
+    if (paradas.length === 0) {
+      alert("Adicione ao menos uma parada.");
+      return;
+    }
+
+    if (paradas.some((parada) => !parada.endereco.trim())) {
+      alert("Preencha o endereço de todas as paradas.");
+      return;
+    }
+
+    const valorBaseConvertido = converterValor(valorBase);
+
+    if (!Number.isFinite(valorBaseConvertido) || valorBaseConvertido <= 0) {
+      alert("Informe um valor base válido.");
+      return;
+    }
+
+    const retorno = calcularRetorno(solicitante, paradas);
+    const total = calcularTotal(valorBase, retorno, 0);
+
+    setSalvandoOrcamento(true);
+
+    try {
+      const resposta = await fetch("/api/teles", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          orcamento: true,
+          solicitante,
+          dataTele,
+          motoboyId: null,
+          motoboy: "",
+          status: "Aguardando cliente",
+          tipoRota: descobrirTipoRota(paradas),
+          valorBase: valorBaseConvertido,
+          retorno,
+          espera: 0,
+          total,
+          valor: formatarValor(total),
+          distanciaKm: rotaSelecionada?.distanciaKm ?? null,
+          tempoMinutos: rotaSelecionada?.duracaoMin ?? null,
+          recebimento: "pendente",
+          formaCobranca,
+          valorRecebido: 0,
+          motoboyRecebedor: null,
+          fechamentoId: null,
+          observacaoGeral,
+          paradas,
+        }),
+      });
+
+      let dados: { erro?: string; id?: string } = {};
+
+      try {
+        dados = await resposta.json();
+      } catch {}
+
+      if (!resposta.ok) {
+        throw new Error(dados.erro || "Não foi possível salvar o orçamento.");
+      }
+
+      await recarregarDados();
+      router.push("/teles");
+    } catch (erro) {
+      alert(erro instanceof Error ? erro.message : "Não foi possível salvar o orçamento.");
+    } finally {
+      setSalvandoOrcamento(false);
+    }
   }
 
   const retornoAtual = calcularRetorno(solicitante, paradas);
@@ -896,25 +984,46 @@ export default function NovaTelePage() {
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={criarTele}
-              disabled={salvando}
-              className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-7 py-4 font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 md:w-auto"
-            >
-              {salvando ? (
-                <>
-                  <Loader2 size={21} className="animate-spin" />
-                  Criando tele...
-                </>
-              ) : (
-                <>
-                  <Send size={20} />
-                  Criar tele
-                  <ArrowRight size={20} />
-                </>
-              )}
-            </button>
+            <div className="flex w-full flex-col gap-3 sm:flex-row md:w-auto">
+              <button
+                type="button"
+                onClick={criarOrcamento}
+                disabled={salvando || salvandoOrcamento}
+                className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl border border-amber-300 bg-amber-50 px-7 py-4 font-semibold text-amber-800 shadow-sm transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+              >
+                {salvandoOrcamento ? (
+                  <>
+                    <Loader2 size={21} className="animate-spin" />
+                    Salvando orçamento...
+                  </>
+                ) : (
+                  <>
+                    <ReceiptText size={20} />
+                    Orçamento
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={criarTele}
+                disabled={salvando || salvandoOrcamento}
+                className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-7 py-4 font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+              >
+                {salvando ? (
+                  <>
+                    <Loader2 size={21} className="animate-spin" />
+                    Criando tele...
+                  </>
+                ) : (
+                  <>
+                    <Send size={20} />
+                    Criar tele
+                    <ArrowRight size={20} />
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </section>
       </div>
