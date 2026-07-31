@@ -134,6 +134,7 @@ function formatarTeleParaTela(tele: any) {
 
   return {
     id: tele.id,
+    orcamento: Boolean(tele.orcamento),
     solicitante: tele.solicitante,
     motoboyId: tele.motoboyId,
     motoboy: tele.motoboyNome || tele.motoboy?.nome || "",
@@ -314,6 +315,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const body = await request.json();
+  const ehOrcamento = body.orcamento === true;
 
   const cliente = await prisma.cliente.findFirst({
     where: {
@@ -321,7 +323,7 @@ export async function POST(request: Request) {
     },
   });
 
-  const motoboy = body.motoboy
+  const motoboy = !ehOrcamento && body.motoboy
     ? await prisma.motoboy.findFirst({
         where: {
           nome: body.motoboy,
@@ -331,7 +333,9 @@ export async function POST(request: Request) {
 
   const total = Number(body.total ?? Number(String(body.valor || "0").replace(",", ".")));
 
-  const valorRecebido = Math.max(0, Math.min(Number(body.valorRecebido || 0), total));
+  const valorRecebido = ehOrcamento
+    ? 0
+    : Math.max(0, Math.min(Number(body.valorRecebido || 0), total));
   const paradasOperacionais = montarParadasOperacionais(body.paradas);
 
   if (paradasOperacionais.length === 0) {
@@ -344,6 +348,7 @@ export async function POST(request: Request) {
   const tele = await prisma.$transaction(async (tx) => {
     const teleCriada = await tx.tele.create({
       data: {
+        orcamento: ehOrcamento,
         clienteId: cliente?.id,
         solicitante: body.solicitante,
         dataTele: body.dataTele ? new Date(`${body.dataTele}T12:00:00`) : new Date(),
@@ -357,9 +362,11 @@ export async function POST(request: Request) {
         recusadaPeloMotoboyEm: null,
         motivoRecusaMotoboy: null,
 
-        status: motoboy
-          ? "AGUARDANDO_MOTOBOY"
-          : statusParaBanco(body.status || "Aguardando cliente"),
+        status: ehOrcamento
+          ? "AGUARDANDO_CLIENTE"
+          : motoboy
+            ? "AGUARDANDO_MOTOBOY"
+            : statusParaBanco(body.status || "Aguardando cliente"),
         tipoRota: body.tipoRota || "Entrega",
 
         valorBase: body.valorBase || 0,
@@ -371,16 +378,18 @@ export async function POST(request: Request) {
         tempoMinutos: body.tempoMinutos || null,
 
         recebimento: recebimentoParaBanco(
-          valorRecebido > 0 ? body.recebimento || "escritorio" : "pendente"
+          !ehOrcamento && valorRecebido > 0
+            ? body.recebimento || "escritorio"
+            : "pendente"
         ) as any,
         formaCobranca: formaCobrancaParaBanco(body.formaCobranca || "semanal") as any,
         valorRecebido,
-        dataRecebimento: valorRecebido > 0 ? new Date() : null,
+        dataRecebimento: !ehOrcamento && valorRecebido > 0 ? new Date() : null,
         motoboyRecebedor:
-          valorRecebido > 0 && body.recebimento === "motoboy"
+          !ehOrcamento && valorRecebido > 0 && body.recebimento === "motoboy"
             ? body.motoboyRecebedor || null
             : null,
-        fechamentoId: body.fechamentoId || null,
+        fechamentoId: ehOrcamento ? null : body.fechamentoId || null,
 
         observacaoGeral: body.observacaoGeral || "",
 
@@ -406,14 +415,16 @@ export async function POST(request: Request) {
       },
     });
 
-    await sincronizarRecebimentoMotoboy({
-      tx,
-      teleId: teleCriada.id,
-      solicitante: teleCriada.solicitante,
-      recebimento: body.recebimento || "pendente",
-      valorRecebido,
-      motoboyRecebedor: body.motoboyRecebedor || null,
-    });
+    if (!ehOrcamento) {
+      await sincronizarRecebimentoMotoboy({
+        tx,
+        teleId: teleCriada.id,
+        solicitante: teleCriada.solicitante,
+        recebimento: body.recebimento || "pendente",
+        valorRecebido,
+        motoboyRecebedor: body.motoboyRecebedor || null,
+      });
+    }
 
     return teleCriada;
   });
@@ -454,6 +465,7 @@ export async function PUT(request: Request) {
         id: body.id,
       },
       select: {
+        orcamento: true,
         motoboyId: true,
         statusAceite: true,
         ordemMotoboy: true,
@@ -466,6 +478,13 @@ export async function PUT(request: Request) {
 
     if (!teleAtualAntesDaEdicao) {
       return NextResponse.json({ erro: "Tele não encontrada." }, { status: 404 });
+    }
+
+    if (teleAtualAntesDaEdicao.orcamento) {
+      return NextResponse.json(
+        { erro: "A edição de orçamentos será liberada na etapa da Central de Operações." },
+        { status: 409 }
+      );
     }
 
     const haviaMotoboy = Boolean(teleAtualAntesDaEdicao.motoboyId);
@@ -614,6 +633,7 @@ export async function PATCH(request: Request) {
       },
       select: {
         id: true,
+        orcamento: true,
         solicitante: true,
         total: true,
         valorRecebido: true,
@@ -624,6 +644,13 @@ export async function PATCH(request: Request) {
 
     if (!teleAtual) {
       return NextResponse.json({ erro: "Tele nÃƒÂ£o encontrada." }, { status: 404 });
+    }
+
+    if (teleAtual.orcamento) {
+      return NextResponse.json(
+        { erro: "Orçamentos não podem registrar cobrança ou pagamento." },
+        { status: 409 }
+      );
     }
 
     const total = Number(teleAtual.total || 0);
