@@ -2,6 +2,7 @@ package com.lauckdastele.expressmanager;
 
 import android.Manifest;
 import android.app.ActivityManager;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -67,6 +68,12 @@ public class LocalizacaoPlugin extends Plugin {
         resposta.put("bateriaSemRestricao", bateriaSemRestricao);
         resposta.put("gpsAtivo", gpsAtivo);
         resposta.put("servicoAtivo", servicoAtivo);
+        resposta.put("fabricante", fabricanteNormalizado());
+        resposta.put("modelo", Build.MODEL == null ? "" : Build.MODEL);
+        resposta.put("versaoAndroid", Build.VERSION.RELEASE == null ? "" : Build.VERSION.RELEASE);
+        resposta.put("nivelAndroid", Build.VERSION.SDK_INT);
+        resposta.put("possuiAtalhoFabricante", possuiAtalhoFabricante());
+        resposta.put("rotuloAtalhoFabricante", rotuloAtalhoFabricante());
 
         /*
          * Permissões e configurações obrigatórias para permitir
@@ -168,6 +175,221 @@ public class LocalizacaoPlugin extends Plugin {
                     "Não foi possível abrir as configurações de GPS.",
                     erro
             );
+        }
+    }
+
+    @PluginMethod
+    public void obterInformacoesDispositivo(PluginCall call) {
+        JSObject resposta = new JSObject();
+
+        resposta.put("fabricante", fabricanteNormalizado());
+        resposta.put("modelo", Build.MODEL == null ? "" : Build.MODEL);
+        resposta.put("versaoAndroid", Build.VERSION.RELEASE == null ? "" : Build.VERSION.RELEASE);
+        resposta.put("nivelAndroid", Build.VERSION.SDK_INT);
+        resposta.put("possuiAtalhoFabricante", possuiAtalhoFabricante());
+        resposta.put("rotuloAtalhoFabricante", rotuloAtalhoFabricante());
+
+        call.resolve(resposta);
+    }
+
+    @PluginMethod
+    public void abrirConfiguracoesNotificacoes(PluginCall call) {
+        try {
+            Intent intent;
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                intent = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+                intent.putExtra(
+                        Settings.EXTRA_APP_PACKAGE,
+                        getContext().getPackageName()
+                );
+            } else {
+                intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                intent.setData(
+                        Uri.parse("package:" + getContext().getPackageName())
+                );
+            }
+
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+
+            JSObject resposta = new JSObject();
+            resposta.put("aberto", true);
+            call.resolve(resposta);
+        } catch (Exception erro) {
+            abrirDetalhesDoAplicativo(
+                    call,
+                    "Não foi possível abrir as configurações de notificações."
+            );
+        }
+    }
+
+    @PluginMethod
+    public void abrirConfiguracoesFabricante(PluginCall call) {
+        Intent intentFabricante = criarIntentFabricante();
+
+        if (intentFabricante != null && abrirIntentSeDisponivel(intentFabricante)) {
+            JSObject resposta = new JSObject();
+            resposta.put("aberto", true);
+            resposta.put("fabricante", fabricanteNormalizado());
+            resposta.put("fallback", false);
+            call.resolve(resposta);
+            return;
+        }
+
+        try {
+            Intent fallback = new Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+            );
+
+            fallback.setData(
+                    Uri.parse("package:" + getContext().getPackageName())
+            );
+
+            fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(fallback);
+
+            JSObject resposta = new JSObject();
+            resposta.put("aberto", true);
+            resposta.put("fabricante", fabricanteNormalizado());
+            resposta.put("fallback", true);
+            call.resolve(resposta);
+        } catch (Exception erro) {
+            call.reject(
+                    "Não foi possível abrir as configurações especiais do aparelho.",
+                    erro
+            );
+        }
+    }
+
+    private String fabricanteNormalizado() {
+        String fabricante = Build.MANUFACTURER;
+
+        if (fabricante == null) {
+            return "desconhecido";
+        }
+
+        return fabricante.trim().toLowerCase();
+    }
+
+    private boolean possuiAtalhoFabricante() {
+        return criarIntentFabricante() != null;
+    }
+
+    private String rotuloAtalhoFabricante() {
+        String fabricante = fabricanteNormalizado();
+
+        if (
+                fabricante.contains("xiaomi")
+                        || fabricante.contains("redmi")
+                        || fabricante.contains("poco")
+        ) {
+            return "Inicialização automática";
+        }
+
+        if (
+                fabricante.contains("oppo")
+                        || fabricante.contains("realme")
+                        || fabricante.contains("oneplus")
+        ) {
+            return "Inicialização em segundo plano";
+        }
+
+        if (fabricante.contains("vivo")) {
+            return "Gerenciamento de inicialização";
+        }
+
+        if (fabricante.contains("huawei") || fabricante.contains("honor")) {
+            return "Inicialização de aplicativos";
+        }
+
+        return "Configurações especiais";
+    }
+
+    private Intent criarIntentFabricante() {
+        String fabricante = fabricanteNormalizado();
+        Intent intent = new Intent();
+
+        if (
+                fabricante.contains("xiaomi")
+                        || fabricante.contains("redmi")
+                        || fabricante.contains("poco")
+        ) {
+            intent.setComponent(
+                    new ComponentName(
+                            "com.miui.securitycenter",
+                            "com.miui.permcenter.autostart.AutoStartManagementActivity"
+                    )
+            );
+            return intent;
+        }
+
+        if (
+                fabricante.contains("oppo")
+                        || fabricante.contains("realme")
+                        || fabricante.contains("oneplus")
+        ) {
+            intent.setComponent(
+                    new ComponentName(
+                            "com.coloros.safecenter",
+                            "com.coloros.safecenter.permission.startup.StartupAppListActivity"
+                    )
+            );
+
+            if (intent.resolveActivity(getContext().getPackageManager()) != null) {
+                return intent;
+            }
+
+            Intent oplus = new Intent();
+            oplus.setComponent(
+                    new ComponentName(
+                            "com.oplus.safecenter",
+                            "com.oplus.safecenter.permission.startup.StartupAppListActivity"
+                    )
+            );
+            return oplus;
+        }
+
+        if (fabricante.contains("vivo")) {
+            intent.setComponent(
+                    new ComponentName(
+                            "com.vivo.permissionmanager",
+                            "com.vivo.permissionmanager.activity.BgStartUpManagerActivity"
+                    )
+            );
+            return intent;
+        }
+
+        if (fabricante.contains("huawei") || fabricante.contains("honor")) {
+            intent.setComponent(
+                    new ComponentName(
+                            "com.huawei.systemmanager",
+                            "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity"
+                    )
+            );
+            return intent;
+        }
+
+        return null;
+    }
+
+    private boolean abrirIntentSeDisponivel(Intent intent) {
+        try {
+            if (
+                    intent == null
+                            || intent.resolveActivity(
+                                    getContext().getPackageManager()
+                            ) == null
+            ) {
+                return false;
+            }
+
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+
+            return true;
+        } catch (Exception erro) {
+            return false;
         }
     }
 
