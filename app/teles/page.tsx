@@ -949,10 +949,15 @@ ${linkMaps}`
       .reduce((total: number, tele: Tele) => total + converterValor(tele.valor), 0);
   }
 
-  const motoboysOnline = localizacoesMotoboys.filter((motoboy) => motoboy.online);
-  const motoboysComLocalizacaoRecente = motoboysOnline.filter(
-    (motoboy) => motoboy.localizacaoRecente
+  const motoboysOnline = localizacoesMotoboys.filter(
+    (motoboy) => motoboy.online && motoboy.localizacaoRecente
   );
+
+  const motoboysComConexaoInterrompida = localizacoesMotoboys.filter(
+    (motoboy) => motoboy.online && !motoboy.localizacaoRecente
+  );
+
+  const motoboysComLocalizacaoRecente = motoboysOnline;
 
   const motoboySelecionado =
     localizacoesMotoboys.find((motoboy) => motoboy.id === motoboySelecionadoId) || null;
@@ -1324,7 +1329,11 @@ ${linkMaps}`
               <div>
                 <h3 className="font-bold text-slate-900">Equipe em campo</h3>
                 <p className="mt-1 text-xs text-slate-500">
-                  {motoboysOnline.length} online de {localizacoesMotoboys.length} cadastrados
+                  {motoboysOnline.length} online
+                  {motoboysComConexaoInterrompida.length > 0
+                    ? ` • ${motoboysComConexaoInterrompida.length} com conexão interrompida`
+                    : ""}
+                  {" "}de {localizacoesMotoboys.length} cadastrados
                 </p>
               </div>
 
@@ -1352,10 +1361,10 @@ ${linkMaps}`
                     className={`rounded-2xl border p-4 text-left transition ${
                       selecionado
                         ? "border-blue-500 bg-blue-50 ring-4 ring-blue-100"
-                        : motoboy.localizacaoRecente
+                        : motoboy.online && motoboy.localizacaoRecente
                           ? "border-emerald-200 bg-emerald-50/70 hover:border-emerald-400 hover:bg-emerald-50"
                           : motoboy.online
-                            ? "cursor-not-allowed border-amber-200 bg-amber-50/70 opacity-80"
+                            ? "cursor-not-allowed border-amber-200 bg-amber-50/70 opacity-90"
                             : "cursor-not-allowed border-slate-200 bg-slate-50 opacity-70"
                     }`}
                   >
@@ -1365,7 +1374,7 @@ ${linkMaps}`
                           className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
                             selecionado
                               ? "bg-blue-600 text-white"
-                              : motoboy.localizacaoRecente
+                              : motoboy.online && motoboy.localizacaoRecente
                                 ? "bg-emerald-600 text-white"
                                 : motoboy.online
                                   ? "bg-amber-500 text-white"
@@ -1386,13 +1395,23 @@ ${linkMaps}`
 
                       <span
                         className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                          motoboy.online
+                          motoboy.online && motoboy.localizacaoRecente
                             ? "bg-emerald-100 text-emerald-700"
-                            : "bg-slate-200 text-slate-600"
+                            : motoboy.online
+                              ? "bg-amber-100 text-amber-700"
+                              : "bg-slate-200 text-slate-600"
                         }`}
                       >
-                        {motoboy.online ? <Wifi size={12} /> : <WifiOff size={12} />}
-                        {motoboy.online ? "Online" : "Offline"}
+                        {motoboy.online && motoboy.localizacaoRecente ? (
+                          <Wifi size={12} />
+                        ) : (
+                          <WifiOff size={12} />
+                        )}
+                        {motoboy.online && motoboy.localizacaoRecente
+                          ? "Online"
+                          : motoboy.online
+                            ? "Conexão interrompida"
+                            : "Offline"}
                       </span>
                     </div>
 
