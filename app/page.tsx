@@ -364,6 +364,14 @@ export default function Dashboard() {
     (tele) => tele.status === "Aguardando cliente"
   ).length;
 
+  const motoboysRealmenteOnline = motoboysOnline.filter(
+    (motoboy) => motoboy.localizacaoRecente
+  );
+
+  const motoboysComConexaoInterrompida = motoboysOnline.filter(
+    (motoboy) => !motoboy.localizacaoRecente
+  );
+
   return (
     <PageContainer>
       <div className="mb-8 flex items-start justify-between gap-4">
@@ -404,9 +412,13 @@ export default function Dashboard() {
 
         <Card
           title="Motoboys online"
-          value={`${motoboysOnline.length}`}
+          value={`${motoboysRealmenteOnline.length}`}
           icon={<User size={24} />}
-          description={`${motoboys.length} cadastrados no sistema`}
+          description={
+            motoboysComConexaoInterrompida.length > 0
+              ? `${motoboysComConexaoInterrompida.length} com conexão interrompida`
+              : `${motoboys.length} cadastrados no sistema`
+          }
           tone="orange"
         />
 
@@ -458,7 +470,13 @@ export default function Dashboard() {
       </div>
 
       <div className="mb-6">
-        <Panel title="Motoboys online">
+        <Panel
+          title={`Motoboys online (${motoboysRealmenteOnline.length})${
+            motoboysComConexaoInterrompida.length > 0
+              ? ` • ${motoboysComConexaoInterrompida.length} com conexão interrompida`
+              : ""
+          }`}
+        >
           {carregandoMotoboysOnline ? (
             <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center text-sm text-slate-500">
               Carregando posições dos motoboys...
@@ -841,9 +859,21 @@ function MotoboyOnlineCard({ motoboy }: { motoboy: MotoboyOnline }) {
     : "";
 
   return (
-    <article className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+    <article
+      className={`rounded-2xl border p-4 shadow-sm ${
+        motoboy.localizacaoRecente
+          ? "border-emerald-100 bg-white"
+          : "border-amber-200 bg-amber-50/60"
+      }`}
+    >
       <div className="flex items-start gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+        <div
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+            motoboy.localizacaoRecente
+              ? "bg-emerald-100 text-emerald-700"
+              : "bg-amber-100 text-amber-700"
+          }`}
+        >
           <Bike size={21} />
         </div>
 
@@ -858,7 +888,7 @@ function MotoboyOnlineCard({ motoboy }: { motoboy: MotoboyOnline }) {
                   : "bg-amber-100 text-amber-700"
               }`}
             >
-              {motoboy.localizacaoRecente ? "Localização recente" : "Localização atrasada"}
+              {motoboy.localizacaoRecente ? "Online" : "Conexão interrompida"}
             </span>
           </div>
 
