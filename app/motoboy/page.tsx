@@ -1468,11 +1468,13 @@ export default function MotoboyPage() {
     rotaDestaqueMapa?.polylineTotal || rotaDestaqueMapa?.polyline || null;
 
   const teleRotaAtivaMapa =
-    entregasAndamento.find((tele) => tele.rotaAtiva) || null;
+    entregasAndamento.find((tele) => tele.rotaAtiva) ||
+    entregasAndamento[0] ||
+    null;
 
-  const destinoRotaAtivaMapa = useMemo(() => {
+  const enderecosPendentesRotaAtivaMapa = useMemo(() => {
     if (!teleRotaAtivaMapa) {
-      return null;
+      return [];
     }
 
     const paradas = Array.isArray(teleRotaAtivaMapa.paradas)
@@ -1481,7 +1483,7 @@ export default function MotoboyPage() {
         )
       : [];
 
-    const indice = Math.max(
+    const indiceAtual = Math.max(
       0,
       Math.min(
         Number(teleRotaAtivaMapa.paradaAtualMotoboy || 0),
@@ -1489,17 +1491,22 @@ export default function MotoboyPage() {
       )
     );
 
-    return String(paradas[indice]?.endereco || "").trim() || null;
+    return paradas
+      .slice(indiceAtual)
+      .map((parada) => String(parada.endereco || "").trim())
+      .filter(Boolean);
   }, [teleRotaAtivaMapa]);
 
   const mapaRotaDinamicaSrc =
     teleRotaAtivaMapa &&
-    destinoRotaAtivaMapa &&
+    enderecosPendentesRotaAtivaMapa.length > 0 &&
     latitudeAtual !== null &&
     longitudeAtual !== null
-      ? `https://maps.google.com/maps?saddr=${latitudeAtual},${longitudeAtual}&daddr=${encodeURIComponent(
-          destinoRotaAtivaMapa
-        )}&dirflg=d&z=16&output=embed`
+      ? `https://maps.google.com/maps?saddr=${encodeURIComponent(
+          `${latitudeAtual},${longitudeAtual}`
+        )}&daddr=${enderecosPendentesRotaAtivaMapa
+          .map((endereco) => encodeURIComponent(endereco))
+          .join("+to:")}&dirflg=d&output=embed`
       : null;
 
   const mapaLocalizacaoSrc =
@@ -1723,7 +1730,8 @@ export default function MotoboyPage() {
                 <iframe
                   title="Mapa ampliado da rota ativa"
                   src={mapaRotaDinamicaSrc}
-                  className="h-full w-full border-0"
+                  className="pointer-events-auto h-full w-full border-0"
+                  style={{ touchAction: "pan-x pan-y pinch-zoom" }}
                   loading="eager"
                   allowFullScreen
                   referrerPolicy="no-referrer-when-downgrade"
@@ -1732,7 +1740,8 @@ export default function MotoboyPage() {
                 <iframe
                   title="Mapa ampliado da localização"
                   src={mapaLocalizacaoSrc}
-                  className="h-full w-full border-0"
+                  className="pointer-events-auto h-full w-full border-0"
+                  style={{ touchAction: "pan-x pan-y pinch-zoom" }}
                   loading="eager"
                   allowFullScreen
                   referrerPolicy="no-referrer-when-downgrade"
@@ -2287,14 +2296,118 @@ export default function MotoboyPage() {
         )}
 
         <section className="sm:mt-5">
-          <article className="w-full min-w-0 max-w-full overflow-hidden border-y border-slate-200 bg-white shadow-sm sm:rounded-[2rem] sm:border">
-            <div className="relative h-[68svh] min-h-[480px] max-h-[680px] w-full min-w-0 sm:h-[620px] sm:max-h-none">
+          <div className="border-y border-slate-200 bg-white px-3 py-3 shadow-sm sm:rounded-3xl sm:border sm:px-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <div
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${statusPainel.iconeClasse}`}
+              >
+                {statusPainel.tipo === "OFFLINE" ? (
+                  <WifiOff size={21} />
+                ) : (
+                  <Wifi size={21} />
+                )}
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                  <strong className="truncate text-sm text-slate-900 sm:text-base">
+                    {statusPainel.rotulo}
+                  </strong>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusPainel.badgeClasse}`}
+                  >
+                    {statusPainel.subtitulo}
+                  </span>
+                </div>
+
+                <p className="mt-1 truncate text-xs text-slate-500">
+                  {localizacaoAtualizadaEm
+                    ? `Localização ${formatarTempoLocalizacao(localizacaoAtualizadaEm)}`
+                    : "Aguardando localização"}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => void (online ? ficarOffline() : ficarOnline())}
+                disabled={
+                  alterandoPresenca ||
+                  verificandoPermissoes ||
+                  (executandoNoAppAndroid() &&
+                    !online &&
+                    permissoesLocalizacao !== null &&
+                    !permissoesLocalizacao.prontoParaFicarOnline)
+                }
+                className={`flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-2xl px-3 text-[11px] font-bold text-white transition disabled:cursor-wait disabled:opacity-60 ${
+                  online
+                    ? "bg-red-600 hover:bg-red-700"
+                    : "bg-emerald-600 hover:bg-emerald-700"
+                }`}
+              >
+                {alterandoPresenca ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : online ? (
+                  <WifiOff size={16} />
+                ) : (
+                  <Wifi size={16} />
+                )}
+                {online ? "Offline" : "Online"}
+              </button>
+            </div>
+
+            {statusPainel.tipo === "REDE_RUIM" && (
+              <div className="mt-3 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
+                Sinal ou precisão instáveis. Mantenha GPS e internet ativos.
+              </div>
+            )}
+          </div>
+
+          {teleDestaqueMapa && rotaDestaqueMapa && (
+            <div className="border-b border-slate-200 bg-slate-950 px-4 py-3 text-white sm:mt-3 sm:rounded-2xl sm:border-b-0">
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">
+                    {telesAguardandoAceite.some(
+                      (tele) => tele.id === teleDestaqueMapa.id
+                    )
+                      ? "Nova tele no mapa"
+                      : mapaRotaDinamicaSrc
+                        ? "Rota completa em andamento"
+                        : "Rota em andamento"}
+                  </p>
+                  <p className="mt-1 truncate text-sm font-bold">
+                    {teleDestaqueMapa.solicitante || "Solicitante não informado"}
+                  </p>
+                </div>
+
+                <div className="shrink-0 text-right text-[11px] leading-5 text-slate-200">
+                  <span className="block">
+                    Até coleta:{" "}
+                    {formatarDistancia(
+                      rotaDestaqueMapa.distanciaAteColetaKm || 0
+                    )}
+                  </span>
+                  <span className="block">
+                    Total:{" "}
+                    {formatarDistancia(
+                      rotaDestaqueMapa.distanciaTotalKm ||
+                        rotaDestaqueMapa.distanciaKm
+                    )}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <article className="w-full min-w-0 max-w-full overflow-hidden border-b border-slate-200 bg-white shadow-sm sm:mt-3 sm:rounded-[2rem] sm:border">
+            <div className="relative h-[64svh] min-h-[470px] max-h-[720px] w-full min-w-0 bg-slate-200 sm:h-[650px] sm:max-h-none">
               {mapaRotaDinamicaSrc ? (
                 <iframe
-                  key={`${teleRotaAtivaMapa?.id}-${latitudeAtual?.toFixed(5)}-${longitudeAtual?.toFixed(5)}-${destinoRotaAtivaMapa}`}
-                  title="Mapa acompanhando a rota ativa"
+                  key={`${teleRotaAtivaMapa?.id}-${latitudeAtual?.toFixed(5)}-${longitudeAtual?.toFixed(5)}-${enderecosPendentesRotaAtivaMapa.join("|")}`}
+                  title="Mapa interativo da rota completa"
                   src={mapaRotaDinamicaSrc}
-                  className="block h-full w-full min-w-0 max-w-full border-0"
+                  className="pointer-events-auto block h-full w-full min-w-0 max-w-full border-0"
+                  style={{ touchAction: "pan-x pan-y pinch-zoom" }}
                   loading="eager"
                   allowFullScreen
                   referrerPolicy="no-referrer-when-downgrade"
@@ -2303,16 +2416,17 @@ export default function MotoboyPage() {
                 <img
                   src={`/api/maps/imagem-rota?polyline=${encodeURIComponent(
                     polylineDestaqueMapa
-                  )}&versao=mapa-principal-operacional-1`}
+                  )}&versao=mapa-principal-operacional-2`}
                   alt="Rota em destaque no mapa principal"
-                  className="block h-full w-full min-w-0 max-w-full object-cover"
+                  className="block h-full w-full min-w-0 max-w-full object-contain"
                 />
               ) : mapaLocalizacaoSrc ? (
                 <iframe
-                  title="Mapa da sua localização"
+                  title="Mapa interativo da sua localização"
                   src={mapaLocalizacaoSrc}
-                  className="block h-full w-full min-w-0 max-w-full border-0"
-                  loading="lazy"
+                  className="pointer-events-auto block h-full w-full min-w-0 max-w-full border-0"
+                  style={{ touchAction: "pan-x pan-y pinch-zoom" }}
+                  loading="eager"
                   allowFullScreen
                   referrerPolicy="no-referrer-when-downgrade"
                 />
@@ -2332,160 +2446,47 @@ export default function MotoboyPage() {
                 </div>
               )}
 
-              <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-slate-950/10 via-transparent to-slate-950/70" />
-
-              <div className="absolute left-2.5 right-2.5 top-2.5 min-w-0 sm:left-5 sm:right-5 sm:top-5">
-                <div className="w-full min-w-0 max-w-full overflow-hidden rounded-3xl bg-white/95 p-3 shadow-xl backdrop-blur sm:p-4">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${statusPainel.iconeClasse}`}
-                    >
-                      {statusPainel.tipo === "OFFLINE" ? (
-                        <WifiOff size={21} />
-                      ) : (
-                        <Wifi size={21} />
-                      )}
-                    </div>
-
-                    <div className="min-w-0 flex-1 overflow-hidden">
-                      <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
-                        <strong className="truncate text-sm text-slate-900 sm:text-base">
-                          {statusPainel.rotulo}
-                        </strong>
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusPainel.badgeClasse}`}
-                        >
-                          {statusPainel.subtitulo}
-                        </span>
-                      </div>
-
-                      <p className="mt-1 truncate text-xs text-slate-500">
-                        {localizacaoAtualizadaEm
-                          ? `Localização ${formatarTempoLocalizacao(localizacaoAtualizadaEm)}`
-                          : "Aguardando localização"}
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => void (online ? ficarOffline() : ficarOnline())}
-                      disabled={
-                        alterandoPresenca ||
-                        verificandoPermissoes ||
-                        (executandoNoAppAndroid() &&
-                          !online &&
-                          permissoesLocalizacao !== null &&
-                          !permissoesLocalizacao.prontoParaFicarOnline)
-                      }
-                      className={`flex h-10 max-w-[38%] shrink-0 items-center justify-center gap-1.5 rounded-2xl px-2.5 text-[11px] font-bold text-white transition disabled:cursor-wait disabled:opacity-60 sm:max-w-none sm:px-3 sm:text-xs ${
-                        online
-                          ? "bg-red-600 hover:bg-red-700"
-                          : "bg-emerald-600 hover:bg-emerald-700"
-                      }`}
-                    >
-                      {alterandoPresenca ? (
-                        <Loader2 size={16} className="animate-spin" />
-                      ) : online ? (
-                        <WifiOff size={16} />
-                      ) : (
-                        <Wifi size={16} />
-                      )}
-                      {online ? "Offline" : "Online"}
-                    </button>
-                  </div>
-
-                  {statusPainel.tipo === "REDE_RUIM" && (
-                    <div className="mt-3 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
-                      Sinal ou precisão instáveis. Mantenha GPS e internet ativos.
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {teleDestaqueMapa && rotaDestaqueMapa && (
-                <div className="absolute left-2.5 right-2.5 top-[88px] min-w-0 sm:left-5 sm:right-auto sm:top-24 sm:w-80">
-                  <div className="w-full min-w-0 max-w-full overflow-hidden rounded-2xl bg-slate-950/90 px-3.5 py-3 text-white shadow-xl backdrop-blur sm:px-4">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">
-                      {telesAguardandoAceite.some(
-                        (tele) => tele.id === teleDestaqueMapa.id
-                      )
-                        ? "Nova tele no mapa"
-                        : mapaRotaDinamicaSrc
-                          ? "Acompanhando sua rota"
-                          : "Rota em andamento"}
-                    </p>
-                    <p className="mt-1 truncate text-sm font-bold">
-                      {teleDestaqueMapa.solicitante || "Solicitante não informado"}
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-200">
-                      <span>
-                        Até coleta:{" "}
-                        {formatarDistancia(
-                          rotaDestaqueMapa.distanciaAteColetaKm || 0
-                        )}
-                      </span>
-                      <span>
-                        Total:{" "}
-                        {formatarDistancia(
-                          rotaDestaqueMapa.distanciaTotalKm ||
-                            rotaDestaqueMapa.distanciaKm
-                        )}
-                      </span>
-                      <span>
-                        {Math.round(
-                          rotaDestaqueMapa.duracaoTotalMin ||
-                            rotaDestaqueMapa.duracaoMin
-                        )}{" "}
-                        min
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               <button
                 type="button"
                 onClick={() => setMapaExpandido(true)}
-                className="absolute bottom-[94px] right-2.5 z-20 flex h-11 items-center justify-center gap-2 rounded-2xl bg-slate-950/90 px-3 text-xs font-bold text-white shadow-xl backdrop-blur sm:bottom-[106px] sm:right-5"
+                className="absolute bottom-3 right-3 z-20 flex h-11 items-center justify-center gap-2 rounded-2xl bg-slate-950/95 px-3 text-xs font-bold text-white shadow-xl"
               >
                 <Maximize2 size={17} />
-                Ampliar mapa
+                Ampliar
               </button>
-
-              <div className="absolute bottom-2.5 left-2.5 right-2.5 min-w-0 sm:bottom-5 sm:left-5 sm:right-5">
-                <div className="grid min-w-0 grid-cols-3 gap-1.5 sm:gap-2">
-                  <div className="min-w-0 rounded-2xl bg-white/94 px-2.5 py-2.5 shadow-lg backdrop-blur sm:px-3 sm:py-3">
-                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
-                      Aguardando
-                    </p>
-                    <strong className="mt-1 block text-xl text-slate-900">
-                      {telesAguardandoAceite.length}
-                    </strong>
-                  </div>
-
-                  <div className="min-w-0 rounded-2xl bg-white/94 px-2.5 py-2.5 shadow-lg backdrop-blur sm:px-3 sm:py-3">
-                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
-                      Em rota
-                    </p>
-                    <strong className="mt-1 block text-xl text-slate-900">
-                      {entregasAndamento.length}
-                    </strong>
-                  </div>
-
-                  <div className="min-w-0 rounded-2xl bg-white/94 px-2.5 py-2.5 shadow-lg backdrop-blur sm:px-3 sm:py-3">
-                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
-                      Concluídas
-                    </p>
-                    <strong className="mt-1 block text-xl text-slate-900">
-                      {entregasConcluidas.length}
-                    </strong>
-                  </div>
-                </div>
-              </div>
             </div>
           </article>
 
-          <div className="mt-3 grid min-w-0 grid-cols-3 gap-1.5 px-3 sm:gap-2 sm:px-0">
+          <div className="grid min-w-0 grid-cols-3 gap-1.5 px-3 pt-3 sm:gap-2 sm:px-0">
+            <div className="min-w-0 rounded-2xl border border-slate-200 bg-white px-2.5 py-2.5 shadow-sm">
+              <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+                Aguardando
+              </p>
+              <strong className="mt-1 block text-xl text-slate-900">
+                {telesAguardandoAceite.length}
+              </strong>
+            </div>
+
+            <div className="min-w-0 rounded-2xl border border-slate-200 bg-white px-2.5 py-2.5 shadow-sm">
+              <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+                Em rota
+              </p>
+              <strong className="mt-1 block text-xl text-slate-900">
+                {entregasAndamento.length}
+              </strong>
+            </div>
+
+            <div className="min-w-0 rounded-2xl border border-slate-200 bg-white px-2.5 py-2.5 shadow-sm">
+              <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+                Concluídas
+              </p>
+              <strong className="mt-1 block text-xl text-slate-900">
+                {entregasConcluidas.length}
+              </strong>
+            </div>
+          </div>
+
+          <div className="mt-2 grid min-w-0 grid-cols-3 gap-1.5 px-3 sm:gap-2 sm:px-0">
             <div className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm sm:p-3">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                 Bruto hoje
