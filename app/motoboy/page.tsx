@@ -2438,6 +2438,7 @@ export default function MotoboyPage() {
                   key={tele.id}
                   tele={tele}
                   miniMapa={undefined}
+                  compacto
                   atualizando={teleAtualizando === tele.id}
                   bloqueado={Boolean(teleAtualizando)}
                   onAvancarEtapa={(etapa) => void avancarEtapaMotoboy(tele, etapa)}
@@ -2598,6 +2599,7 @@ function CardTele({
   tele,
   miniMapa,
   concluida = false,
+  compacto = false,
   atualizando,
   bloqueado,
   onAvancarEtapa,
@@ -2610,6 +2612,7 @@ function CardTele({
   tele: Tele;
   miniMapa?: EstadoMiniMapa;
   concluida?: boolean;
+  compacto?: boolean;
   atualizando: boolean;
   bloqueado: boolean;
   onAvancarEtapa: (etapa: EtapaMotoboyTele) => void;
@@ -2745,6 +2748,264 @@ function CardTele({
     cobrancaNaHora &&
     estaNoLocal &&
     saldoPendente > 0.009;
+
+  if (compacto && !concluida && tele.statusAceite === "ACEITA") {
+    const paradaFoco =
+      etapaAtual === "CHEGOU_NA_COLETA" || etapaAtual === "CHEGOU_NA_ENTREGA"
+        ? paradaLiberada
+        : paradaAtual;
+
+    const indiceParadaFoco =
+      paradaFoco?.id && paradaFoco.id === paradaLiberada?.id
+        ? indiceVisualAtual
+        : indiceParadaAtual;
+
+    const nomeParadaFoco = paradaFoco
+      ? tituloParada(paradaFoco, indiceParadaFoco)
+      : "Parada não informada";
+
+    const enderecoParadaFoco =
+      String(paradaFoco?.endereco || "").trim() || "Endereço não informado";
+
+    return (
+      <article className="p-4 sm:p-6">
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div
+            className={`px-4 py-3 sm:px-5 ${
+              tele.rotaAtiva
+                ? "bg-emerald-600 text-white"
+                : tele.aguardandoRetomada
+                  ? "bg-orange-500 text-white"
+                  : "bg-slate-950 text-white"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/70">
+                  {tele.rotaAtiva
+                    ? "Rota ativa"
+                    : tele.aguardandoRetomada
+                      ? "Rota pausada"
+                      : "Próxima tele"}
+                </p>
+                <h3 className="mt-1 truncate text-lg font-bold">
+                  {tele.solicitante || "Solicitante não informado"}
+                </h3>
+              </div>
+
+              <div className="shrink-0 text-right">
+                <p className="text-[10px] uppercase tracking-wide text-white/70">
+                  Seu líquido
+                </p>
+                <strong className="mt-1 block text-lg">
+                  {formatarMoeda(totalTele * 0.8)}
+                </strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 sm:p-5">
+            <div className="flex items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-100 text-blue-700">
+                <MapPin size={21} />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                  Destino atual
+                </p>
+                <h4 className="mt-1 text-base font-bold text-slate-900">
+                  {rotuloCurtoTipoParada(paradaFoco?.tipo)} • {nomeParadaFoco}
+                </h4>
+                <p className="mt-1 break-words text-sm leading-5 text-slate-500">
+                  {enderecoParadaFoco}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                Etapa atual
+              </p>
+              <p className="mt-1 text-sm font-semibold leading-5 text-slate-800">
+                {rotuloEtapaMotoboy(etapaAtual, paradaFoco)}
+              </p>
+            </div>
+
+            {observacao && (
+              <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-5 text-amber-800">
+                <strong>Observação:</strong> {observacao}
+              </div>
+            )}
+
+            {sugestaoGestor?.parada && (
+              <div className="mt-3 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-violet-700">
+                  Sugestão do gestor
+                </p>
+                <p className="mt-1 text-sm font-semibold text-slate-800">
+                  {rotuloCurtoTipoParada(sugestaoGestor.parada.tipo)}
+                  {sugestaoGestor.parada.cliente
+                    ? ` • ${sugestaoGestor.parada.cliente}`
+                    : ""}
+                </p>
+              </div>
+            )}
+
+            {precisaCobrar && (
+              <button
+                type="button"
+                onClick={onRegistrarPagamento}
+                disabled={bloqueado}
+                className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-amber-500 px-4 font-bold text-white transition hover:bg-amber-600 disabled:opacity-60"
+              >
+                {atualizando ? (
+                  <Loader2 size={18} className="animate-spin" />
+                ) : (
+                  <CircleDollarSign size={18} />
+                )}
+                Cobrar {formatarMoeda(saldoPendente)}
+              </button>
+            )}
+
+            {esperaAtiva && (
+              <div className="mt-4 flex items-center justify-between gap-4 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-orange-700">
+                    Tempo de espera
+                  </p>
+                  <strong className="mt-1 block text-xl tabular-nums text-slate-900">
+                    {formatarCronometroEspera(segundosEspera)}
+                  </strong>
+                </div>
+
+                <div className="text-right">
+                  <p className="text-xs text-slate-500">Acumulado</p>
+                  <strong className="mt-1 block text-orange-700">
+                    {formatarMoeda(Number(tele.espera || 0))}
+                  </strong>
+                </div>
+              </div>
+            )}
+
+            {tele.aguardandoRetomada && (
+              <div className="mt-4 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm leading-5 text-orange-800">
+                Esta rota está pausada. Retome quando voltar para esta tele.
+              </div>
+            )}
+
+            {acaoEtapa && (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => onAvancarEtapa(acaoEtapa.proximaEtapa)}
+                  disabled={bloqueado}
+                  className={`flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                    tele.aguardandoRetomada
+                      ? "bg-orange-600 hover:bg-orange-700"
+                      : acaoEtapa.proximaEtapa === "CONCLUIDA"
+                        ? "bg-emerald-600 hover:bg-emerald-700"
+                        : "bg-slate-950 hover:bg-slate-800"
+                  }`}
+                >
+                  {atualizando ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      Atualizando...
+                    </>
+                  ) : (
+                    <>
+                      {tele.aguardandoRetomada ? (
+                        <RefreshCw size={18} />
+                      ) : acaoEtapa.proximaEtapa === "CONCLUIDA" ? (
+                        <CheckCircle2 size={18} />
+                      ) : (
+                        <Route size={18} />
+                      )}
+                      {acaoEtapa.texto}
+                    </>
+                  )}
+                </button>
+
+                {(etapaAtual === "EM_ROTA_COLETA" ||
+                  etapaAtual === "EM_ROTA_ENTREGA") &&
+                  paradaAtual && (
+                    <button
+                      type="button"
+                      onClick={onAbrirMapaParadaAtual}
+                      disabled={bloqueado}
+                      className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      <MapPin size={18} />
+                      Abrir mapa
+                    </button>
+                  )}
+              </div>
+            )}
+
+            <details className="mt-4 rounded-2xl border border-slate-200 bg-white">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-slate-700">
+                Ver todos os detalhes da tele
+                <ChevronDown size={18} className="text-slate-400" />
+              </summary>
+
+              <div className="border-t border-slate-100 px-4 py-4">
+                <div className="space-y-3">
+                  {paradas.map((parada, indice) => (
+                    <div
+                      key={parada.id || `${tele.id}-compacta-${indice}`}
+                      className={`rounded-2xl border px-3 py-3 ${
+                        indice === indiceVisualAtual
+                          ? "border-blue-200 bg-blue-50"
+                          : "border-slate-200 bg-slate-50"
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <span
+                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                            indice === indiceVisualAtual
+                              ? "bg-blue-600 text-white"
+                              : "bg-slate-900 text-white"
+                          }`}
+                        >
+                          {indice + 1}
+                        </span>
+
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-800">
+                            {tituloParada(parada, indice)}
+                          </p>
+                          <p className="mt-1 break-words text-xs leading-5 text-slate-500">
+                            {parada.endereco || "Endereço não informado"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4 flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                  <div>
+                    <p className="text-xs text-slate-400">Valor da tele</p>
+                    <strong className="mt-1 block text-slate-900">
+                      {formatarMoeda(totalTele)}
+                    </strong>
+                  </div>
+
+                  <div className="text-right">
+                    <p className="text-xs text-slate-400">Seu líquido</p>
+                    <strong className="mt-1 block text-emerald-700">
+                      {formatarMoeda(totalTele * 0.8)}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+            </details>
+          </div>
+        </div>
+      </article>
+    );
+  }
 
   return (
     <article className="p-5 sm:p-6">
