@@ -241,11 +241,75 @@ model Motoboy {
   notificacoesGestor   NotificacaoGestor[]
   controlesDiarios     ControleDiarioMotoboy[]
   sessoesOnline        SessaoOnlineMotoboy[]
+  historicosMensais    HistoricoMensalMotoboy[]
+  importacoesHistorico ImportacaoHistoricoMotoboy[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([online, localizacaoAtualizadaEm])
+}
+
+model ImportacaoHistoricoMotoboy {
+  id String @id @default(cuid())
+
+  motoboyId String
+  motoboy   Motoboy @relation(fields: [motoboyId], references: [id], onDelete: Cascade)
+
+  nomeArquivo String
+  quantidade  Int    @default(0)
+
+  /**
+   * Identificador calculado a partir do arquivo para bloquear
+   * a importação acidental do mesmo conteúdo mais de uma vez.
+   */
+  hashArquivo String
+
+  historicos HistoricoMensalMotoboy[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([motoboyId, hashArquivo])
+  @@index([motoboyId, createdAt])
+}
+
+model HistoricoMensalMotoboy {
+  id String @id @default(cuid())
+
+  motoboyId String
+  motoboy   Motoboy @relation(fields: [motoboyId], references: [id], onDelete: Cascade)
+
+  importacaoId String?
+  importacao   ImportacaoHistoricoMotoboy? @relation(fields: [importacaoId], references: [id], onDelete: SetNull)
+
+  ano Int
+  mes Int
+
+  /**
+   * Ganhos antigos relacionados ao trabalho principal.
+   * Na planilha do Henrique corresponde à soma das colunas B e C.
+   */
+  faturamentoTrabalho Float @default(0)
+
+  /**
+   * Trabalhos externos, particulares ou extras.
+   * Na planilha do Henrique corresponde à coluna D.
+   */
+  feitoPorFora Float @default(0)
+
+  gasolina   Float @default(0)
+  manutencao Float @default(0)
+
+  diasTrabalhados Int?
+  observacoes     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([motoboyId, ano, mes])
+  @@index([motoboyId, ano, mes])
+  @@index([importacaoId])
 }
 
 model ControleDiarioMotoboy {
