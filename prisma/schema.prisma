@@ -239,6 +239,8 @@ model Motoboy {
   movimentos           MovimentoFinanceiroMotoboy[]
   itensFilaOperacional ItemFilaOperacionalMotoboy[]
   notificacoesGestor   NotificacaoGestor[]
+  controlesDiarios     ControleDiarioMotoboy[]
+  sessoesOnline        SessaoOnlineMotoboy[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -246,9 +248,105 @@ model Motoboy {
   @@index([online, localizacaoAtualizadaEm])
 }
 
+model ControleDiarioMotoboy {
+  id String @id @default(cuid())
+
+  motoboyId String
+  motoboy   Motoboy @relation(fields: [motoboyId], references: [id], onDelete: Cascade)
+
+  /**
+   * Dia operacional do motoboy.
+   * A aplicação deverá normalizar esta data para o fuso America/Sao_Paulo.
+   */
+  dataReferencia DateTime
+
+  /**
+   * Valor calculado pelas teles do Express Manager naquele dia.
+   * Será preenchido/recalculado pela API, não digitado manualmente.
+   */
+  valorExpressManager Float @default(0)
+
+  /**
+   * Ganhos pessoais informados pelo motoboy.
+   */
+  valorPorFora Float @default(0)
+
+  /**
+   * Despesas do dia.
+   */
+  gasolina       Float @default(0)
+  manutencao     Float @default(0)
+  alimentacao    Float @default(0)
+  outrasDespesas Float @default(0)
+
+  descricaoManutencao     String?
+  descricaoOutrasDespesas String?
+  observacoes             String?
+
+  /**
+   * Hodômetro informado manualmente.
+   */
+  kmInicial Float?
+  kmFinal   Float?
+
+  /**
+   * Totais automáticos obtidos pelas sessões online.
+   */
+  kmOnlineTotal       Float @default(0)
+  tempoOnlineSegundos Int   @default(0)
+
+  sessoesOnline SessaoOnlineMotoboy[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([motoboyId, dataReferencia])
+  @@index([motoboyId, dataReferencia])
+}
+
+model SessaoOnlineMotoboy {
+  id String @id @default(cuid())
+
+  motoboyId String
+  motoboy   Motoboy @relation(fields: [motoboyId], references: [id], onDelete: Cascade)
+
+  controleDiarioId String
+  controleDiario   ControleDiarioMotoboy @relation(fields: [controleDiarioId], references: [id], onDelete: Cascade)
+
+  iniciadaEm  DateTime  @default(now())
+  encerradaEm DateTime?
+
+  /**
+   * Totais acumulados somente com pontos considerados válidos.
+   */
+  kmOnline      Float @default(0)
+  tempoSegundos Int   @default(0)
+
+  /**
+   * Último ponto aceito para calcular o próximo trecho.
+   */
+  ultimaLatitude      Float?
+  ultimaLongitude     Float?
+  ultimaPrecisao      Float?
+  ultimaLocalizacaoEm DateTime?
+
+  /**
+   * Contadores úteis para auditoria dos filtros de GPS.
+   */
+  pontosAceitos     Int @default(0)
+  pontosDescartados Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([motoboyId, iniciadaEm])
+  @@index([motoboyId, encerradaEm])
+  @@index([controleDiarioId, iniciadaEm])
+}
+
 model Tele {
   orcamento Boolean @default(false)
-  id String @id @default(cuid())
+  id        String  @id @default(cuid())
 
   clienteId String?
   cliente   Cliente? @relation(fields: [clienteId], references: [id])
