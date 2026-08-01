@@ -2472,7 +2472,7 @@ export default function MotoboyPage() {
           )}
 
           <article className="w-full min-w-0 max-w-full overflow-hidden border-b border-slate-200 bg-white shadow-sm sm:mt-3 sm:rounded-[2rem] sm:border">
-            <div className="relative h-[70svh] min-h-[540px] max-h-[820px] w-full min-w-0 overscroll-contain bg-slate-200 sm:h-[680px] sm:max-h-none">
+            <div className="relative h-[52svh] min-h-[390px] max-h-[560px] w-full min-w-0 overscroll-contain bg-slate-200 sm:h-[560px] sm:max-h-none">
               {mapaRotaDinamicaSrc ? (
                 <iframe
                   key={`${teleRotaAtivaMapa?.id}-${latitudeAtual?.toFixed(5)}-${longitudeAtual?.toFixed(5)}-${enderecosPendentesRotaAtivaMapa.join("|")}`}
@@ -2904,7 +2904,7 @@ function PainelAceiteTele({
           </div>
         </div>
 
-        <div className="p-4 sm:p-5">
+        <div className="p-3.5 sm:p-5">
           <div className="flex items-start gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white">
               <MapPin size={19} />
@@ -2925,7 +2925,7 @@ function PainelAceiteTele({
             </div>
           </div>
 
-          <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
+          <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
             <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-700">
@@ -2941,7 +2941,7 @@ function PainelAceiteTele({
               </span>
             </div>
 
-            <div className="h-[300px] w-full min-w-0 bg-slate-200 sm:h-[360px]">
+            <div className="h-[235px] w-full min-w-0 bg-slate-200 sm:h-[300px]">
               {mapaPreviewSrc ? (
                 <iframe
                   title="Prévia interativa da rota antes do aceite"
@@ -2984,7 +2984,7 @@ function PainelAceiteTele({
             </div>
           ) : null}
 
-          <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="mt-3 grid grid-cols-2 gap-2.5">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
               <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
                 Valor da tele
@@ -3004,7 +3004,7 @@ function PainelAceiteTele({
             </div>
           </div>
 
-          <div className="mt-4 grid min-w-0 grid-cols-2 gap-2.5 sm:mt-5 sm:gap-3">
+          <div className="sticky bottom-0 z-20 -mx-3.5 mt-3 grid min-w-0 grid-cols-2 gap-2.5 border-t border-slate-200 bg-white/95 px-3.5 pb-1 pt-3 backdrop-blur sm:static sm:mx-0 sm:mt-5 sm:gap-3 sm:border-0 sm:bg-transparent sm:px-0 sm:pb-0 sm:pt-0 sm:backdrop-blur-none">
             <button
               type="button"
               onClick={onRecusar}
@@ -4024,7 +4024,11 @@ function MetricasRota({
           : "border-slate-200 bg-slate-50"
       }`}
     >
-      <div className="grid grid-cols-2 divide-x divide-y divide-slate-200 sm:grid-cols-3 sm:divide-y-0">
+      <div className={`grid divide-x divide-slate-200 ${
+        destaque
+          ? "grid-cols-3"
+          : "grid-cols-2 divide-y sm:grid-cols-3 sm:divide-y-0"
+      }`}>
         <MetricaRota
           titulo="Até a coleta"
           valor={formatarDistancia(distanciaAteColeta)}
@@ -4039,7 +4043,7 @@ function MetricasRota({
           titulo="Total estimado"
           valor={formatarDistancia(distanciaTotal)}
           detalhe={`${Math.round(duracaoTotal)} min`}
-          classeExtra="col-span-2 sm:col-span-1"
+          classeExtra={destaque ? "" : "col-span-2 sm:col-span-1"}
         />
       </div>
 
