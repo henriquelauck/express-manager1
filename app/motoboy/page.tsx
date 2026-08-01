@@ -1481,71 +1481,53 @@ export default function MotoboyPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-5 sm:px-6 sm:py-7">
+    <main className="min-h-screen bg-slate-50 px-0 py-0 sm:px-6 sm:py-7">
       <div className="mx-auto w-full max-w-6xl">
-        <header className="overflow-hidden rounded-3xl bg-slate-950 text-white shadow-lg">
-          <div className="relative p-5 sm:p-7">
+        <header className="bg-slate-950 text-white shadow-lg sm:rounded-3xl">
+          <div className="relative px-4 pb-4 pt-[calc(env(safe-area-inset-top)+14px)] sm:p-7">
             <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-emerald-500/20 blur-3xl" />
 
-            <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex items-start gap-4">
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-slate-950">
-                  <Bike size={27} />
+            <div className="relative flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-slate-950 sm:h-14 sm:w-14">
+                  <Bike size={24} />
                 </div>
 
-                <div>
-                  <p className="text-sm font-medium text-emerald-300">Área do motoboy</p>
-
-                  <h1 className="mt-1 text-2xl font-bold sm:text-3xl">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
+                    Express Manager
+                  </p>
+                  <h1 className="truncate text-lg font-bold sm:text-3xl">
                     Olá, {usuario?.nome || "Motoboy"}
                   </h1>
-
-                  <p className="mt-2 text-sm leading-6 text-slate-300">
-                    Acompanhe suas entregas e atualize o andamento.
-                  </p>
                 </div>
               </div>
 
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <Link
-                  href="/motoboy/minha-operacao"
-                  className="flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 font-semibold text-slate-950 transition hover:bg-emerald-400"
-                >
-                  <CircleDollarSign size={18} />
-                  Minha operação
-                </Link>
-
-                <Link
-                  href="/motoboy/extrato"
-                  className="flex h-12 items-center justify-center gap-2 rounded-xl bg-white px-5 font-semibold text-slate-900 transition hover:bg-slate-100"
-                >
-                  <WalletCards size={18} />
-                  Ver extrato
-                </Link>
-
+              <div className="flex shrink-0 items-center gap-2">
                 <button
                   type="button"
                   onClick={() => void carregarDados(true)}
                   disabled={atualizando || Boolean(teleAtualizando)}
-                  className="flex h-12 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-5 font-semibold text-white transition hover:bg-white/15 disabled:opacity-60"
+                  aria-label="Atualizar painel"
+                  title="Atualizar"
+                  className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white transition hover:bg-white/15 disabled:opacity-60"
                 >
-                  <RefreshCw size={18} className={atualizando ? "animate-spin" : ""} />
-                  Atualizar
+                  <RefreshCw size={19} className={atualizando ? "animate-spin" : ""} />
                 </button>
 
                 <button
                   type="button"
                   onClick={() => void sair()}
-                  className="flex h-12 items-center justify-center gap-2 rounded-xl border border-red-400/30 bg-red-500/10 px-5 font-semibold text-red-200 transition hover:bg-red-500/20"
+                  aria-label="Sair do aplicativo"
+                  title="Sair"
+                  className="flex h-11 w-11 items-center justify-center rounded-2xl border border-red-400/30 bg-red-500/10 text-red-200 transition hover:bg-red-500/20"
                 >
-                  <LogOut size={18} />
-                  Sair
+                  <LogOut size={19} />
                 </button>
               </div>
             </div>
           </div>
         </header>
-
         {executandoNoAppAndroid() && atualizacaoDisponivel && (
           <section className="mt-5 overflow-hidden rounded-3xl border border-blue-300 bg-blue-50 shadow-sm">
             <div className="p-5 sm:p-6">
@@ -1605,7 +1587,7 @@ export default function MotoboyPage() {
 
         {executandoNoAppAndroid() && permissoesLocalizacao && (
           preparacaoCompleta && !preparacaoExpandida ? (
-            <section className="mt-5 overflow-hidden rounded-3xl border border-emerald-300 bg-emerald-50 shadow-sm">
+            <section className="mt-5 hidden overflow-hidden rounded-3xl border border-emerald-300 bg-emerald-50 shadow-sm sm:block">
               <button
                 type="button"
                 onClick={() => setPreparacaoExpandida(true)}
@@ -1845,9 +1827,9 @@ export default function MotoboyPage() {
           )
         )}
 
-        <section className="mt-5 grid gap-5 xl:grid-cols-[1.35fr_0.95fr]">
-          <article className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
-            <div className="relative h-[360px] sm:h-[430px]">
+        <section className="sm:mt-5">
+          <article className="overflow-hidden border-y border-slate-200 bg-white shadow-sm sm:rounded-[2rem] sm:border">
+            <div className="relative h-[500px] sm:h-[520px]">
               {mapaLocalizacaoSrc ? (
                 <iframe
                   title="Mapa da sua localização"
@@ -1862,288 +1844,179 @@ export default function MotoboyPage() {
                     <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-emerald-100 text-emerald-700">
                       <MapPin size={30} />
                     </div>
-
                     <h2 className="mt-5 text-2xl font-bold text-slate-900">
                       Mapa da sua operação
                     </h2>
-
                     <p className="mt-3 text-sm leading-6 text-slate-600">
-                      Assim que você ficar online e enviar sua localização, o mapa da tela inicial
-                      mostrará sua posição atual.
+                      Fique online para mostrar sua posição atual e começar a receber teles.
                     </p>
                   </div>
                 </div>
               )}
 
-              <div className="absolute inset-0 bg-gradient-to-b from-slate-950/10 via-transparent to-slate-950/65" />
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-slate-950/10 via-transparent to-slate-950/70" />
 
-              <div className="absolute left-4 right-4 top-4 sm:left-5 sm:right-5">
-                <div className="rounded-[1.75rem] bg-white/95 p-4 shadow-xl backdrop-blur">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-slate-950 shadow-sm">
-                        <Bike size={24} />
-                      </div>
-
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
-                          Express Manager
-                        </p>
-
-                        <h2 className="mt-1 text-lg font-bold text-slate-900">
-                          Painel do motoboy
-                        </h2>
-
-                        <p className="mt-1 text-sm text-slate-500">
-                          {statusPainel.descricao}
-                        </p>
-                      </div>
-                    </div>
-
-                    <span
-                      className={`inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold ${statusPainel.badgeClasse}`}
+              <div className="absolute left-3 right-3 top-3 sm:left-5 sm:right-5 sm:top-5">
+                <div className="rounded-3xl bg-white/95 p-3 shadow-xl backdrop-blur sm:p-4">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${statusPainel.iconeClasse}`}
                     >
                       {statusPainel.tipo === "OFFLINE" ? (
-                        <WifiOff size={15} />
+                        <WifiOff size={21} />
                       ) : (
-                        <Wifi size={15} />
+                        <Wifi size={21} />
                       )}
-                      {statusPainel.subtitulo}
-                    </span>
-                  </div>
+                    </div>
 
-                  <div className="mt-4 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                    {mapaLocalizacaoSrc ? (
-                      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-                        <span className="flex items-center gap-1.5 font-medium text-slate-800">
-                          <LocateFixed size={14} />
-                          {localizacaoAtualizadaEm
-                            ? `Atualizada ${formatarTempoLocalizacao(localizacaoAtualizadaEm)}`
-                            : "Aguardando atualização"}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <strong className="text-base text-slate-900">
+                          {statusPainel.rotulo}
+                        </strong>
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusPainel.badgeClasse}`}
+                        >
+                          {statusPainel.subtitulo}
                         </span>
-
-                        {precisaoLocalizacao !== null && (
-                          <span>Precisão aproximada: {Math.round(precisaoLocalizacao)} m</span>
-                        )}
-
-                        {segundosSemAtualizacao !== null && (
-                          <span>{segundosSemAtualizacao}s desde o último envio</span>
-                        )}
                       </div>
-                    ) : (
-                      "Sem localização ativa no momento. Toque em “Ficar online” para compartilhar sua posição."
-                    )}
+
+                      <p className="mt-1 truncate text-xs text-slate-500">
+                        {localizacaoAtualizadaEm
+                          ? `Localização ${formatarTempoLocalizacao(localizacaoAtualizadaEm)}`
+                          : "Aguardando localização"}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => void (online ? ficarOffline() : ficarOnline())}
+                      disabled={
+                        alterandoPresenca ||
+                        verificandoPermissoes ||
+                        (executandoNoAppAndroid() &&
+                          !online &&
+                          permissoesLocalizacao !== null &&
+                          !permissoesLocalizacao.prontoParaFicarOnline)
+                      }
+                      className={`flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-2xl px-3 text-xs font-bold text-white transition disabled:cursor-wait disabled:opacity-60 ${
+                        online
+                          ? "bg-red-600 hover:bg-red-700"
+                          : "bg-emerald-600 hover:bg-emerald-700"
+                      }`}
+                    >
+                      {alterandoPresenca ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : online ? (
+                        <WifiOff size={16} />
+                      ) : (
+                        <Wifi size={16} />
+                      )}
+                      {online ? "Sair" : "Entrar"}
+                    </button>
                   </div>
+
+                  {statusPainel.tipo === "REDE_RUIM" && (
+                    <div className="mt-3 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
+                      Sinal ou precisão instáveis. Mantenha GPS e internet ativos.
+                    </div>
+                  )}
                 </div>
               </div>
 
-              <div className="absolute bottom-4 left-4 right-4 sm:left-5 sm:right-5">
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="rounded-2xl bg-white/92 p-3 shadow-lg backdrop-blur">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              <div className="absolute bottom-3 left-3 right-3 sm:bottom-5 sm:left-5 sm:right-5">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-2xl bg-white/94 px-3 py-3 shadow-lg backdrop-blur">
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
                       Aguardando
                     </p>
-                    <strong className="mt-1 block text-lg text-slate-900">
+                    <strong className="mt-1 block text-xl text-slate-900">
                       {telesAguardandoAceite.length}
                     </strong>
-                    <span className="text-xs text-slate-500">novas teles</span>
                   </div>
 
-                  <div className="rounded-2xl bg-white/92 p-3 shadow-lg backdrop-blur">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                      Em andamento
+                  <div className="rounded-2xl bg-white/94 px-3 py-3 shadow-lg backdrop-blur">
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+                      Em rota
                     </p>
-                    <strong className="mt-1 block text-lg text-slate-900">
+                    <strong className="mt-1 block text-xl text-slate-900">
                       {entregasAndamento.length}
                     </strong>
-                    <span className="text-xs text-slate-500">rotas ativas</span>
                   </div>
 
-                  <div className="rounded-2xl bg-white/92 p-3 shadow-lg backdrop-blur">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  <div className="rounded-2xl bg-white/94 px-3 py-3 shadow-lg backdrop-blur">
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
                       Concluídas
                     </p>
-                    <strong className="mt-1 block text-lg text-slate-900">
+                    <strong className="mt-1 block text-xl text-slate-900">
                       {entregasConcluidas.length}
                     </strong>
-                    <span className="text-xs text-slate-500">no dia</span>
                   </div>
                 </div>
               </div>
             </div>
           </article>
 
-          <article
-            className={`overflow-hidden rounded-[2rem] border shadow-sm ${statusPainel.painelClasse}`}
-          >
-            <div className="p-5 sm:p-6">
-              <div className="flex items-start gap-4">
-                <div
-                  className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${statusPainel.iconeClasse}`}
-                >
-                  {statusPainel.tipo === "OFFLINE" ? (
-                    <WifiOff size={26} />
-                  ) : (
-                    <Wifi size={26} />
-                  )}
-                </div>
+          <div className="grid grid-cols-2 gap-3 px-4 pt-4 sm:px-0">
+            <Link
+              href="/motoboy/minha-operacao"
+              className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-slate-900 px-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+            >
+              <CircleDollarSign size={19} />
+              Minha operação
+            </Link>
 
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-slate-500">Status da operação</p>
+            <Link
+              href="/motoboy/extrato"
+              className="flex h-14 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+            >
+              <WalletCards size={19} />
+              Extrato
+            </Link>
+          </div>
 
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <h2 className="text-2xl font-bold text-slate-900">{statusPainel.rotulo}</h2>
-
-                    <span
-                      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${statusPainel.badgeClasse}`}
-                    >
-                      {statusPainel.subtitulo}
-                    </span>
-                  </div>
-
-                  <p className="mt-3 text-sm leading-6 text-slate-600">
-                    {statusPainel.descricao}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-2xl bg-white/85 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Localização
-                  </p>
-                  <p className="mt-2 text-base font-semibold text-slate-900">
-                    {localizacaoAtualizadaEm
-                      ? `Atualizada ${formatarTempoLocalizacao(localizacaoAtualizadaEm)}`
-                      : "Aguardando posição"}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {mapaLocalizacaoSrc
-                      ? "Mapa carregado na tela inicial."
-                      : "Fique online para ativar o mapa."}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl bg-white/85 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Precisão / sinal
-                  </p>
-                  <p className="mt-2 text-base font-semibold text-slate-900">
-                    {precisaoLocalizacao !== null
-                      ? `${Math.round(precisaoLocalizacao)} m`
-                      : online
-                        ? "Aguardando precisão"
-                        : "Sem leitura"}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {statusPainel.tipo === "REDE_RUIM"
-                      ? "Seu aparelho está ativo, mas com sinal ou precisão instáveis."
-                      : "Quanto menor a precisão em metros, melhor."}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl bg-white/85 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Aguardando aceite
-                  </p>
-                  <p className="mt-2 text-base font-semibold text-slate-900">
-                    {telesAguardandoAceite.length} tele(s)
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Responda as novas teles dentro do prazo.
-                  </p>
-                </div>
-
-                <div className="rounded-2xl bg-white/85 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Rotas em andamento
-                  </p>
-                  <p className="mt-2 text-base font-semibold text-slate-900">
-                    {entregasAndamento.length} ativa(s)
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Apenas uma rota segue ativa por vez.
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={() => void (online ? ficarOffline() : ficarOnline())}
-                  disabled={
-                    alterandoPresenca ||
-                    verificandoPermissoes ||
-                    (executandoNoAppAndroid() &&
-                      !online &&
-                      permissoesLocalizacao !== null &&
-                      !permissoesLocalizacao.prontoParaFicarOnline)
-                  }
-                  className={`flex h-12 items-center justify-center gap-2 rounded-2xl px-5 font-semibold text-white transition disabled:cursor-wait disabled:opacity-60 ${
-                    online ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"
-                  }`}
-                >
-                  {alterandoPresenca ? (
-                    <>
-                      <Loader2 size={18} className="animate-spin" />
-                      Aguarde...
-                    </>
-                  ) : online ? (
-                    <>
-                      <WifiOff size={18} />
-                      Ficar offline
-                    </>
-                  ) : (
-                    <>
-                      <Wifi size={18} />
-                      Ficar online
-                    </>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => void carregarDados(true)}
-                  disabled={atualizando || Boolean(teleAtualizando)}
-                  className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-5 font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
-                >
-                  <RefreshCw size={18} className={atualizando ? "animate-spin" : ""} />
-                  Atualizar painel
-                </button>
-
-                <Link
-                  href="/motoboy/minha-operacao"
-                  className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 font-semibold text-white transition hover:bg-slate-800"
-                >
-                  <CircleDollarSign size={18} />
-                  Minha operação
-                </Link>
-
-                <Link
-                  href="/motoboy/extrato"
-                  className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-5 font-semibold text-slate-700 transition hover:bg-slate-50"
-                >
-                  <WalletCards size={18} />
-                  Ver extrato
-                </Link>
-              </div>
-
-              {erroLocalizacao && (
-                <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                  {erroLocalizacao}
-                </div>
-              )}
+          <div className="mt-3 grid grid-cols-3 gap-2 px-4 sm:px-0">
+            <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                Bruto hoje
+              </p>
+              <strong className="mt-1 block text-sm text-slate-900">
+                {formatarMoeda(brutoHoje)}
+              </strong>
             </div>
-          </article>
+
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 shadow-sm">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600">
+                Seu líquido
+              </p>
+              <strong className="mt-1 block text-sm text-emerald-800">
+                {formatarMoeda(liquidoHoje)}
+              </strong>
+            </div>
+
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-3 shadow-sm">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">
+                Recebido
+              </p>
+              <strong className="mt-1 block text-sm text-blue-800">
+                {formatarMoeda(recebidoHoje)}
+              </strong>
+            </div>
+          </div>
+
+          {erroLocalizacao && (
+            <div className="mx-4 mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 sm:mx-0">
+              {erroLocalizacao}
+            </div>
+          )}
         </section>
-
         {erro && (
-          <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="mx-4 mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 sm:mx-0">
             {erro}
           </div>
         )}
 
-        <section className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-5">
+        <section className="mt-6 hidden grid-cols-2 gap-4 sm:grid lg:grid-cols-5">
           <CardResumo
             titulo="Entregas hoje"
             valor={String(telesHoje.length)}
@@ -2184,7 +2057,7 @@ export default function MotoboyPage() {
         </section>
 
         <section
-          className={`mt-6 overflow-hidden rounded-3xl border shadow-sm ${
+          className={`mt-6 hidden overflow-hidden rounded-3xl border shadow-sm sm:block ${
             ganhouTrocaOleo
               ? "border-emerald-600 bg-emerald-600 text-white"
               : "border-slate-200 bg-white text-slate-900"
@@ -2273,7 +2146,7 @@ export default function MotoboyPage() {
         </section>
 
         {telesAguardandoAceite.length > 0 && (
-          <section className="mt-8 overflow-hidden rounded-3xl border border-amber-200 bg-white shadow-sm">
+          <section className="mx-4 mt-6 overflow-hidden rounded-3xl border border-amber-200 bg-white shadow-sm sm:mx-0 sm:mt-8">
             <CabecalhoSecao
               titulo="Novas teles aguardando aceite"
               descricao="Confira os dados e aceite ou recuse antes de iniciar."
@@ -2301,7 +2174,7 @@ export default function MotoboyPage() {
           </section>
         )}
 
-        <section className="mt-8 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <section className="mx-4 mt-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm sm:mx-0 sm:mt-8">
           <CabecalhoSecao
             titulo="Entregas em andamento"
             descricao="Atualize cada etapa conforme o serviço avança."
@@ -2338,7 +2211,7 @@ export default function MotoboyPage() {
           )}
         </section>
 
-        <section className="mt-8 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <section className="mx-4 mt-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm sm:mx-0 sm:mt-8">
           <CabecalhoSecao
             titulo="Entregas concluídas"
             descricao="Teles finalizadas hoje."
