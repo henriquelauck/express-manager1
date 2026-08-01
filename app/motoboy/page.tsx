@@ -1433,6 +1433,14 @@ export default function MotoboyPage() {
 
               <div className="flex flex-col gap-3 sm:flex-row">
                 <Link
+                  href="/motoboy/minha-operacao"
+                  className="flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 font-semibold text-slate-950 transition hover:bg-emerald-400"
+                >
+                  <CircleDollarSign size={18} />
+                  Minha operação
+                </Link>
+
+                <Link
                   href="/motoboy/extrato"
                   className="flex h-12 items-center justify-center gap-2 rounded-xl bg-white px-5 font-semibold text-slate-900 transition hover:bg-slate-100"
                 >
