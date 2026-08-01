@@ -65,8 +65,13 @@ type EstadoPermissoesLocalizacao = {
   localizacaoDuranteUso: boolean;
   localizacaoSegundoPlano: boolean;
   notificacoes: boolean;
+  bateriaSemRestricao: boolean;
+  gpsAtivo: boolean;
+  servicoAtivo: boolean;
   prontoParaFicarOnline: boolean;
   precisaAbrirConfiguracoes: boolean;
+  precisaCorrigirBateria?: boolean;
+  precisaAtivarGps?: boolean;
 };
 
 type LocalizacaoNativaPlugin = {
@@ -75,6 +80,8 @@ type LocalizacaoNativaPlugin = {
   pararSomAlerta(): Promise<{ parado: boolean }>;
   verificarPermissoes(): Promise<EstadoPermissoesLocalizacao>;
   abrirConfiguracoesLocalizacao(): Promise<{ aberto: boolean }>;
+  abrirConfiguracoesBateria(): Promise<{ aberto: boolean; fallback?: boolean }>;
+  abrirConfiguracoesGps(): Promise<{ aberto: boolean }>;
 };
 
 type CredenciaisNativasPlugin = {
@@ -220,6 +227,8 @@ export default function MotoboyPage() {
     useState<EstadoPermissoesLocalizacao | null>(null);
   const [verificandoPermissoes, setVerificandoPermissoes] = useState(false);
   const [abrindoConfiguracoes, setAbrindoConfiguracoes] = useState(false);
+  const [abrindoConfiguracoesBateria, setAbrindoConfiguracoesBateria] = useState(false);
+  const [abrindoConfiguracoesGps, setAbrindoConfiguracoesGps] = useState(false);
   const [atualizacaoDisponivel, setAtualizacaoDisponivel] =
     useState<VersaoAplicativo | null>(null);
   const [versaoInstalada, setVersaoInstalada] = useState<string | null>(null);
@@ -276,6 +285,48 @@ export default function MotoboyPage() {
       );
     } finally {
       setAbrindoConfiguracoes(false);
+    }
+  }
+
+  async function abrirConfiguracoesDaBateria() {
+    if (!executandoNoAppAndroid() || abrindoConfiguracoesBateria) {
+      return;
+    }
+
+    setAbrindoConfiguracoesBateria(true);
+    setErroLocalizacao("");
+
+    try {
+      await LocalizacaoNativa.abrirConfiguracoesBateria();
+    } catch (erroConfiguracoes) {
+      setErroLocalizacao(
+        erroConfiguracoes instanceof Error
+          ? erroConfiguracoes.message
+          : "Não foi possível abrir as configurações de bateria."
+      );
+    } finally {
+      setAbrindoConfiguracoesBateria(false);
+    }
+  }
+
+  async function abrirConfiguracoesDoGps() {
+    if (!executandoNoAppAndroid() || abrindoConfiguracoesGps) {
+      return;
+    }
+
+    setAbrindoConfiguracoesGps(true);
+    setErroLocalizacao("");
+
+    try {
+      await LocalizacaoNativa.abrirConfiguracoesGps();
+    } catch (erroConfiguracoes) {
+      setErroLocalizacao(
+        erroConfiguracoes instanceof Error
+          ? erroConfiguracoes.message
+          : "Não foi possível abrir as configurações de GPS."
+      );
+    } finally {
+      setAbrindoConfiguracoesGps(false);
     }
   }
 
@@ -1362,62 +1413,156 @@ export default function MotoboyPage() {
           </section>
         )}
 
-        {executandoNoAppAndroid() &&
-          permissoesLocalizacao &&
-          !permissoesLocalizacao.prontoParaFicarOnline && (
-            <section className="mt-5 overflow-hidden rounded-3xl border border-amber-300 bg-amber-50 shadow-sm">
-              <div className="p-5 sm:p-6">
-                <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-                  <div className="flex items-start gap-4">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-500 text-white">
-                      <LocateFixed size={23} />
-                    </div>
+        {executandoNoAppAndroid() && permissoesLocalizacao && (
+          <section
+            className={`mt-5 overflow-hidden rounded-3xl border shadow-sm ${
+              permissoesLocalizacao.prontoParaFicarOnline
+                ? "border-emerald-300 bg-emerald-50"
+                : "border-amber-300 bg-amber-50"
+            }`}
+          >
+            <div className="p-5 sm:p-6">
+              <div className="flex items-start gap-4">
+                <div
+                  className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${
+                    permissoesLocalizacao.prontoParaFicarOnline
+                      ? "bg-emerald-600 text-white"
+                      : "bg-amber-500 text-white"
+                  }`}
+                >
+                  {permissoesLocalizacao.prontoParaFicarOnline ? (
+                    <CheckCircle2 size={23} />
+                  ) : (
+                    <LocateFixed size={23} />
+                  )}
+                </div>
 
-                    <div>
-                      <p className="text-sm font-semibold text-amber-700">Permissão obrigatória</p>
+                <div className="min-w-0 flex-1">
+                  <p
+                    className={`text-sm font-semibold ${
+                      permissoesLocalizacao.prontoParaFicarOnline
+                        ? "text-emerald-700"
+                        : "text-amber-700"
+                    }`}
+                  >
+                    Preparação obrigatória
+                  </p>
 
-                      <h2 className="mt-1 text-xl font-bold text-slate-900">
-                        Ative a localização em segundo plano
-                      </h2>
+                  <h2 className="mt-1 text-xl font-bold text-slate-900">
+                    {permissoesLocalizacao.prontoParaFicarOnline
+                      ? "Celular preparado para operar"
+                      : "Conclua as configurações abaixo"}
+                  </h2>
 
-                      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-700">
-                        Para receber e realizar entregas, permita o acesso à localização em segundo
-                        plano. Assim, sua posição continuará sendo atualizada mesmo com a tela
-                        bloqueada. Ao tocar em “Ficar offline”, o compartilhamento da localização
-                        será encerrado.
-                      </p>
+                  <p className="mt-2 text-sm leading-6 text-slate-700">
+                    O Express Manager precisa dessas permissões para receber teles e continuar
+                    enviando a localização com o aplicativo minimizado ou com a tela bloqueada.
+                  </p>
 
-                      <div className="mt-4 rounded-2xl border border-amber-200 bg-white/80 px-4 py-3 text-sm leading-6 text-slate-700">
-                        Abra as configurações e selecione:
-                        <strong className="ml-1">
-                          Permissões → Localização → Permitir o tempo todo
-                        </strong>
-                      </div>
-                    </div>
+                  <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <ItemPreparacao
+                      pronto={permissoesLocalizacao.localizacaoDuranteUso}
+                      titulo="Localização"
+                      descricao="Acesso durante o uso"
+                    />
+                    <ItemPreparacao
+                      pronto={permissoesLocalizacao.localizacaoSegundoPlano}
+                      titulo="Segundo plano"
+                      descricao='Permitir o tempo todo'
+                    />
+                    <ItemPreparacao
+                      pronto={permissoesLocalizacao.notificacoes}
+                      titulo="Notificações"
+                      descricao="Avisos e serviço permanente"
+                    />
+                    <ItemPreparacao
+                      pronto={permissoesLocalizacao.gpsAtivo}
+                      titulo="GPS"
+                      descricao="Localização do aparelho ligada"
+                    />
+                    <ItemPreparacao
+                      pronto={permissoesLocalizacao.bateriaSemRestricao}
+                      titulo="Bateria"
+                      descricao="Express Manager sem otimização"
+                    />
+                    <ItemPreparacao
+                      pronto={online ? permissoesLocalizacao.servicoAtivo : true}
+                      titulo="Serviço nativo"
+                      descricao={online ? "Executando em primeiro plano" : "Inicia ao ficar online"}
+                    />
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => void abrirConfiguracoesDaLocalizacao()}
-                    disabled={abrindoConfiguracoes}
-                    className="flex h-12 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-amber-500 px-6 font-semibold text-white transition hover:bg-amber-600 disabled:cursor-wait disabled:opacity-60 md:w-auto"
-                  >
-                    {abrindoConfiguracoes ? (
-                      <>
-                        <Loader2 size={18} className="animate-spin" />
-                        Abrindo...
-                      </>
-                    ) : (
-                      <>
-                        <LocateFixed size={18} />
-                        Ativar permissão
-                      </>
-                    )}
-                  </button>
+                  {!permissoesLocalizacao.prontoParaFicarOnline && (
+                    <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                      {(!permissoesLocalizacao.localizacaoDuranteUso ||
+                        !permissoesLocalizacao.localizacaoSegundoPlano ||
+                        !permissoesLocalizacao.notificacoes) && (
+                        <button
+                          type="button"
+                          onClick={() => void abrirConfiguracoesDaLocalizacao()}
+                          disabled={abrindoConfiguracoes}
+                          className="flex h-12 items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+                        >
+                          {abrindoConfiguracoes ? (
+                            <Loader2 size={18} className="animate-spin" />
+                          ) : (
+                            <LocateFixed size={18} />
+                          )}
+                          Corrigir permissões
+                        </button>
+                      )}
+
+                      {!permissoesLocalizacao.bateriaSemRestricao && (
+                        <button
+                          type="button"
+                          onClick={() => void abrirConfiguracoesDaBateria()}
+                          disabled={abrindoConfiguracoesBateria}
+                          className="flex h-12 items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 font-semibold text-white transition hover:bg-amber-600 disabled:opacity-60"
+                        >
+                          {abrindoConfiguracoesBateria ? (
+                            <Loader2 size={18} className="animate-spin" />
+                          ) : (
+                            <Clock3 size={18} />
+                          )}
+                          Liberar bateria
+                        </button>
+                      )}
+
+                      {!permissoesLocalizacao.gpsAtivo && (
+                        <button
+                          type="button"
+                          onClick={() => void abrirConfiguracoesDoGps()}
+                          disabled={abrindoConfiguracoesGps}
+                          className="flex h-12 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 font-semibold text-white transition hover:bg-blue-700 disabled:opacity-60"
+                        >
+                          {abrindoConfiguracoesGps ? (
+                            <Loader2 size={18} className="animate-spin" />
+                          ) : (
+                            <MapPin size={18} />
+                          )}
+                          Ativar GPS
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => void verificarPermissoesLocalizacao()}
+                        disabled={verificandoPermissoes}
+                        className="flex h-12 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-5 font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                      >
+                        <RefreshCw
+                          size={18}
+                          className={verificandoPermissoes ? "animate-spin" : ""}
+                        />
+                        Verificar novamente
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
-            </section>
-          )}
+            </div>
+          </section>
+        )}
 
         <section
           className={`mt-5 overflow-hidden rounded-3xl border p-5 shadow-sm sm:p-6 ${
@@ -1760,6 +1905,39 @@ export default function MotoboyPage() {
         </footer>
       </div>
     </main>
+  );
+}
+
+function ItemPreparacao({
+  pronto,
+  titulo,
+  descricao,
+}: {
+  pronto: boolean;
+  titulo: string;
+  descricao: string;
+}) {
+  return (
+    <div
+      className={`flex items-start gap-3 rounded-2xl border p-4 ${
+        pronto
+          ? "border-emerald-200 bg-white text-emerald-800"
+          : "border-amber-200 bg-white text-amber-800"
+      }`}
+    >
+      <div
+        className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
+          pronto ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+        }`}
+      >
+        {pronto ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
+      </div>
+
+      <div>
+        <p className="font-semibold text-slate-900">{titulo}</p>
+        <p className="mt-1 text-xs leading-5 text-slate-500">{descricao}</p>
+      </div>
+    </div>
   );
 }
 
