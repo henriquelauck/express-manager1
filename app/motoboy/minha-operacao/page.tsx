@@ -538,15 +538,25 @@ export default function MinhaOperacaoPage() {
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={() => void carregar(true)}
-                disabled={atualizando}
-                className="flex h-12 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-5 font-semibold text-white transition hover:bg-white/15 disabled:opacity-60"
-              >
-                <RefreshCw size={18} className={atualizando ? "animate-spin" : ""} />
-                Atualizar
-              </button>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <Link
+                  href="/motoboy/relatorio-operacao"
+                  className="flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 font-semibold text-slate-950 transition hover:bg-emerald-400"
+                >
+                  <TrendingUp size={18} />
+                  Ver relatório completo
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={() => void carregar(true)}
+                  disabled={atualizando}
+                  className="flex h-12 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-5 font-semibold text-white transition hover:bg-white/15 disabled:opacity-60"
+                >
+                  <RefreshCw size={18} className={atualizando ? "animate-spin" : ""} />
+                  Atualizar
+                </button>
+              </div>
             </div>
           </div>
         </header>
