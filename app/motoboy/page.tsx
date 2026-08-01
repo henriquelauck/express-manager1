@@ -18,6 +18,7 @@ import {
   Home,
   BarChart3,
   MapPin,
+  Maximize2,
   PackageCheck,
   RefreshCw,
   Route,
@@ -267,6 +268,7 @@ export default function MotoboyPage() {
   const [erroAtualizacaoApp, setErroAtualizacaoApp] = useState("");
   const [menuAberto, setMenuAberto] = useState(false);
   const [concluidasAberto, setConcluidasAberto] = useState(false);
+  const [mapaExpandido, setMapaExpandido] = useState(false);
 
   const watchIdRef = useRef<number | null>(null);
   const ultimaPosicaoRef = useRef<{
@@ -1584,7 +1586,12 @@ export default function MotoboyPage() {
   }
 
   useEffect(() => {
-    if (!menuAberto && !concluidasAberto && telesAguardandoAceite.length === 0) {
+    if (
+      !menuAberto &&
+      !concluidasAberto &&
+      !mapaExpandido &&
+      telesAguardandoAceite.length === 0
+    ) {
       return;
     }
 
@@ -1601,7 +1608,12 @@ export default function MotoboyPage() {
       document.body.style.overflow = "";
       document.removeEventListener("keydown", fecharComEscape);
     };
-  }, [menuAberto, concluidasAberto, telesAguardandoAceite.length]);
+  }, [
+    menuAberto,
+    concluidasAberto,
+    mapaExpandido,
+    telesAguardandoAceite.length,
+  ]);
 
   if (carregando) {
     return (
@@ -1673,6 +1685,8 @@ export default function MotoboyPage() {
             miniMapa={miniMapas[telesAguardandoAceite[0].id]}
             atualizando={teleAtualizando === telesAguardandoAceite[0].id}
             bloqueado={Boolean(teleAtualizando)}
+            latitudeAtual={latitudeAtual}
+            longitudeAtual={longitudeAtual}
             onAceitar={() =>
               void responderAceite(telesAguardandoAceite[0], "ACEITAR")
             }
@@ -1680,6 +1694,70 @@ export default function MotoboyPage() {
               void responderAceite(telesAguardandoAceite[0], "RECUSAR")
             }
           />
+        )}
+
+        {mapaExpandido && (
+          <div className="fixed inset-0 z-[190] flex flex-col bg-slate-950">
+            <header className="flex items-center justify-between gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+12px)] text-white">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">
+                  Mapa da operação
+                </p>
+                <h2 className="mt-1 truncate text-base font-bold">
+                  {teleRotaAtivaMapa?.solicitante || "Sua localização atual"}
+                </h2>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setMapaExpandido(false)}
+                aria-label="Fechar mapa ampliado"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10"
+              >
+                <X size={21} />
+              </button>
+            </header>
+
+            <div className="relative min-h-0 flex-1 bg-slate-200">
+              {mapaRotaDinamicaSrc ? (
+                <iframe
+                  title="Mapa ampliado da rota ativa"
+                  src={mapaRotaDinamicaSrc}
+                  className="h-full w-full border-0"
+                  loading="eager"
+                  allowFullScreen
+                  referrerPolicy="no-referrer-when-downgrade"
+                />
+              ) : mapaLocalizacaoSrc ? (
+                <iframe
+                  title="Mapa ampliado da localização"
+                  src={mapaLocalizacaoSrc}
+                  className="h-full w-full border-0"
+                  loading="eager"
+                  allowFullScreen
+                  referrerPolicy="no-referrer-when-downgrade"
+                />
+              ) : polylineDestaqueMapa ? (
+                <img
+                  src={`/api/maps/imagem-rota?polyline=${encodeURIComponent(
+                    polylineDestaqueMapa
+                  )}&versao=mapa-ampliado-operacional-1`}
+                  alt="Rota ampliada"
+                  className="h-full w-full object-contain"
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center px-6 text-center text-slate-600">
+                  A localização ainda não está disponível.
+                </div>
+              )}
+            </div>
+
+            <div className="bg-slate-950 px-4 pb-[calc(env(safe-area-inset-bottom)+14px)] pt-3">
+              <p className="text-center text-xs leading-5 text-slate-300">
+                Arraste o mapa e use dois dedos para aproximar ou afastar.
+              </p>
+            </div>
+          </div>
         )}
 
         {menuAberto && (
@@ -2210,7 +2288,7 @@ export default function MotoboyPage() {
 
         <section className="sm:mt-5">
           <article className="w-full min-w-0 max-w-full overflow-hidden border-y border-slate-200 bg-white shadow-sm sm:rounded-[2rem] sm:border">
-            <div className="relative h-[58svh] min-h-[390px] max-h-[500px] w-full min-w-0 sm:h-[520px] sm:max-h-none">
+            <div className="relative h-[68svh] min-h-[480px] max-h-[680px] w-full min-w-0 sm:h-[620px] sm:max-h-none">
               {mapaRotaDinamicaSrc ? (
                 <iframe
                   key={`${teleRotaAtivaMapa?.id}-${latitudeAtual?.toFixed(5)}-${longitudeAtual?.toFixed(5)}-${destinoRotaAtivaMapa}`}
@@ -2218,6 +2296,7 @@ export default function MotoboyPage() {
                   src={mapaRotaDinamicaSrc}
                   className="block h-full w-full min-w-0 max-w-full border-0"
                   loading="eager"
+                  allowFullScreen
                   referrerPolicy="no-referrer-when-downgrade"
                 />
               ) : polylineDestaqueMapa ? (
@@ -2234,6 +2313,7 @@ export default function MotoboyPage() {
                   src={mapaLocalizacaoSrc}
                   className="block h-full w-full min-w-0 max-w-full border-0"
                   loading="lazy"
+                  allowFullScreen
                   referrerPolicy="no-referrer-when-downgrade"
                 />
               ) : (
@@ -2362,6 +2442,15 @@ export default function MotoboyPage() {
                   </div>
                 </div>
               )}
+
+              <button
+                type="button"
+                onClick={() => setMapaExpandido(true)}
+                className="absolute bottom-[94px] right-2.5 z-20 flex h-11 items-center justify-center gap-2 rounded-2xl bg-slate-950/90 px-3 text-xs font-bold text-white shadow-xl backdrop-blur sm:bottom-[106px] sm:right-5"
+              >
+                <Maximize2 size={17} />
+                Ampliar mapa
+              </button>
 
               <div className="absolute bottom-2.5 left-2.5 right-2.5 min-w-0 sm:bottom-5 sm:left-5 sm:right-5">
                 <div className="grid min-w-0 grid-cols-3 gap-1.5 sm:gap-2">
@@ -2647,6 +2736,8 @@ function PainelAceiteTele({
   miniMapa,
   atualizando,
   bloqueado,
+  latitudeAtual,
+  longitudeAtual,
   onAceitar,
   onRecusar,
 }: {
@@ -2654,6 +2745,8 @@ function PainelAceiteTele({
   miniMapa?: EstadoMiniMapa;
   atualizando: boolean;
   bloqueado: boolean;
+  latitudeAtual: number | null;
+  longitudeAtual: number | null;
   onAceitar: () => void;
   onRecusar: () => void;
 }) {
@@ -2682,9 +2775,32 @@ function PainelAceiteTele({
     : [];
   const primeiraParada = paradas[0];
 
+  const enderecosRota = paradas
+    .map((parada) => String(parada.endereco || "").trim())
+    .filter(Boolean);
+
+  const origemPreview =
+    latitudeAtual !== null && longitudeAtual !== null
+      ? `${latitudeAtual},${longitudeAtual}`
+      : enderecosRota[0] || "";
+
+  const destinoPreview =
+    enderecosRota.length > 0
+      ? enderecosRota
+          .map((endereco) => encodeURIComponent(endereco))
+          .join("+to:")
+      : "";
+
+  const mapaPreviewSrc =
+    origemPreview && destinoPreview
+      ? `https://maps.google.com/maps?saddr=${encodeURIComponent(
+          origemPreview
+        )}&daddr=${destinoPreview}&dirflg=d&output=embed`
+      : null;
+
   return (
-    <div className="fixed inset-0 z-[200] flex w-full max-w-full items-end justify-center overflow-hidden bg-slate-950/75 px-2.5 pb-[calc(env(safe-area-inset-bottom)+10px)] pt-[calc(env(safe-area-inset-top)+10px)] backdrop-blur-sm sm:items-center sm:p-6">
-      <section className="max-h-[calc(100svh_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom)_-_20px)] w-full min-w-0 max-w-[calc(100vw-20px)] overflow-x-hidden overflow-y-auto overscroll-contain rounded-[1.75rem] bg-white shadow-2xl sm:max-h-[94vh] sm:max-w-lg sm:rounded-[2rem]">
+    <div className="fixed inset-0 z-[200] flex w-full max-w-full items-start justify-center overflow-hidden bg-slate-950/75 px-2.5 pb-[calc(env(safe-area-inset-bottom)+10px)] pt-[calc(env(safe-area-inset-top)+10px)] backdrop-blur-sm sm:items-center sm:p-6">
+      <section className="max-h-[calc(100svh_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom)_-_20px)] w-full min-w-0 max-w-[calc(100vw-20px)] overflow-x-hidden overflow-y-auto overscroll-contain rounded-[1.75rem] bg-white shadow-2xl sm:max-h-[94vh] sm:max-w-2xl sm:rounded-[2rem]">
         <div className="bg-slate-950 px-4 py-4 text-white sm:px-5 sm:py-5">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
@@ -2734,6 +2850,52 @@ function PainelAceiteTele({
             </div>
           </div>
 
+          <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-700">
+                  Prévia completa da rota
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Sua posição → coleta → entrega
+                </p>
+              </div>
+
+              <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold text-emerald-700">
+                Interativo
+              </span>
+            </div>
+
+            <div className="h-[300px] w-full min-w-0 bg-slate-200 sm:h-[360px]">
+              {mapaPreviewSrc ? (
+                <iframe
+                  title="Prévia interativa da rota antes do aceite"
+                  src={mapaPreviewSrc}
+                  className="h-full w-full border-0"
+                  loading="eager"
+                  allowFullScreen
+                  referrerPolicy="no-referrer-when-downgrade"
+                />
+              ) : resultado?.polylineTotal || resultado?.polyline ? (
+                <img
+                  src={`/api/maps/imagem-rota?polyline=${encodeURIComponent(
+                    resultado.polylineTotal || resultado.polyline || ""
+                  )}&versao=preview-aceite-interativo-1`}
+                  alt="Prévia da rota antes do aceite"
+                  className="h-full w-full object-contain"
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center px-5 text-center text-sm text-slate-500">
+                  A rota será exibida assim que a localização e os endereços estiverem disponíveis.
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-slate-200 bg-white px-4 py-2.5 text-center text-[11px] leading-4 text-slate-500">
+              Arraste o mapa e use dois dedos para analisar todo o percurso antes de responder.
+            </div>
+          </div>
+
           {miniMapa?.carregando ? (
             <div className="mt-4 flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
               <Loader2 size={18} className="animate-spin" />
@@ -2766,10 +2928,6 @@ function PainelAceiteTele({
               </strong>
             </div>
           </div>
-
-          <p className="mt-4 text-center text-xs leading-5 text-slate-500">
-            A rota completa está visível no mapa principal ao fundo.
-          </p>
 
           <div className="mt-4 grid min-w-0 grid-cols-2 gap-2.5 sm:mt-5 sm:gap-3">
             <button
