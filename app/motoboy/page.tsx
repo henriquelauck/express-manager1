@@ -269,6 +269,7 @@ export default function MotoboyPage() {
   const [menuAberto, setMenuAberto] = useState(false);
   const [concluidasAberto, setConcluidasAberto] = useState(false);
   const [mapaExpandido, setMapaExpandido] = useState(false);
+  const [resumoRotaExpandido, setResumoRotaExpandido] = useState(false);
 
   const watchIdRef = useRef<number | null>(null);
   const ultimaPosicaoRef = useRef<{
@@ -1509,6 +1510,29 @@ export default function MotoboyPage() {
           .join("+to:")}&dirflg=d&output=embed`
       : null;
 
+  const urlRotaCompletaGoogleMaps =
+    teleRotaAtivaMapa &&
+    enderecosPendentesRotaAtivaMapa.length > 0 &&
+    latitudeAtual !== null &&
+    longitudeAtual !== null
+      ? (() => {
+          const origem = encodeURIComponent(`${latitudeAtual},${longitudeAtual}`);
+          const destino = encodeURIComponent(
+            enderecosPendentesRotaAtivaMapa[
+              enderecosPendentesRotaAtivaMapa.length - 1
+            ]
+          );
+          const pontosIntermediarios = enderecosPendentesRotaAtivaMapa
+            .slice(0, -1)
+            .map((endereco) => encodeURIComponent(endereco))
+            .join("%7C");
+
+          return `https://www.google.com/maps/dir/?api=1&origin=${origem}&destination=${destino}${
+            pontosIntermediarios ? `&waypoints=${pontosIntermediarios}` : ""
+          }&travelmode=driving`;
+        })()
+      : null;
+
   const mapaLocalizacaoSrc =
     latitudeAtual !== null && longitudeAtual !== null
       ? `https://maps.google.com/maps?q=${latitudeAtual},${longitudeAtual}&z=16&output=embed`
@@ -1715,14 +1739,31 @@ export default function MotoboyPage() {
                 </h2>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setMapaExpandido(false)}
-                aria-label="Fechar mapa ampliado"
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10"
-              >
-                <X size={21} />
-              </button>
+              <div className="flex shrink-0 items-center gap-2">
+                {urlRotaCompletaGoogleMaps && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      window.location.href = urlRotaCompletaGoogleMaps;
+                    }}
+                    aria-label="Abrir rota completa no Google Maps"
+                    title="Abrir no Google Maps"
+                    className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-3 text-xs font-bold"
+                  >
+                    <Route size={18} />
+                    Google Maps
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setMapaExpandido(false)}
+                  aria-label="Fechar mapa ampliado"
+                  className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/15 bg-white/10"
+                >
+                  <X size={21} />
+                </button>
+              </div>
             </header>
 
             <div className="relative min-h-0 flex-1 bg-slate-200">
@@ -2296,10 +2337,10 @@ export default function MotoboyPage() {
         )}
 
         <section className="sm:mt-5">
-          <div className="border-y border-slate-200 bg-white px-3 py-3 shadow-sm sm:rounded-3xl sm:border sm:px-4">
+          <div className="border-y border-slate-200 bg-white px-3 py-2.5 shadow-sm sm:rounded-3xl sm:border sm:px-4">
             <div className="flex min-w-0 items-center gap-3">
               <div
-                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${statusPainel.iconeClasse}`}
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${statusPainel.iconeClasse}`}
               >
                 {statusPainel.tipo === "OFFLINE" ? (
                   <WifiOff size={21} />
@@ -2338,7 +2379,7 @@ export default function MotoboyPage() {
                     permissoesLocalizacao !== null &&
                     !permissoesLocalizacao.prontoParaFicarOnline)
                 }
-                className={`flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-2xl px-3 text-[11px] font-bold text-white transition disabled:cursor-wait disabled:opacity-60 ${
+                className={`flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl px-3 text-[11px] font-bold text-white transition disabled:cursor-wait disabled:opacity-60 ${
                   online
                     ? "bg-red-600 hover:bg-red-700"
                     : "bg-emerald-600 hover:bg-emerald-700"
@@ -2363,51 +2404,83 @@ export default function MotoboyPage() {
           </div>
 
           {teleDestaqueMapa && rotaDestaqueMapa && (
-            <div className="border-b border-slate-200 bg-slate-950 px-4 py-3 text-white sm:mt-3 sm:rounded-2xl sm:border-b-0">
-              <div className="flex min-w-0 items-start justify-between gap-3">
+            <div className="border-b border-slate-200 bg-slate-950 text-white sm:mt-3 sm:rounded-2xl sm:border-b-0">
+              <button
+                type="button"
+                onClick={() => setResumoRotaExpandido((aberto) => !aberto)}
+                className="flex w-full min-w-0 items-center justify-between gap-3 px-4 py-2.5 text-left"
+              >
                 <div className="min-w-0">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-emerald-300">
                     {telesAguardandoAceite.some(
                       (tele) => tele.id === teleDestaqueMapa.id
                     )
                       ? "Nova tele no mapa"
-                      : mapaRotaDinamicaSrc
-                        ? "Rota completa em andamento"
-                        : "Rota em andamento"}
+                      : "Rota em andamento"}
                   </p>
-                  <p className="mt-1 truncate text-sm font-bold">
+                  <p className="mt-0.5 truncate text-sm font-bold">
                     {teleDestaqueMapa.solicitante || "Solicitante não informado"}
                   </p>
                 </div>
 
-                <div className="shrink-0 text-right text-[11px] leading-5 text-slate-200">
-                  <span className="block">
-                    Até coleta:{" "}
-                    {formatarDistancia(
-                      rotaDestaqueMapa.distanciaAteColetaKm || 0
-                    )}
-                  </span>
-                  <span className="block">
-                    Total:{" "}
-                    {formatarDistancia(
-                      rotaDestaqueMapa.distanciaTotalKm ||
-                        rotaDestaqueMapa.distanciaKm
-                    )}
-                  </span>
+                <span className="flex shrink-0 items-center gap-1 text-[11px] font-semibold text-slate-200">
+                  {resumoRotaExpandido ? "Recolher" : "Ver resumo"}
+                  <ChevronDown
+                    size={16}
+                    className={resumoRotaExpandido ? "rotate-180 transition" : "transition"}
+                  />
+                </span>
+              </button>
+
+              {resumoRotaExpandido && (
+                <div className="grid grid-cols-3 gap-2 border-t border-white/10 px-4 py-2.5 text-center">
+                  <div>
+                    <p className="text-[9px] uppercase tracking-wide text-slate-400">
+                      Até coleta
+                    </p>
+                    <strong className="mt-0.5 block text-xs">
+                      {formatarDistancia(
+                        rotaDestaqueMapa.distanciaAteColetaKm || 0
+                      )}
+                    </strong>
+                  </div>
+                  <div>
+                    <p className="text-[9px] uppercase tracking-wide text-slate-400">
+                      Total
+                    </p>
+                    <strong className="mt-0.5 block text-xs">
+                      {formatarDistancia(
+                        rotaDestaqueMapa.distanciaTotalKm ||
+                          rotaDestaqueMapa.distanciaKm
+                      )}
+                    </strong>
+                  </div>
+                  <div>
+                    <p className="text-[9px] uppercase tracking-wide text-slate-400">
+                      Tempo
+                    </p>
+                    <strong className="mt-0.5 block text-xs">
+                      {Math.round(
+                        rotaDestaqueMapa.duracaoTotalMin ||
+                          rotaDestaqueMapa.duracaoMin
+                      )} min
+                    </strong>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
           <article className="w-full min-w-0 max-w-full overflow-hidden border-b border-slate-200 bg-white shadow-sm sm:mt-3 sm:rounded-[2rem] sm:border">
-            <div className="relative h-[64svh] min-h-[470px] max-h-[720px] w-full min-w-0 bg-slate-200 sm:h-[650px] sm:max-h-none">
+            <div className="relative h-[70svh] min-h-[540px] max-h-[820px] w-full min-w-0 overscroll-contain bg-slate-200 sm:h-[680px] sm:max-h-none">
               {mapaRotaDinamicaSrc ? (
                 <iframe
                   key={`${teleRotaAtivaMapa?.id}-${latitudeAtual?.toFixed(5)}-${longitudeAtual?.toFixed(5)}-${enderecosPendentesRotaAtivaMapa.join("|")}`}
                   title="Mapa interativo da rota completa"
                   src={mapaRotaDinamicaSrc}
                   className="pointer-events-auto block h-full w-full min-w-0 max-w-full border-0"
-                  style={{ touchAction: "pan-x pan-y pinch-zoom" }}
+                  style={{ touchAction: "auto" }}
+                  tabIndex={0}
                   loading="eager"
                   allowFullScreen
                   referrerPolicy="no-referrer-when-downgrade"
@@ -2425,7 +2498,8 @@ export default function MotoboyPage() {
                   title="Mapa interativo da sua localização"
                   src={mapaLocalizacaoSrc}
                   className="pointer-events-auto block h-full w-full min-w-0 max-w-full border-0"
-                  style={{ touchAction: "pan-x pan-y pinch-zoom" }}
+                  style={{ touchAction: "auto" }}
+                  tabIndex={0}
                   loading="eager"
                   allowFullScreen
                   referrerPolicy="no-referrer-when-downgrade"
@@ -2457,12 +2531,12 @@ export default function MotoboyPage() {
             </div>
           </article>
 
-          <div className="grid min-w-0 grid-cols-3 gap-1.5 px-3 pt-3 sm:gap-2 sm:px-0">
+          <div className="grid min-w-0 grid-cols-3 gap-1.5 px-3 pt-2.5 sm:gap-2 sm:px-0">
             <div className="min-w-0 rounded-2xl border border-slate-200 bg-white px-2.5 py-2.5 shadow-sm">
               <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
                 Aguardando
               </p>
-              <strong className="mt-1 block text-xl text-slate-900">
+              <strong className="mt-0.5 block text-lg text-slate-900">
                 {telesAguardandoAceite.length}
               </strong>
             </div>
@@ -2471,7 +2545,7 @@ export default function MotoboyPage() {
               <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
                 Em rota
               </p>
-              <strong className="mt-1 block text-xl text-slate-900">
+              <strong className="mt-0.5 block text-lg text-slate-900">
                 {entregasAndamento.length}
               </strong>
             </div>
@@ -2480,7 +2554,7 @@ export default function MotoboyPage() {
               <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
                 Concluídas
               </p>
-              <strong className="mt-1 block text-xl text-slate-900">
+              <strong className="mt-0.5 block text-lg text-slate-900">
                 {entregasConcluidas.length}
               </strong>
             </div>
