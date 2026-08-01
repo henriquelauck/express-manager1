@@ -72,6 +72,12 @@ type EstadoPermissoesLocalizacao = {
   precisaAbrirConfiguracoes: boolean;
   precisaCorrigirBateria?: boolean;
   precisaAtivarGps?: boolean;
+  fabricante?: string;
+  modelo?: string;
+  versaoAndroid?: string;
+  nivelAndroid?: number;
+  possuiAtalhoFabricante?: boolean;
+  rotuloAtalhoFabricante?: string;
 };
 
 type LocalizacaoNativaPlugin = {
@@ -82,6 +88,12 @@ type LocalizacaoNativaPlugin = {
   abrirConfiguracoesLocalizacao(): Promise<{ aberto: boolean }>;
   abrirConfiguracoesBateria(): Promise<{ aberto: boolean; fallback?: boolean }>;
   abrirConfiguracoesGps(): Promise<{ aberto: boolean }>;
+  abrirConfiguracoesNotificacoes(): Promise<{ aberto: boolean }>;
+  abrirConfiguracoesFabricante(): Promise<{
+    aberto: boolean;
+    fabricante?: string;
+    fallback?: boolean;
+  }>;
 };
 
 type CredenciaisNativasPlugin = {
@@ -229,6 +241,11 @@ export default function MotoboyPage() {
   const [abrindoConfiguracoes, setAbrindoConfiguracoes] = useState(false);
   const [abrindoConfiguracoesBateria, setAbrindoConfiguracoesBateria] = useState(false);
   const [abrindoConfiguracoesGps, setAbrindoConfiguracoesGps] = useState(false);
+  const [abrindoConfiguracoesNotificacoes, setAbrindoConfiguracoesNotificacoes] =
+    useState(false);
+  const [abrindoConfiguracoesFabricante, setAbrindoConfiguracoesFabricante] =
+    useState(false);
+  const [reiniciandoServicoNativo, setReiniciandoServicoNativo] = useState(false);
   const [atualizacaoDisponivel, setAtualizacaoDisponivel] =
     useState<VersaoAplicativo | null>(null);
   const [versaoInstalada, setVersaoInstalada] = useState<string | null>(null);
@@ -327,6 +344,75 @@ export default function MotoboyPage() {
       );
     } finally {
       setAbrindoConfiguracoesGps(false);
+    }
+  }
+
+  async function abrirConfiguracoesDasNotificacoes() {
+    if (!executandoNoAppAndroid() || abrindoConfiguracoesNotificacoes) {
+      return;
+    }
+
+    setAbrindoConfiguracoesNotificacoes(true);
+    setErroLocalizacao("");
+
+    try {
+      await LocalizacaoNativa.abrirConfiguracoesNotificacoes();
+    } catch (erroConfiguracoes) {
+      setErroLocalizacao(
+        erroConfiguracoes instanceof Error
+          ? erroConfiguracoes.message
+          : "Não foi possível abrir as configurações de notificações."
+      );
+    } finally {
+      setAbrindoConfiguracoesNotificacoes(false);
+    }
+  }
+
+  async function abrirConfiguracoesEspeciaisDoFabricante() {
+    if (!executandoNoAppAndroid() || abrindoConfiguracoesFabricante) {
+      return;
+    }
+
+    setAbrindoConfiguracoesFabricante(true);
+    setErroLocalizacao("");
+
+    try {
+      await LocalizacaoNativa.abrirConfiguracoesFabricante();
+    } catch (erroConfiguracoes) {
+      setErroLocalizacao(
+        erroConfiguracoes instanceof Error
+          ? erroConfiguracoes.message
+          : "Não foi possível abrir as configurações especiais do aparelho."
+      );
+    } finally {
+      setAbrindoConfiguracoesFabricante(false);
+    }
+  }
+
+  async function reiniciarServicoNativo() {
+    if (
+      !executandoNoAppAndroid() ||
+      reiniciandoServicoNativo ||
+      !online
+    ) {
+      return;
+    }
+
+    setReiniciandoServicoNativo(true);
+    setErroLocalizacao("");
+
+    try {
+      await LocalizacaoNativa.parar();
+      await LocalizacaoNativa.iniciar();
+      await verificarPermissoesLocalizacao();
+    } catch (erroServico) {
+      setErroLocalizacao(
+        erroServico instanceof Error
+          ? erroServico.message
+          : "Não foi possível reiniciar o serviço nativo."
+      );
+    } finally {
+      setReiniciandoServicoNativo(false);
     }
   }
 
@@ -1459,36 +1545,69 @@ export default function MotoboyPage() {
                     enviando a localização com o aplicativo minimizado ou com a tela bloqueada.
                   </p>
 
+                  {(permissoesLocalizacao.fabricante ||
+                    permissoesLocalizacao.modelo ||
+                    permissoesLocalizacao.versaoAndroid) && (
+                    <div className="mt-4 rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-xs text-slate-600">
+                      <strong className="text-slate-800">Aparelho identificado:</strong>{" "}
+                      {[permissoesLocalizacao.fabricante, permissoesLocalizacao.modelo]
+                        .filter(Boolean)
+                        .join(" ")}
+                      {permissoesLocalizacao.versaoAndroid
+                        ? ` • Android ${permissoesLocalizacao.versaoAndroid}`
+                        : ""}
+                    </div>
+                  )}
+
                   <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <ItemPreparacao
                       pronto={permissoesLocalizacao.localizacaoDuranteUso}
                       titulo="Localização"
                       descricao="Acesso durante o uso"
+                      acaoRotulo="Abrir permissão"
+                      onAcao={() => void abrirConfiguracoesDaLocalizacao()}
+                      carregando={abrindoConfiguracoes}
                     />
                     <ItemPreparacao
                       pronto={permissoesLocalizacao.localizacaoSegundoPlano}
                       titulo="Segundo plano"
-                      descricao='Permitir o tempo todo'
+                      descricao='Selecionar "Permitir o tempo todo"'
+                      acaoRotulo="Abrir permissão"
+                      onAcao={() => void abrirConfiguracoesDaLocalizacao()}
+                      carregando={abrindoConfiguracoes}
                     />
                     <ItemPreparacao
                       pronto={permissoesLocalizacao.notificacoes}
                       titulo="Notificações"
                       descricao="Avisos e serviço permanente"
+                      acaoRotulo="Abrir notificações"
+                      onAcao={() => void abrirConfiguracoesDasNotificacoes()}
+                      carregando={abrindoConfiguracoesNotificacoes}
                     />
                     <ItemPreparacao
                       pronto={permissoesLocalizacao.gpsAtivo}
                       titulo="GPS"
                       descricao="Localização do aparelho ligada"
+                      acaoRotulo="Ativar GPS"
+                      onAcao={() => void abrirConfiguracoesDoGps()}
+                      carregando={abrindoConfiguracoesGps}
                     />
                     <ItemPreparacao
                       pronto={permissoesLocalizacao.bateriaSemRestricao}
                       titulo="Bateria"
                       descricao="Express Manager sem otimização"
+                      acaoRotulo="Liberar bateria"
+                      onAcao={() => void abrirConfiguracoesDaBateria()}
+                      carregando={abrindoConfiguracoesBateria}
                     />
                     <ItemPreparacao
                       pronto={online ? permissoesLocalizacao.servicoAtivo : true}
                       titulo="Serviço nativo"
                       descricao={online ? "Executando em primeiro plano" : "Inicia ao ficar online"}
+                      acaoRotulo="Reiniciar serviço"
+                      onAcao={() => void reiniciarServicoNativo()}
+                      carregando={reiniciandoServicoNativo}
+                      ocultarAcao={!online}
                     />
                   </div>
 
@@ -1541,6 +1660,23 @@ export default function MotoboyPage() {
                             <MapPin size={18} />
                           )}
                           Ativar GPS
+                        </button>
+                      )}
+
+                      {permissoesLocalizacao.possuiAtalhoFabricante && (
+                        <button
+                          type="button"
+                          onClick={() => void abrirConfiguracoesEspeciaisDoFabricante()}
+                          disabled={abrindoConfiguracoesFabricante}
+                          className="flex h-12 items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 font-semibold text-white transition hover:bg-violet-700 disabled:opacity-60"
+                        >
+                          {abrindoConfiguracoesFabricante ? (
+                            <Loader2 size={18} className="animate-spin" />
+                          ) : (
+                            <RefreshCw size={18} />
+                          )}
+                          {permissoesLocalizacao.rotuloAtalhoFabricante ||
+                            "Configuração especial"}
                         </button>
                       )}
 
@@ -1912,31 +2048,53 @@ function ItemPreparacao({
   pronto,
   titulo,
   descricao,
+  acaoRotulo,
+  onAcao,
+  carregando = false,
+  ocultarAcao = false,
 }: {
   pronto: boolean;
   titulo: string;
   descricao: string;
+  acaoRotulo?: string;
+  onAcao?: () => void;
+  carregando?: boolean;
+  ocultarAcao?: boolean;
 }) {
   return (
     <div
-      className={`flex items-start gap-3 rounded-2xl border p-4 ${
+      className={`rounded-2xl border p-4 ${
         pronto
           ? "border-emerald-200 bg-white text-emerald-800"
           : "border-amber-200 bg-white text-amber-800"
       }`}
     >
-      <div
-        className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
-          pronto ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
-        }`}
-      >
-        {pronto ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
+      <div className="flex items-start gap-3">
+        <div
+          className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
+            pronto ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+          }`}
+        >
+          {pronto ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-slate-900">{titulo}</p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">{descricao}</p>
+        </div>
       </div>
 
-      <div>
-        <p className="font-semibold text-slate-900">{titulo}</p>
-        <p className="mt-1 text-xs leading-5 text-slate-500">{descricao}</p>
-      </div>
+      {!pronto && onAcao && acaoRotulo && !ocultarAcao && (
+        <button
+          type="button"
+          onClick={onAcao}
+          disabled={carregando}
+          className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-3 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+        >
+          {carregando && <Loader2 size={15} className="animate-spin" />}
+          {acaoRotulo}
+        </button>
+      )}
     </div>
   );
 }
