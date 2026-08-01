@@ -1619,8 +1619,8 @@ export default function MotoboyPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 px-0 py-0 sm:px-6 sm:py-7">
-      <div className="mx-auto w-full max-w-6xl">
+    <main className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50 px-0 py-0 sm:px-6 sm:py-7">
+      <div className="mx-auto w-full min-w-0 max-w-6xl overflow-x-hidden">
         <header className="bg-slate-950 text-white shadow-lg sm:rounded-3xl">
           <div className="relative px-4 pb-4 pt-[calc(env(safe-area-inset-top)+14px)] sm:p-7">
             <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-emerald-500/20 blur-3xl" />
@@ -2209,14 +2209,14 @@ export default function MotoboyPage() {
         )}
 
         <section className="sm:mt-5">
-          <article className="overflow-hidden border-y border-slate-200 bg-white shadow-sm sm:rounded-[2rem] sm:border">
-            <div className="relative h-[500px] sm:h-[520px]">
+          <article className="w-full min-w-0 max-w-full overflow-hidden border-y border-slate-200 bg-white shadow-sm sm:rounded-[2rem] sm:border">
+            <div className="relative h-[58svh] min-h-[390px] max-h-[500px] w-full min-w-0 sm:h-[520px] sm:max-h-none">
               {mapaRotaDinamicaSrc ? (
                 <iframe
                   key={`${teleRotaAtivaMapa?.id}-${latitudeAtual?.toFixed(5)}-${longitudeAtual?.toFixed(5)}-${destinoRotaAtivaMapa}`}
                   title="Mapa acompanhando a rota ativa"
                   src={mapaRotaDinamicaSrc}
-                  className="h-full w-full border-0"
+                  className="block h-full w-full min-w-0 max-w-full border-0"
                   loading="eager"
                   referrerPolicy="no-referrer-when-downgrade"
                 />
@@ -2226,13 +2226,13 @@ export default function MotoboyPage() {
                     polylineDestaqueMapa
                   )}&versao=mapa-principal-operacional-1`}
                   alt="Rota em destaque no mapa principal"
-                  className="h-full w-full object-cover"
+                  className="block h-full w-full min-w-0 max-w-full object-cover"
                 />
               ) : mapaLocalizacaoSrc ? (
                 <iframe
                   title="Mapa da sua localização"
                   src={mapaLocalizacaoSrc}
-                  className="h-full w-full border-0"
+                  className="block h-full w-full min-w-0 max-w-full border-0"
                   loading="lazy"
                   referrerPolicy="no-referrer-when-downgrade"
                 />
@@ -2254,8 +2254,8 @@ export default function MotoboyPage() {
 
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-slate-950/10 via-transparent to-slate-950/70" />
 
-              <div className="absolute left-3 right-3 top-3 sm:left-5 sm:right-5 sm:top-5">
-                <div className="rounded-3xl bg-white/95 p-3 shadow-xl backdrop-blur sm:p-4">
+              <div className="absolute left-2.5 right-2.5 top-2.5 min-w-0 sm:left-5 sm:right-5 sm:top-5">
+                <div className="w-full min-w-0 max-w-full overflow-hidden rounded-3xl bg-white/95 p-3 shadow-xl backdrop-blur sm:p-4">
                   <div className="flex items-center gap-3">
                     <div
                       className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${statusPainel.iconeClasse}`}
@@ -2267,9 +2267,9 @@ export default function MotoboyPage() {
                       )}
                     </div>
 
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <strong className="text-base text-slate-900">
+                    <div className="min-w-0 flex-1 overflow-hidden">
+                      <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
+                        <strong className="truncate text-sm text-slate-900 sm:text-base">
                           {statusPainel.rotulo}
                         </strong>
                         <span
@@ -2297,7 +2297,7 @@ export default function MotoboyPage() {
                           permissoesLocalizacao !== null &&
                           !permissoesLocalizacao.prontoParaFicarOnline)
                       }
-                      className={`flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-2xl px-3 text-xs font-bold text-white transition disabled:cursor-wait disabled:opacity-60 ${
+                      className={`flex h-10 max-w-[38%] shrink-0 items-center justify-center gap-1.5 rounded-2xl px-2.5 text-[11px] font-bold text-white transition disabled:cursor-wait disabled:opacity-60 sm:max-w-none sm:px-3 sm:text-xs ${
                         online
                           ? "bg-red-600 hover:bg-red-700"
                           : "bg-emerald-600 hover:bg-emerald-700"
@@ -2323,8 +2323,8 @@ export default function MotoboyPage() {
               </div>
 
               {teleDestaqueMapa && rotaDestaqueMapa && (
-                <div className="absolute left-3 right-3 top-24 sm:left-5 sm:right-auto sm:top-24 sm:w-80">
-                  <div className="rounded-2xl bg-slate-950/90 px-4 py-3 text-white shadow-xl backdrop-blur">
+                <div className="absolute left-2.5 right-2.5 top-[88px] min-w-0 sm:left-5 sm:right-auto sm:top-24 sm:w-80">
+                  <div className="w-full min-w-0 max-w-full overflow-hidden rounded-2xl bg-slate-950/90 px-3.5 py-3 text-white shadow-xl backdrop-blur sm:px-4">
                     <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">
                       {telesAguardandoAceite.some(
                         (tele) => tele.id === teleDestaqueMapa.id
@@ -2363,9 +2363,9 @@ export default function MotoboyPage() {
                 </div>
               )}
 
-              <div className="absolute bottom-3 left-3 right-3 sm:bottom-5 sm:left-5 sm:right-5">
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-2xl bg-white/94 px-3 py-3 shadow-lg backdrop-blur">
+              <div className="absolute bottom-2.5 left-2.5 right-2.5 min-w-0 sm:bottom-5 sm:left-5 sm:right-5">
+                <div className="grid min-w-0 grid-cols-3 gap-1.5 sm:gap-2">
+                  <div className="min-w-0 rounded-2xl bg-white/94 px-2.5 py-2.5 shadow-lg backdrop-blur sm:px-3 sm:py-3">
                     <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
                       Aguardando
                     </p>
@@ -2374,7 +2374,7 @@ export default function MotoboyPage() {
                     </strong>
                   </div>
 
-                  <div className="rounded-2xl bg-white/94 px-3 py-3 shadow-lg backdrop-blur">
+                  <div className="min-w-0 rounded-2xl bg-white/94 px-2.5 py-2.5 shadow-lg backdrop-blur sm:px-3 sm:py-3">
                     <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
                       Em rota
                     </p>
@@ -2383,7 +2383,7 @@ export default function MotoboyPage() {
                     </strong>
                   </div>
 
-                  <div className="rounded-2xl bg-white/94 px-3 py-3 shadow-lg backdrop-blur">
+                  <div className="min-w-0 rounded-2xl bg-white/94 px-2.5 py-2.5 shadow-lg backdrop-blur sm:px-3 sm:py-3">
                     <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
                       Concluídas
                     </p>
@@ -2396,30 +2396,30 @@ export default function MotoboyPage() {
             </div>
           </article>
 
-          <div className="mt-3 grid grid-cols-3 gap-2 px-4 sm:px-0">
-            <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="mt-3 grid min-w-0 grid-cols-3 gap-1.5 px-3 sm:gap-2 sm:px-0">
+            <div className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm sm:p-3">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                 Bruto hoje
               </p>
-              <strong className="mt-1 block text-sm text-slate-900">
+              <strong className="mt-1 block truncate text-[13px] text-slate-900 sm:text-sm">
                 {formatarMoeda(brutoHoje)}
               </strong>
             </div>
 
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 shadow-sm">
+            <div className="min-w-0 overflow-hidden rounded-2xl border border-emerald-200 bg-emerald-50 p-2.5 shadow-sm sm:p-3">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600">
                 Seu líquido
               </p>
-              <strong className="mt-1 block text-sm text-emerald-800">
+              <strong className="mt-1 block truncate text-[13px] text-emerald-800 sm:text-sm">
                 {formatarMoeda(liquidoHoje)}
               </strong>
             </div>
 
-            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-3 shadow-sm">
+            <div className="min-w-0 overflow-hidden rounded-2xl border border-blue-200 bg-blue-50 p-2.5 shadow-sm sm:p-3">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">
                 Recebido
               </p>
-              <strong className="mt-1 block text-sm text-blue-800">
+              <strong className="mt-1 block truncate text-[13px] text-blue-800 sm:text-sm">
                 {formatarMoeda(recebidoHoje)}
               </strong>
             </div>
@@ -2595,7 +2595,7 @@ export default function MotoboyPage() {
           </section>
         )}
 
-        <section className="mx-4 mt-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm sm:mx-0 sm:mt-8">
+        <section className="mx-3 mt-5 min-w-0 max-w-full overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm sm:mx-0 sm:mt-8">
           <CabecalhoSecao
             titulo="Entregas em andamento"
             descricao="Atualize cada etapa conforme o serviço avança."
@@ -2683,15 +2683,15 @@ function PainelAceiteTele({
   const primeiraParada = paradas[0];
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-slate-950/75 px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-[calc(env(safe-area-inset-top)+12px)] backdrop-blur-sm sm:items-center sm:p-6">
-      <section className="max-h-[94vh] w-full max-w-lg overflow-y-auto rounded-[2rem] bg-white shadow-2xl">
-        <div className="bg-slate-950 px-5 py-5 text-white">
+    <div className="fixed inset-0 z-[200] flex w-full max-w-full items-end justify-center overflow-hidden bg-slate-950/75 px-2.5 pb-[calc(env(safe-area-inset-bottom)+10px)] pt-[calc(env(safe-area-inset-top)+10px)] backdrop-blur-sm sm:items-center sm:p-6">
+      <section className="max-h-[calc(100svh_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom)_-_20px)] w-full min-w-0 max-w-[calc(100vw-20px)] overflow-x-hidden overflow-y-auto overscroll-contain rounded-[1.75rem] bg-white shadow-2xl sm:max-h-[94vh] sm:max-w-lg sm:rounded-[2rem]">
+        <div className="bg-slate-950 px-4 py-4 text-white sm:px-5 sm:py-5">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-300">
                 Nova tele aguardando resposta
               </p>
-              <h2 className="mt-2 truncate text-2xl font-bold">
+              <h2 className="mt-1.5 truncate text-xl font-bold sm:mt-2 sm:text-2xl">
                 {tele.solicitante || "Solicitante não informado"}
               </h2>
             </div>
@@ -2713,7 +2713,7 @@ function PainelAceiteTele({
           </div>
         </div>
 
-        <div className="p-5">
+        <div className="p-4 sm:p-5">
           <div className="flex items-start gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white">
               <MapPin size={19} />
@@ -2771,12 +2771,12 @@ function PainelAceiteTele({
             A rota completa está visível no mapa principal ao fundo.
           </p>
 
-          <div className="mt-5 grid grid-cols-[0.9fr_1.4fr] gap-3">
+          <div className="mt-4 grid min-w-0 grid-cols-2 gap-2.5 sm:mt-5 sm:gap-3">
             <button
               type="button"
               onClick={onRecusar}
               disabled={bloqueado || expirado}
-              className="flex min-h-16 items-center justify-center gap-2 rounded-2xl border-2 border-red-200 bg-red-50 px-4 text-base font-bold text-red-700 transition active:scale-[0.98] disabled:opacity-50"
+              className="flex min-h-14 min-w-0 items-center justify-center gap-1.5 rounded-2xl border-2 border-red-200 bg-red-50 px-2.5 text-sm font-bold text-red-700 transition active:scale-[0.98] disabled:opacity-50 sm:min-h-16 sm:px-4 sm:text-base"
             >
               {atualizando ? (
                 <Loader2 size={20} className="animate-spin" />
@@ -2790,7 +2790,7 @@ function PainelAceiteTele({
               type="button"
               onClick={onAceitar}
               disabled={bloqueado || expirado}
-              className="flex min-h-16 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 text-lg font-bold text-white shadow-lg shadow-emerald-600/25 transition active:scale-[0.98] disabled:opacity-50"
+              className="flex min-h-14 min-w-0 items-center justify-center gap-1.5 rounded-2xl bg-emerald-600 px-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-600/25 transition active:scale-[0.98] disabled:opacity-50 sm:min-h-16 sm:px-4 sm:text-lg"
             >
               {atualizando ? (
                 <>
@@ -3121,8 +3121,8 @@ function CardTele({
       String(paradaFoco?.endereco || "").trim() || "Endereço não informado";
 
     return (
-      <article className="p-4 sm:p-6">
-        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+      <article className="w-full min-w-0 max-w-full overflow-hidden p-3 sm:p-6">
+        <div className="w-full min-w-0 max-w-full overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
           <div
             className={`px-4 py-3 sm:px-5 ${
               tele.rotaAtiva
@@ -3132,7 +3132,7 @@ function CardTele({
                   : "bg-slate-950 text-white"
             }`}
           >
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-start justify-between gap-2.5 sm:gap-3">
               <div className="min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/70">
                   {tele.rotaAtiva
@@ -3146,18 +3146,18 @@ function CardTele({
                 </h3>
               </div>
 
-              <div className="shrink-0 text-right">
+              <div className="max-w-[42%] shrink-0 text-right">
                 <p className="text-[10px] uppercase tracking-wide text-white/70">
                   Seu líquido
                 </p>
-                <strong className="mt-1 block text-lg">
+                <strong className="mt-1 block truncate text-base sm:text-lg">
                   {formatarMoeda(totalTele * 0.8)}
                 </strong>
               </div>
             </div>
           </div>
 
-          <div className="p-4 sm:p-5">
+          <div className="min-w-0 p-3.5 sm:p-5">
             <div className="flex items-start gap-3">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-100 text-blue-700">
                 <MapPin size={21} />
@@ -3167,7 +3167,7 @@ function CardTele({
                 <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
                   Destino atual
                 </p>
-                <h4 className="mt-1 text-base font-bold text-slate-900">
+                <h4 className="mt-1 break-words text-sm font-bold leading-5 text-slate-900 sm:text-base">
                   {rotuloCurtoTipoParada(paradaFoco?.tipo)} • {nomeParadaFoco}
                 </h4>
                 <p className="mt-1 break-words text-sm leading-5 text-slate-500">
@@ -3785,7 +3785,7 @@ function MetricasRota({
 
   return (
     <div
-      className={`mt-4 overflow-hidden rounded-2xl border ${
+      className={`mt-4 w-full min-w-0 max-w-full overflow-hidden rounded-2xl border ${
         destaque
           ? "border-emerald-200 bg-emerald-50"
           : "border-slate-200 bg-slate-50"
@@ -3839,12 +3839,12 @@ function MetricaRota({
   classeExtra?: string;
 }) {
   return (
-    <div className={`px-3 py-3 ${classeExtra}`}>
-      <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+    <div className={`min-w-0 overflow-hidden px-2.5 py-3 sm:px-3 ${classeExtra}`}>
+      <p className="break-words text-[8px] font-bold uppercase tracking-wide text-slate-400 sm:text-[9px]">
         {titulo}
       </p>
       <strong
-        className={`mt-1 block text-sm ${
+        className={`mt-1 block break-words text-xs leading-4 sm:text-sm ${
           destaque ? "text-emerald-700" : "text-slate-900"
         }`}
       >
