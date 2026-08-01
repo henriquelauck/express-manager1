@@ -235,6 +235,8 @@ export default function MotoboyPage() {
   const [alterandoPresenca, setAlterandoPresenca] = useState(false);
   const [precisaoLocalizacao, setPrecisaoLocalizacao] = useState<number | null>(null);
   const [localizacaoAtualizadaEm, setLocalizacaoAtualizadaEm] = useState<string | null>(null);
+  const [latitudeAtual, setLatitudeAtual] = useState<number | null>(null);
+  const [longitudeAtual, setLongitudeAtual] = useState<number | null>(null);
   const [miniMapas, setMiniMapas] = useState<Record<string, EstadoMiniMapa>>({});
   const [permissoesLocalizacao, setPermissoesLocalizacao] =
     useState<EstadoPermissoesLocalizacao | null>(null);
@@ -734,6 +736,8 @@ export default function MotoboyPage() {
       setOnline(Boolean(presenca.online));
       setPrecisaoLocalizacao(typeof presenca.precisao === "number" ? presenca.precisao : null);
       setLocalizacaoAtualizadaEm(presenca.localizacaoAtualizadaEm || null);
+      setLatitudeAtual(typeof presenca.latitude === "number" ? presenca.latitude : null);
+      setLongitudeAtual(typeof presenca.longitude === "number" ? presenca.longitude : null);
 
       if (presenca.online) {
         iniciarWatchPosition();
@@ -780,6 +784,8 @@ export default function MotoboyPage() {
     setOnline(true);
     setPrecisaoLocalizacao(posicao.coords.accuracy);
     setLocalizacaoAtualizadaEm(dados?.motoboy?.localizacaoAtualizadaEm || new Date().toISOString());
+    setLatitudeAtual(posicao.coords.latitude);
+    setLongitudeAtual(posicao.coords.longitude);
 
     ultimaPosicaoRef.current = {
       latitude: posicao.coords.latitude,
@@ -909,6 +915,9 @@ export default function MotoboyPage() {
       pararMonitoramentoLocal();
       setOnline(false);
       setPrecisaoLocalizacao(null);
+      setLocalizacaoAtualizadaEm(null);
+      setLatitudeAtual(null);
+      setLongitudeAtual(null);
     } catch (erroOffline) {
       setErroLocalizacao(
         erroOffline instanceof Error ? erroOffline.message : "Não foi possível ficar offline."
@@ -1380,6 +1389,72 @@ export default function MotoboyPage() {
     permissoesLocalizacao.bateriaSemRestricao &&
     (!online || permissoesLocalizacao.servicoAtivo);
 
+  const mapaLocalizacaoSrc =
+    latitudeAtual !== null && longitudeAtual !== null
+      ? `https://maps.google.com/maps?q=${latitudeAtual},${longitudeAtual}&z=16&output=embed`
+      : null;
+
+  const segundosSemAtualizacao = useMemo(() => {
+    if (!localizacaoAtualizadaEm) {
+      return null;
+    }
+
+    const instante = new Date(localizacaoAtualizadaEm).getTime();
+
+    if (!Number.isFinite(instante)) {
+      return null;
+    }
+
+    return Math.max(0, Math.round((Date.now() - instante) / 1000));
+  }, [localizacaoAtualizadaEm, online, atualizando, teles.length]);
+
+  const statusPainel = useMemo(() => {
+    const semAtualizacaoRecente =
+      segundosSemAtualizacao !== null && segundosSemAtualizacao > 120;
+
+    const precisaoRuim =
+      precisaoLocalizacao !== null &&
+      Number.isFinite(precisaoLocalizacao) &&
+      precisaoLocalizacao > 80;
+
+    if (!online) {
+      return {
+        tipo: "OFFLINE" as const,
+        rotulo: "Offline",
+        subtitulo: "Indisponível",
+        descricao:
+          "Ative seu status para compartilhar sua localização e receber teles com mais rapidez.",
+        badgeClasse: "bg-slate-100 text-slate-700",
+        painelClasse: "border-slate-200 bg-white",
+        iconeClasse: "bg-slate-100 text-slate-500",
+      };
+    }
+
+    if (semAtualizacaoRecente || precisaoRuim) {
+      return {
+        tipo: "REDE_RUIM" as const,
+        rotulo: "Rede ruim",
+        subtitulo: "Atenção",
+        descricao:
+          "Sua localização está ativa, mas o sinal ou a precisão não estão ideais no momento.",
+        badgeClasse: "bg-amber-100 text-amber-700",
+        painelClasse: "border-amber-200 bg-amber-50",
+        iconeClasse: "bg-amber-500 text-white",
+      };
+    }
+
+    return {
+      tipo: "ONLINE" as const,
+      rotulo: "Online",
+      subtitulo: "Disponível",
+      descricao:
+        "Seu app está pronto para receber teles e compartilhar sua localização com o gestor.",
+      badgeClasse: "bg-emerald-100 text-emerald-700",
+      painelClasse: "border-emerald-200 bg-emerald-50",
+      iconeClasse: "bg-emerald-600 text-white",
+    };
+  }, [online, precisaoLocalizacao, segundosSemAtualizacao]);
+
   useEffect(() => {
     if (!permissoesLocalizacao) {
       return;
@@ -1770,102 +1845,296 @@ export default function MotoboyPage() {
           )
         )}
 
-        <section
-          className={`mt-5 overflow-hidden rounded-3xl border p-5 shadow-sm sm:p-6 ${
-            online ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"
-          }`}
-        >
-          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-start gap-4">
-              <div
-                className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${
-                  online ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500"
-                }`}
-              >
-                {online ? <Wifi size={23} /> : <WifiOff size={23} />}
-              </div>
+        <section className="mt-5 grid gap-5 xl:grid-cols-[1.35fr_0.95fr]">
+          <article className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
+            <div className="relative h-[360px] sm:h-[430px]">
+              {mapaLocalizacaoSrc ? (
+                <iframe
+                  title="Mapa da sua localização"
+                  src={mapaLocalizacaoSrc}
+                  className="h-full w-full border-0"
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center bg-[radial-gradient(circle_at_top,_#dcfce7,_#f8fafc_55%)] px-6 text-center">
+                  <div className="max-w-sm">
+                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-emerald-100 text-emerald-700">
+                      <MapPin size={30} />
+                    </div>
 
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-xl font-bold text-slate-900">
-                    {online ? "Você está online" : "Você está offline"}
-                  </h2>
+                    <h2 className="mt-5 text-2xl font-bold text-slate-900">
+                      Mapa da sua operação
+                    </h2>
 
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                      online ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"
-                    }`}
-                  >
-                    {online ? "Disponível" : "Indisponível"}
-                  </span>
+                    <p className="mt-3 text-sm leading-6 text-slate-600">
+                      Assim que você ficar online e enviar sua localização, o mapa da tela inicial
+                      mostrará sua posição atual.
+                    </p>
+                  </div>
                 </div>
+              )}
 
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                  {online
-                    ? executandoNoAppAndroid()
-                      ? "Sua localização está sendo compartilhada pelo aplicativo Android, inclusive com o app minimizado."
-                      : executandoNoAppAndroid()
-                        ? "Sua localização está sendo compartilhada pelo aplicativo Android, inclusive com o app minimizado."
-                        : "Sua posição está sendo compartilhada enquanto este painel permanecer aberto."
-                    : "Fique online para que o gestor veja sua posição e possa despachar as teles mais próximas."}
-                </p>
+              <div className="absolute inset-0 bg-gradient-to-b from-slate-950/10 via-transparent to-slate-950/65" />
 
-                {online && (
-                  <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-500">
-                    <span className="flex items-center gap-1.5">
-                      <LocateFixed size={14} />
-                      {localizacaoAtualizadaEm
-                        ? `Atualizada ${formatarTempoLocalizacao(localizacaoAtualizadaEm)}`
-                        : "Aguardando localização"}
+              <div className="absolute left-4 right-4 top-4 sm:left-5 sm:right-5">
+                <div className="rounded-[1.75rem] bg-white/95 p-4 shadow-xl backdrop-blur">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-slate-950 shadow-sm">
+                        <Bike size={24} />
+                      </div>
+
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                          Express Manager
+                        </p>
+
+                        <h2 className="mt-1 text-lg font-bold text-slate-900">
+                          Painel do motoboy
+                        </h2>
+
+                        <p className="mt-1 text-sm text-slate-500">
+                          {statusPainel.descricao}
+                        </p>
+                      </div>
+                    </div>
+
+                    <span
+                      className={`inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold ${statusPainel.badgeClasse}`}
+                    >
+                      {statusPainel.tipo === "OFFLINE" ? (
+                        <WifiOff size={15} />
+                      ) : (
+                        <Wifi size={15} />
+                      )}
+                      {statusPainel.subtitulo}
                     </span>
+                  </div>
 
-                    {precisaoLocalizacao !== null && (
-                      <span>Precisão aproximada: {Math.round(precisaoLocalizacao)} m</span>
+                  <div className="mt-4 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                    {mapaLocalizacaoSrc ? (
+                      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                        <span className="flex items-center gap-1.5 font-medium text-slate-800">
+                          <LocateFixed size={14} />
+                          {localizacaoAtualizadaEm
+                            ? `Atualizada ${formatarTempoLocalizacao(localizacaoAtualizadaEm)}`
+                            : "Aguardando atualização"}
+                        </span>
+
+                        {precisaoLocalizacao !== null && (
+                          <span>Precisão aproximada: {Math.round(precisaoLocalizacao)} m</span>
+                        )}
+
+                        {segundosSemAtualizacao !== null && (
+                          <span>{segundosSemAtualizacao}s desde o último envio</span>
+                        )}
+                      </div>
+                    ) : (
+                      "Sem localização ativa no momento. Toque em “Ficar online” para compartilhar sua posição."
                     )}
                   </div>
-                )}
+                </div>
+              </div>
+
+              <div className="absolute bottom-4 left-4 right-4 sm:left-5 sm:right-5">
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-2xl bg-white/92 p-3 shadow-lg backdrop-blur">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      Aguardando
+                    </p>
+                    <strong className="mt-1 block text-lg text-slate-900">
+                      {telesAguardandoAceite.length}
+                    </strong>
+                    <span className="text-xs text-slate-500">novas teles</span>
+                  </div>
+
+                  <div className="rounded-2xl bg-white/92 p-3 shadow-lg backdrop-blur">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      Em andamento
+                    </p>
+                    <strong className="mt-1 block text-lg text-slate-900">
+                      {entregasAndamento.length}
+                    </strong>
+                    <span className="text-xs text-slate-500">rotas ativas</span>
+                  </div>
+
+                  <div className="rounded-2xl bg-white/92 p-3 shadow-lg backdrop-blur">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      Concluídas
+                    </p>
+                    <strong className="mt-1 block text-lg text-slate-900">
+                      {entregasConcluidas.length}
+                    </strong>
+                    <span className="text-xs text-slate-500">no dia</span>
+                  </div>
+                </div>
               </div>
             </div>
+          </article>
 
-            <button
-              type="button"
-              onClick={() => void (online ? ficarOffline() : ficarOnline())}
-              disabled={
-                alterandoPresenca ||
-                verificandoPermissoes ||
-                (executandoNoAppAndroid() &&
-                  !online &&
-                  permissoesLocalizacao !== null &&
-                  !permissoesLocalizacao.prontoParaFicarOnline)
-              }
-              className={`flex h-12 w-full items-center justify-center gap-2 rounded-xl px-6 font-semibold text-white transition disabled:cursor-wait disabled:opacity-60 md:w-auto ${
-                online ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"
-              }`}
-            >
-              {alterandoPresenca ? (
-                <>
-                  <Loader2 size={18} className="animate-spin" />
-                  Aguarde...
-                </>
-              ) : online ? (
-                <>
-                  <WifiOff size={18} />
-                  Ficar offline
-                </>
-              ) : (
-                <>
-                  <Wifi size={18} />
-                  Ficar online
-                </>
+          <article
+            className={`overflow-hidden rounded-[2rem] border shadow-sm ${statusPainel.painelClasse}`}
+          >
+            <div className="p-5 sm:p-6">
+              <div className="flex items-start gap-4">
+                <div
+                  className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${statusPainel.iconeClasse}`}
+                >
+                  {statusPainel.tipo === "OFFLINE" ? (
+                    <WifiOff size={26} />
+                  ) : (
+                    <Wifi size={26} />
+                  )}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-slate-500">Status da operação</p>
+
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <h2 className="text-2xl font-bold text-slate-900">{statusPainel.rotulo}</h2>
+
+                    <span
+                      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${statusPainel.badgeClasse}`}
+                    >
+                      {statusPainel.subtitulo}
+                    </span>
+                  </div>
+
+                  <p className="mt-3 text-sm leading-6 text-slate-600">
+                    {statusPainel.descricao}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl bg-white/85 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Localização
+                  </p>
+                  <p className="mt-2 text-base font-semibold text-slate-900">
+                    {localizacaoAtualizadaEm
+                      ? `Atualizada ${formatarTempoLocalizacao(localizacaoAtualizadaEm)}`
+                      : "Aguardando posição"}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {mapaLocalizacaoSrc
+                      ? "Mapa carregado na tela inicial."
+                      : "Fique online para ativar o mapa."}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-white/85 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Precisão / sinal
+                  </p>
+                  <p className="mt-2 text-base font-semibold text-slate-900">
+                    {precisaoLocalizacao !== null
+                      ? `${Math.round(precisaoLocalizacao)} m`
+                      : online
+                        ? "Aguardando precisão"
+                        : "Sem leitura"}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {statusPainel.tipo === "REDE_RUIM"
+                      ? "Seu aparelho está ativo, mas com sinal ou precisão instáveis."
+                      : "Quanto menor a precisão em metros, melhor."}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-white/85 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Aguardando aceite
+                  </p>
+                  <p className="mt-2 text-base font-semibold text-slate-900">
+                    {telesAguardandoAceite.length} tele(s)
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Responda as novas teles dentro do prazo.
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-white/85 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Rotas em andamento
+                  </p>
+                  <p className="mt-2 text-base font-semibold text-slate-900">
+                    {entregasAndamento.length} ativa(s)
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Apenas uma rota segue ativa por vez.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => void (online ? ficarOffline() : ficarOnline())}
+                  disabled={
+                    alterandoPresenca ||
+                    verificandoPermissoes ||
+                    (executandoNoAppAndroid() &&
+                      !online &&
+                      permissoesLocalizacao !== null &&
+                      !permissoesLocalizacao.prontoParaFicarOnline)
+                  }
+                  className={`flex h-12 items-center justify-center gap-2 rounded-2xl px-5 font-semibold text-white transition disabled:cursor-wait disabled:opacity-60 ${
+                    online ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"
+                  }`}
+                >
+                  {alterandoPresenca ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      Aguarde...
+                    </>
+                  ) : online ? (
+                    <>
+                      <WifiOff size={18} />
+                      Ficar offline
+                    </>
+                  ) : (
+                    <>
+                      <Wifi size={18} />
+                      Ficar online
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => void carregarDados(true)}
+                  disabled={atualizando || Boolean(teleAtualizando)}
+                  className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-5 font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                >
+                  <RefreshCw size={18} className={atualizando ? "animate-spin" : ""} />
+                  Atualizar painel
+                </button>
+
+                <Link
+                  href="/motoboy/minha-operacao"
+                  className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 font-semibold text-white transition hover:bg-slate-800"
+                >
+                  <CircleDollarSign size={18} />
+                  Minha operação
+                </Link>
+
+                <Link
+                  href="/motoboy/extrato"
+                  className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-5 font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  <WalletCards size={18} />
+                  Ver extrato
+                </Link>
+              </div>
+
+              {erroLocalizacao && (
+                <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {erroLocalizacao}
+                </div>
               )}
-            </button>
-          </div>
-
-          {erroLocalizacao && (
-            <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {erroLocalizacao}
             </div>
-          )}
+          </article>
         </section>
 
         {erro && (
