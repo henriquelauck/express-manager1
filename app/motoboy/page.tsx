@@ -154,6 +154,11 @@ type ResultadoMiniMapa = {
   distanciaKm: number;
   duracaoMin: number;
   polyline: string | null;
+  distanciaAteColetaKm?: number;
+  duracaoAteColetaMin?: number;
+  distanciaTotalKm?: number;
+  duracaoTotalMin?: number;
+  polylineTotal?: string | null;
 };
 
 type EstadoMiniMapa = {
@@ -628,10 +633,6 @@ export default function MotoboyPage() {
   }
 
   async function carregarMiniMapa(tele: Tele) {
-    if (miniMapasConsultadosRef.current.has(tele.id)) {
-      return;
-    }
-
     const paradasValidas = Array.isArray(tele.paradas)
       ? [...tele.paradas]
           .sort((a, b) => Number(a.ordem || 0) - Number(b.ordem || 0))
@@ -639,7 +640,13 @@ export default function MotoboyPage() {
       : [];
 
     if (paradasValidas.length < 2) {
-      miniMapasConsultadosRef.current.add(tele.id);
+      const chaveSemRota = `${tele.id}-sem-rota`;
+
+      if (miniMapasConsultadosRef.current.has(chaveSemRota)) {
+        return;
+      }
+
+      miniMapasConsultadosRef.current.add(chaveSemRota);
 
       setMiniMapas((atuais) => ({
         ...atuais,
@@ -653,51 +660,89 @@ export default function MotoboyPage() {
       return;
     }
 
-    miniMapasConsultadosRef.current.add(tele.id);
+    const latitudeChave =
+      latitudeAtual !== null ? latitudeAtual.toFixed(3) : "sem-latitude";
+    const longitudeChave =
+      longitudeAtual !== null ? longitudeAtual.toFixed(3) : "sem-longitude";
+    const chaveConsulta = `${tele.id}-${latitudeChave}-${longitudeChave}`;
+
+    if (miniMapasConsultadosRef.current.has(chaveConsulta)) {
+      return;
+    }
+
+    miniMapasConsultadosRef.current.add(chaveConsulta);
 
     setMiniMapas((atuais) => ({
       ...atuais,
       [tele.id]: {
         carregando: true,
         erro: null,
-        resultado: null,
+        resultado: atuais[tele.id]?.resultado || null,
       },
     }));
 
     try {
       const temRetorno = paradasValidas.some((parada) =>
-        ["TROCAR", "ENTREGA_E_COLETA", "RETORNO"].includes(String(parada.tipo || "").toUpperCase())
+        ["TROCAR", "ENTREGA_E_COLETA", "RETORNO"].includes(
+          String(parada.tipo || "").toUpperCase()
+        )
       );
 
       const paradasParaCalculo = paradasValidas.filter(
         (parada) => String(parada.tipo || "").toUpperCase() !== "RETORNO"
       );
 
-      const resposta = await fetch("/api/maps/calcular-rota", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          paradas: paradasParaCalculo.map((parada) => ({
-            endereco: String(parada.endereco || "").trim(),
-          })),
-          temRetorno,
-        }),
-      });
+      async function calcularRota(enderecos: string[], retorno: boolean) {
+        const resposta = await fetch("/api/maps/calcular-rota", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            paradas: enderecos.map((endereco) => ({
+              endereco,
+            })),
+            temRetorno: retorno,
+          }),
+        });
 
-      if (!resposta.ok) {
-        let mensagem = "Não foi possível carregar a prévia da rota.";
+        if (!resposta.ok) {
+          let mensagem = "Não foi possível calcular a rota.";
 
-        try {
-          const dadosErro = await resposta.json();
-          mensagem = dadosErro?.erro || mensagem;
-        } catch {}
+          try {
+            const dadosErro = await resposta.json();
+            mensagem = dadosErro?.erro || mensagem;
+          } catch {}
 
-        throw new Error(mensagem);
+          throw new Error(mensagem);
+        }
+
+        return (await resposta.json()) as ResultadoMiniMapa;
       }
 
-      const dados = (await resposta.json()) as ResultadoMiniMapa;
+      const enderecosTele = paradasParaCalculo.map((parada) =>
+        String(parada.endereco || "").trim()
+      );
+
+      const rotaTele = await calcularRota(enderecosTele, temRetorno);
+
+      let rotaTotal: ResultadoMiniMapa | null = null;
+
+      if (latitudeAtual !== null && longitudeAtual !== null) {
+        rotaTotal = await calcularRota(
+          [`${latitudeAtual},${longitudeAtual}`, ...enderecosTele],
+          temRetorno
+        );
+      }
+
+      const distanciaTele = Number(rotaTele.distanciaKm || 0);
+      const duracaoTele = Number(rotaTele.duracaoMin || 0);
+      const distanciaTotal = rotaTotal
+        ? Number(rotaTotal.distanciaKm || 0)
+        : distanciaTele;
+      const duracaoTotal = rotaTotal
+        ? Number(rotaTotal.duracaoMin || 0)
+        : duracaoTele;
 
       setMiniMapas((atuais) => ({
         ...atuais,
@@ -705,9 +750,14 @@ export default function MotoboyPage() {
           carregando: false,
           erro: null,
           resultado: {
-            distanciaKm: Number(dados.distanciaKm || 0),
-            duracaoMin: Number(dados.duracaoMin || 0),
-            polyline: dados.polyline || null,
+            distanciaKm: distanciaTele,
+            duracaoMin: duracaoTele,
+            polyline: rotaTele.polyline || null,
+            distanciaAteColetaKm: Math.max(distanciaTotal - distanciaTele, 0),
+            duracaoAteColetaMin: Math.max(duracaoTotal - duracaoTele, 0),
+            distanciaTotalKm: distanciaTotal,
+            duracaoTotalMin: duracaoTotal,
+            polylineTotal: rotaTotal?.polyline || rotaTele.polyline || null,
           },
         },
       }));
@@ -719,8 +769,8 @@ export default function MotoboyPage() {
           erro:
             erroMiniMapa instanceof Error
               ? erroMiniMapa.message
-              : "Não foi possível carregar a prévia da rota.",
-          resultado: null,
+              : "Não foi possível carregar a rota da tele.",
+          resultado: atuais[tele.id]?.resultado || null,
         },
       }));
     }
@@ -1364,12 +1414,6 @@ export default function MotoboyPage() {
     [teles]
   );
 
-  useEffect(() => {
-    for (const tele of telesAguardandoAceite) {
-      void carregarMiniMapa(tele);
-    }
-  }, [telesAguardandoAceite]);
-
   const entregasAndamento = useMemo(
     () =>
       teles
@@ -1377,6 +1421,19 @@ export default function MotoboyPage() {
         .sort(ordenarTelesPorFila),
     [teles]
   );
+
+  useEffect(() => {
+    const telesComRota = [...telesAguardandoAceite, ...entregasAndamento];
+
+    for (const tele of telesComRota) {
+      void carregarMiniMapa(tele);
+    }
+  }, [
+    telesAguardandoAceite,
+    entregasAndamento,
+    latitudeAtual,
+    longitudeAtual,
+  ]);
 
   const entregasConcluidas = useMemo(
     () =>
@@ -1394,6 +1451,19 @@ export default function MotoboyPage() {
     permissoesLocalizacao.gpsAtivo &&
     permissoesLocalizacao.bateriaSemRestricao &&
     (!online || permissoesLocalizacao.servicoAtivo);
+
+  const teleDestaqueMapa =
+    telesAguardandoAceite[0] ||
+    entregasAndamento.find((tele) => tele.rotaAtiva) ||
+    entregasAndamento[0] ||
+    null;
+
+  const rotaDestaqueMapa = teleDestaqueMapa
+    ? miniMapas[teleDestaqueMapa.id]?.resultado || null
+    : null;
+
+  const polylineDestaqueMapa =
+    rotaDestaqueMapa?.polylineTotal || rotaDestaqueMapa?.polyline || null;
 
   const mapaLocalizacaoSrc =
     latitudeAtual !== null && longitudeAtual !== null
@@ -2091,7 +2161,15 @@ export default function MotoboyPage() {
         <section className="sm:mt-5">
           <article className="overflow-hidden border-y border-slate-200 bg-white shadow-sm sm:rounded-[2rem] sm:border">
             <div className="relative h-[500px] sm:h-[520px]">
-              {mapaLocalizacaoSrc ? (
+              {polylineDestaqueMapa ? (
+                <img
+                  src={`/api/maps/imagem-rota?polyline=${encodeURIComponent(
+                    polylineDestaqueMapa
+                  )}&versao=mapa-principal-operacional-1`}
+                  alt="Rota em destaque no mapa principal"
+                  className="h-full w-full object-cover"
+                />
+              ) : mapaLocalizacaoSrc ? (
                 <iframe
                   title="Mapa da sua localização"
                   src={mapaLocalizacaoSrc}
@@ -2184,6 +2262,45 @@ export default function MotoboyPage() {
                   )}
                 </div>
               </div>
+
+              {teleDestaqueMapa && rotaDestaqueMapa && (
+                <div className="absolute left-3 right-3 top-24 sm:left-5 sm:right-auto sm:top-24 sm:w-80">
+                  <div className="rounded-2xl bg-slate-950/90 px-4 py-3 text-white shadow-xl backdrop-blur">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">
+                      {telesAguardandoAceite.some(
+                        (tele) => tele.id === teleDestaqueMapa.id
+                      )
+                        ? "Nova tele no mapa"
+                        : "Rota em andamento"}
+                    </p>
+                    <p className="mt-1 truncate text-sm font-bold">
+                      {teleDestaqueMapa.solicitante || "Solicitante não informado"}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-200">
+                      <span>
+                        Até coleta:{" "}
+                        {formatarDistancia(
+                          rotaDestaqueMapa.distanciaAteColetaKm || 0
+                        )}
+                      </span>
+                      <span>
+                        Total:{" "}
+                        {formatarDistancia(
+                          rotaDestaqueMapa.distanciaTotalKm ||
+                            rotaDestaqueMapa.distanciaKm
+                        )}
+                      </span>
+                      <span>
+                        {Math.round(
+                          rotaDestaqueMapa.duracaoTotalMin ||
+                            rotaDestaqueMapa.duracaoMin
+                        )}{" "}
+                        min
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="absolute bottom-3 left-3 right-3 sm:bottom-5 sm:left-5 sm:right-5">
                 <div className="grid grid-cols-3 gap-2">
@@ -2437,7 +2554,7 @@ export default function MotoboyPage() {
                 <CardTele
                   key={tele.id}
                   tele={tele}
-                  miniMapa={undefined}
+                  miniMapa={miniMapas[tele.id]}
                   compacto
                   atualizando={teleAtualizando === tele.id}
                   bloqueado={Boolean(teleAtualizando)}
@@ -2823,6 +2940,19 @@ function CardTele({
               </div>
             </div>
 
+            {miniMapa?.carregando ? (
+              <div className="mt-4 flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
+                <Loader2 size={17} className="animate-spin" />
+                Calculando distância e tempo...
+              </div>
+            ) : miniMapa?.resultado ? (
+              <MetricasRota tele={tele} resultado={miniMapa.resultado} />
+            ) : miniMapa?.erro ? (
+              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
+                {miniMapa.erro}
+              </div>
+            ) : null}
+
             <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
                 Etapa atual
@@ -3076,46 +3206,23 @@ function CardTele({
           </div>
 
           {estaAguardandoAceite && (
-            <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
-              <div className="flex items-center justify-between gap-4 border-b border-slate-200 bg-white px-4 py-3">
-                <div>
-                  <p className="font-semibold text-slate-800">Prévia da rota</p>
-                  <p className="mt-0.5 text-xs text-slate-500">
-                    Confira o trajeto antes de aceitar a tele.
-                  </p>
-                </div>
-
-                {miniMapa?.resultado && (
-                  <div className="shrink-0 text-right text-xs text-slate-500">
-                    <strong className="block text-sm text-slate-800">
-                      {miniMapa.resultado.distanciaKm.toFixed(1).replace(".", ",")} km
-                    </strong>
-                    <span>{miniMapa.resultado.duracaoMin} min</span>
-                  </div>
-                )}
-              </div>
-
+            <div className="mt-5">
               {miniMapa?.carregando ? (
-                <div className="flex h-48 items-center justify-center gap-2 text-sm text-slate-500">
+                <div className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
                   <Loader2 size={18} className="animate-spin" />
-                  Calculando rota...
+                  Calculando distância e tempo...
                 </div>
-              ) : miniMapa?.resultado?.polyline ? (
-                <img
-                  src={`/api/maps/imagem-rota?polyline=${encodeURIComponent(
-                    miniMapa.resultado.polyline
-                  )}&versao=mapa-real-2`}
-                  alt="Prévia do trajeto da tele"
-                  className="h-48 w-full object-cover sm:h-56"
-                  loading="lazy"
-                />
+              ) : miniMapa?.resultado ? (
+                <MetricasRota tele={tele} resultado={miniMapa.resultado} destaque />
               ) : miniMapa?.erro ? (
-                <div className="px-4 py-5 text-sm text-amber-700">{miniMapa.erro}</div>
-              ) : (
-                <div className="flex h-48 items-center justify-center text-sm text-slate-500">
-                  Preparando prévia da rota...
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-700">
+                  {miniMapa.erro}
                 </div>
-              )}
+              ) : null}
+
+              <div className="mt-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-800">
+                A rota desta tele está sendo exibida no mapa principal acima.
+              </div>
             </div>
           )}
 
@@ -3420,6 +3527,98 @@ function CardTele({
   );
 }
 
+function MetricasRota({
+  tele,
+  resultado,
+  destaque = false,
+}: {
+  tele: Tele;
+  resultado: ResultadoMiniMapa;
+  destaque?: boolean;
+}) {
+  const distanciaTele = Number(resultado.distanciaKm || 0);
+  const distanciaAteColeta = Number(resultado.distanciaAteColetaKm || 0);
+  const distanciaTotal = Number(resultado.distanciaTotalKm || distanciaTele);
+  const duracaoTele = Number(resultado.duracaoMin || 0);
+  const duracaoAteColeta = Number(resultado.duracaoAteColetaMin || 0);
+  const duracaoTotal = Number(resultado.duracaoTotalMin || duracaoTele);
+  const valorTele = Number(tele.total || 0);
+  const valorPorKm = distanciaTotal > 0 ? valorTele / distanciaTotal : 0;
+  const liquidoPorKm =
+    distanciaTotal > 0 ? (valorTele * 0.8) / distanciaTotal : 0;
+
+  return (
+    <div
+      className={`mt-4 overflow-hidden rounded-2xl border ${
+        destaque
+          ? "border-emerald-200 bg-emerald-50"
+          : "border-slate-200 bg-slate-50"
+      }`}
+    >
+      <div className="grid grid-cols-2 divide-x divide-y divide-slate-200 sm:grid-cols-3 sm:divide-y-0">
+        <MetricaRota
+          titulo="Até a coleta"
+          valor={formatarDistancia(distanciaAteColeta)}
+          detalhe={`${Math.round(duracaoAteColeta)} min`}
+        />
+        <MetricaRota
+          titulo="Rota da tele"
+          valor={formatarDistancia(distanciaTele)}
+          detalhe={`${Math.round(duracaoTele)} min`}
+        />
+        <MetricaRota
+          titulo="Total estimado"
+          valor={formatarDistancia(distanciaTotal)}
+          detalhe={`${Math.round(duracaoTotal)} min`}
+          classeExtra="col-span-2 sm:col-span-1"
+        />
+      </div>
+
+      <div className="grid grid-cols-2 border-t border-slate-200 bg-white/80">
+        <MetricaRota
+          titulo="Valor por km"
+          valor={`${formatarMoeda(valorPorKm)}/km`}
+        />
+        <MetricaRota
+          titulo="Seu líquido por km"
+          valor={`${formatarMoeda(liquidoPorKm)}/km`}
+          destaque
+        />
+      </div>
+    </div>
+  );
+}
+
+function MetricaRota({
+  titulo,
+  valor,
+  detalhe,
+  destaque = false,
+  classeExtra = "",
+}: {
+  titulo: string;
+  valor: string;
+  detalhe?: string;
+  destaque?: boolean;
+  classeExtra?: string;
+}) {
+  return (
+    <div className={`px-3 py-3 ${classeExtra}`}>
+      <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+        {titulo}
+      </p>
+      <strong
+        className={`mt-1 block text-sm ${
+          destaque ? "text-emerald-700" : "text-slate-900"
+        }`}
+      >
+        {valor}
+      </strong>
+      {detalhe && <p className="mt-0.5 text-xs text-slate-500">{detalhe}</p>}
+    </div>
+  );
+}
+
 function EstadoVazio({
   titulo,
   descricao,
@@ -3688,6 +3887,14 @@ function formatarData(data?: string | null) {
   return new Date(data).toLocaleDateString("pt-BR", {
     timeZone: FUSO_BRASIL,
   });
+}
+
+function formatarDistancia(valorKm: number) {
+  if (!Number.isFinite(valorKm)) {
+    return "0 km";
+  }
+
+  return `${valorKm.toFixed(1).replace(".", ",")} km`;
 }
 
 function formatarMoeda(valor: number) {
