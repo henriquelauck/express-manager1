@@ -261,8 +261,8 @@ export default function MotoboyPage() {
   const [baixandoAtualizacao, setBaixandoAtualizacao] = useState(false);
   const [erroAtualizacaoApp, setErroAtualizacaoApp] = useState("");
   const [menuAberto, setMenuAberto] = useState(false);
+  const [concluidasAberto, setConcluidasAberto] = useState(false);
 
-  const entregasConcluidasRef = useRef<HTMLElement | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const ultimaPosicaoRef = useRef<{
     latitude: number;
@@ -1466,28 +1466,20 @@ export default function MotoboyPage() {
       return;
     }
 
-    if (!preparacaoCompleta) {
-      setPreparacaoExpandida(true);
-    }
+    setPreparacaoExpandida(!preparacaoCompleta);
   }, [permissoesLocalizacao, preparacaoCompleta]);
 
   function fecharMenu() {
     setMenuAberto(false);
   }
 
-  function irParaEntregasConcluidas() {
+  function abrirEntregasConcluidas() {
     fecharMenu();
-
-    window.setTimeout(() => {
-      entregasConcluidasRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }, 120);
+    setConcluidasAberto(true);
   }
 
   useEffect(() => {
-    if (!menuAberto) {
+    if (!menuAberto && !concluidasAberto) {
       return;
     }
 
@@ -1504,7 +1496,7 @@ export default function MotoboyPage() {
       document.body.style.overflow = "";
       document.removeEventListener("keydown", fecharComEscape);
     };
-  }, [menuAberto]);
+  }, [menuAberto, concluidasAberto]);
 
   if (carregando) {
     return (
@@ -1674,7 +1666,7 @@ export default function MotoboyPage() {
 
                 <button
                   type="button"
-                  onClick={irParaEntregasConcluidas}
+                  onClick={abrirEntregasConcluidas}
                   className="mt-2 flex w-full items-center gap-3 rounded-2xl px-4 py-4 text-left font-semibold text-slate-800 transition hover:bg-slate-50"
                 >
                   <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
@@ -1723,6 +1715,77 @@ export default function MotoboyPage() {
                 </button>
               </div>
             </aside>
+          </div>
+        )}
+
+        {concluidasAberto && (
+          <div className="fixed inset-0 z-[110] flex flex-col bg-slate-50">
+            <header className="bg-slate-950 px-4 pb-4 pt-[calc(env(safe-area-inset-top)+14px)] text-white shadow-lg">
+              <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-4">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-slate-950">
+                    <CheckCircle2 size={22} />
+                  </div>
+
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
+                      Histórico de hoje
+                    </p>
+                    <h2 className="truncate text-lg font-bold">
+                      Entregas concluídas
+                    </h2>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setConcluidasAberto(false)}
+                  aria-label="Fechar entregas concluídas"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </header>
+
+            <div className="flex-1 overflow-y-auto px-4 py-5 pb-[calc(env(safe-area-inset-bottom)+24px)]">
+              <div className="mx-auto w-full max-w-4xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+                <CabecalhoSecao
+                  titulo="Entregas concluídas"
+                  descricao="Teles finalizadas hoje."
+                  quantidade={entregasConcluidas.length}
+                  icone={<CheckCircle2 size={21} />}
+                  concluida
+                />
+
+                {entregasConcluidas.length === 0 ? (
+                  <EstadoVazio
+                    titulo="Nenhuma entrega concluída"
+                    descricao="As teles finalizadas hoje aparecerão nesta lista."
+                    icone={<CheckCircle2 size={26} />}
+                  />
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {entregasConcluidas.map((tele) => (
+                      <CardTele
+                        key={tele.id}
+                        tele={tele}
+                        miniMapa={undefined}
+                        concluida
+                        atualizando={false}
+                        bloqueado
+                        onAvancarEtapa={() => {}}
+                        onAceitar={() => {}}
+                        onRecusar={() => {}}
+                        onExpirarAceite={() => {}}
+                        onAbrirMapaParadaAtual={() => {}}
+                        onRegistrarPagamento={() => {}}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
@@ -2110,7 +2173,7 @@ export default function MotoboyPage() {
                       ) : (
                         <Wifi size={16} />
                       )}
-                      {online ? "Sair" : "Entrar"}
+                      {online ? "Offline" : "Online"}
                     </button>
                   </div>
 
@@ -2391,45 +2454,6 @@ export default function MotoboyPage() {
           )}
         </section>
 
-        <section
-          ref={entregasConcluidasRef}
-          className="mx-4 mt-6 scroll-mt-4 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm sm:mx-0 sm:mt-8"
-        >
-          <CabecalhoSecao
-            titulo="Entregas concluídas"
-            descricao="Teles finalizadas hoje."
-            quantidade={entregasConcluidas.length}
-            icone={<CheckCircle2 size={21} />}
-            concluida
-          />
-
-          {entregasConcluidas.length === 0 ? (
-            <EstadoVazio
-              titulo="Nenhuma entrega concluída"
-              descricao="As teles finalizadas hoje aparecerão nesta lista."
-              icone={<CheckCircle2 size={26} />}
-            />
-          ) : (
-            <div className="divide-y divide-slate-100">
-              {entregasConcluidas.map((tele) => (
-                <CardTele
-                  key={tele.id}
-                  tele={tele}
-                  miniMapa={undefined}
-                  concluida
-                  atualizando={false}
-                  bloqueado
-                  onAvancarEtapa={() => {}}
-                  onAceitar={() => {}}
-                  onRecusar={() => {}}
-                  onExpirarAceite={() => {}}
-                  onAbrirMapaParadaAtual={() => {}}
-                  onRegistrarPagamento={() => {}}
-                />
-              ))}
-            </div>
-          )}
-        </section>
 
         <footer className="py-8 text-center text-xs text-slate-400">
           Express Manager • Área do motoboy
