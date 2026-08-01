@@ -1,10 +1,14 @@
 package com.lauckdastele.expressmanager;
 
 import android.Manifest;
+import android.app.ActivityManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.PowerManager;
 import android.provider.Settings;
 
 import androidx.core.content.ContextCompat;
@@ -45,34 +49,52 @@ public class LocalizacaoPlugin extends Plugin {
 
     @PluginMethod
     public void verificarPermissoes(PluginCall call) {
+        boolean localizacaoDuranteUso = temPermissaoLocalizacao();
+        boolean localizacaoSegundoPlano = temPermissaoSegundoPlano();
+        boolean notificacoes = temPermissaoNotificacoes();
+        boolean bateriaSemRestricao = bateriaSemRestricao();
+        boolean gpsAtivo = gpsAtivo();
+        boolean servicoAtivo = servicoLocalizacaoAtivo();
+
         JSObject resposta = new JSObject();
 
-        resposta.put(
-                "localizacaoDuranteUso",
-                temPermissaoLocalizacao()
-        );
+        resposta.put("localizacaoDuranteUso", localizacaoDuranteUso);
+        resposta.put("localizacaoSegundoPlano", localizacaoSegundoPlano);
+        resposta.put("notificacoes", notificacoes);
+        resposta.put("bateriaSemRestricao", bateriaSemRestricao);
+        resposta.put("gpsAtivo", gpsAtivo);
+        resposta.put("servicoAtivo", servicoAtivo);
 
-        resposta.put(
-                "localizacaoSegundoPlano",
-                temPermissaoSegundoPlano()
-        );
-
-        resposta.put(
-                "notificacoes",
-                temPermissaoNotificacoes()
-        );
-
+        /*
+         * Permissões e configurações obrigatórias para permitir
+         * que o motoboy fique online com segurança.
+         *
+         * O serviço ainda não precisa estar ativo nesta verificação,
+         * pois ele será iniciado ao tocar em "Ficar online".
+         */
         resposta.put(
                 "prontoParaFicarOnline",
-                temPermissaoLocalizacao()
-                        && temPermissaoSegundoPlano()
-                        && temPermissaoNotificacoes()
+                localizacaoDuranteUso
+                        && localizacaoSegundoPlano
+                        && notificacoes
+                        && bateriaSemRestricao
+                        && gpsAtivo
         );
 
         resposta.put(
                 "precisaAbrirConfiguracoes",
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-                        && !temPermissaoSegundoPlano()
+                        && !localizacaoSegundoPlano
+        );
+
+        resposta.put(
+                "precisaCorrigirBateria",
+                !bateriaSemRestricao
+        );
+
+        resposta.put(
+                "precisaAtivarGps",
+                !gpsAtivo
         );
 
         call.resolve(resposta);
@@ -80,26 +102,67 @@ public class LocalizacaoPlugin extends Plugin {
 
     @PluginMethod
     public void abrirConfiguracoesLocalizacao(PluginCall call) {
-        try {
-            Intent intent = new Intent(
-                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS
-            );
+        abrirDetalhesDoAplicativo(
+                call,
+                "Não foi possível abrir as configurações de localização."
+        );
+    }
 
-            intent.setData(
-                    Uri.parse("package:" + getContext().getPackageName())
-            );
+    @PluginMethod
+    public void abrirConfiguracoesBateria(PluginCall call) {
+        try {
+            Intent intent = new Intent();
+
+            /*
+             * Abre diretamente a configuração de otimização do próprio app
+             * quando o Android oferece suporte. Caso o fabricante bloqueie
+             * esse atalho, usamos a lista geral de otimização de bateria.
+             */
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                intent.setAction(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                intent.setData(Uri.parse("package:" + getContext().getPackageName()));
+            } else {
+                intent.setAction(Settings.ACTION_SETTINGS);
+            }
 
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-
             getContext().startActivity(intent);
 
             JSObject resposta = new JSObject();
             resposta.put("aberto", true);
+            call.resolve(resposta);
+        } catch (Exception primeiroErro) {
+            try {
+                Intent fallback = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+                fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                getContext().startActivity(fallback);
 
+                JSObject resposta = new JSObject();
+                resposta.put("aberto", true);
+                resposta.put("fallback", true);
+                call.resolve(resposta);
+            } catch (Exception segundoErro) {
+                call.reject(
+                        "Não foi possível abrir as configurações de bateria.",
+                        segundoErro
+                );
+            }
+        }
+    }
+
+    @PluginMethod
+    public void abrirConfiguracoesGps(PluginCall call) {
+        try {
+            Intent intent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+
+            JSObject resposta = new JSObject();
+            resposta.put("aberto", true);
             call.resolve(resposta);
         } catch (Exception erro) {
             call.reject(
-                    "Não foi possível abrir as configurações de localização.",
+                    "Não foi possível abrir as configurações de GPS.",
                     erro
             );
         }
@@ -205,11 +268,34 @@ public class LocalizacaoPlugin extends Plugin {
             return;
         }
 
-        iniciarServico(call);
+        validarConfiguracoesEIniciar(call);
     }
 
     @PermissionCallback
     private void permissaoNotificacaoConcedida(PluginCall call) {
+        if (!temPermissaoNotificacoes()) {
+            call.reject("Permissão de notificações não concedida.");
+            return;
+        }
+
+        validarConfiguracoesEIniciar(call);
+    }
+
+    private void validarConfiguracoesEIniciar(PluginCall call) {
+        if (!gpsAtivo()) {
+            call.reject(
+                    "Ative o GPS do aparelho antes de ficar online."
+            );
+            return;
+        }
+
+        if (!bateriaSemRestricao()) {
+            call.reject(
+                    "Desative a otimização de bateria do Express Manager antes de ficar online."
+            );
+            return;
+        }
+
         iniciarServico(call);
     }
 
@@ -251,6 +337,72 @@ public class LocalizacaoPlugin extends Plugin {
         ) == PackageManager.PERMISSION_GRANTED;
     }
 
+    private boolean bateriaSemRestricao() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return true;
+        }
+
+        PowerManager powerManager =
+                (PowerManager) getContext().getSystemService(
+                        Context.POWER_SERVICE
+                );
+
+        if (powerManager == null) {
+            return false;
+        }
+
+        return powerManager.isIgnoringBatteryOptimizations(
+                getContext().getPackageName()
+        );
+    }
+
+    private boolean gpsAtivo() {
+        LocationManager locationManager =
+                (LocationManager) getContext().getSystemService(
+                        Context.LOCATION_SERVICE
+                );
+
+        if (locationManager == null) {
+            return false;
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return locationManager.isLocationEnabled();
+        }
+
+        try {
+            return locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+                    || locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
+        } catch (Exception erro) {
+            return false;
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    private boolean servicoLocalizacaoAtivo() {
+        ActivityManager activityManager =
+                (ActivityManager) getContext().getSystemService(
+                        Context.ACTIVITY_SERVICE
+                );
+
+        if (activityManager == null) {
+            return false;
+        }
+
+        for (ActivityManager.RunningServiceInfo servico :
+                activityManager.getRunningServices(Integer.MAX_VALUE)) {
+            if (
+                    LocalizacaoService.class.getName().equals(
+                            servico.service.getClassName()
+                    )
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private void iniciarServico(PluginCall call) {
         try {
             Intent intent = new Intent(
@@ -287,11 +439,6 @@ public class LocalizacaoPlugin extends Plugin {
                     LocalizacaoService.ACAO_PARAR_SOM
             );
 
-            /*
-             * O serviço já está ativo em primeiro plano.
-             * Para enviar apenas o comando de parar o som, não devemos
-             * criar uma nova obrigação de startForegroundService().
-             */
             getContext().startService(intent);
 
             JSObject resposta = new JSObject();
@@ -324,6 +471,35 @@ public class LocalizacaoPlugin extends Plugin {
         } catch (Exception erro) {
             call.reject(
                     "Não foi possível encerrar o serviço de localização.",
+                    erro
+            );
+        }
+    }
+
+    private void abrirDetalhesDoAplicativo(
+            PluginCall call,
+            String mensagemErro
+    ) {
+        try {
+            Intent intent = new Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+            );
+
+            intent.setData(
+                    Uri.parse("package:" + getContext().getPackageName())
+            );
+
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+            getContext().startActivity(intent);
+
+            JSObject resposta = new JSObject();
+            resposta.put("aberto", true);
+
+            call.resolve(resposta);
+        } catch (Exception erro) {
+            call.reject(
+                    mensagemErro,
                     erro
             );
         }
