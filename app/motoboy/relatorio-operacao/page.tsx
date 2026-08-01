@@ -9,6 +9,7 @@ import {
   Clock3,
   Fuel,
   Gauge,
+  FileSpreadsheet,
   Loader2,
   RefreshCw,
   TrendingDown,
@@ -100,6 +101,7 @@ export default function RelatorioOperacaoMotoboyPage() {
   const [carregando, setCarregando] = useState(true);
   const [atualizando, setAtualizando] = useState(false);
   const [erro, setErro] = useState("");
+  const [exportandoExcel, setExportandoExcel] = useState(false);
 
   async function carregar(mostrarAtualizacao = false) {
     if (mostrarAtualizacao) {
@@ -152,6 +154,154 @@ export default function RelatorioOperacaoMotoboyPage() {
     } finally {
       setCarregando(false);
       setAtualizando(false);
+    }
+  }
+
+  async function exportarExcel() {
+    if (!dados || exportandoExcel) {
+      return;
+    }
+
+    setExportandoExcel(true);
+    setErro("");
+
+    try {
+      const XLSX = await import("xlsx");
+
+      const resumoLinhas = [
+        ["RELATÓRIO DA OPERAÇÃO DO MOTOBOY"],
+        [],
+        ["Motoboy", dados.motoboy.nome],
+        [
+          "Período",
+          `${dados.filtros.inicio || "Início"} até ${dados.filtros.fim || "Atual"}`,
+        ],
+        ["Meses com dados", dados.resumo.mesesComDados],
+        ["Anos com dados", dados.resumo.anosComDados],
+        [],
+        ["INDICADOR", "VALOR"],
+        ["Faturamento do trabalho", dados.resumo.faturamentoTrabalho],
+        ["Feito por fora", dados.resumo.feitoPorFora],
+        ["Faturamento total", dados.resumo.faturamentoTotal],
+        ["Gasolina", dados.resumo.gasolina],
+        ["Manutenção", dados.resumo.manutencao],
+        ["Alimentação", dados.resumo.alimentacao],
+        ["Outras despesas", dados.resumo.outrasDespesas],
+        ["Despesas totais", dados.resumo.despesasTotais],
+        ["Lucro líquido", dados.resumo.lucroLiquido],
+        ["Dias trabalhados", dados.resumo.diasTrabalhados],
+        ["Km rodados", dados.resumo.kmRodados],
+        ["Km online", dados.resumo.kmOnline],
+        ["Tempo online em segundos", dados.resumo.tempoOnlineSegundos],
+        ["Média mensal", dados.resumo.mediaMensal],
+        ["Lucro médio mensal", dados.resumo.mediaLucroMensal],
+        ["Média diária", dados.resumo.mediaDiaria],
+        ["Lucro por dia", dados.resumo.lucroPorDia],
+        ["Faturamento por km", dados.resumo.faturamentoPorKm ?? ""],
+        ["Lucro por km", dados.resumo.lucroPorKm ?? ""],
+        [],
+        ["Regra de consolidação", dados.regraConsolidacao],
+      ];
+
+      const anosLinhas = dados.anos.map((ano) => ({
+        ANO: ano.ano,
+        MESES: ano.meses,
+        FATURAMENTO_TOTAL: ano.faturamentoTotal,
+        DESPESAS_TOTAIS: ano.despesasTotais,
+        LUCRO_LIQUIDO: ano.lucroLiquido,
+        DIAS_TRABALHADOS: ano.diasTrabalhados,
+        MEDIA_MENSAL: ano.mediaMensal,
+      }));
+
+      const mesesLinhas = dados.meses.map((mes) => ({
+        ANO: mes.ano,
+        MES: mes.mes,
+        PERIODO: mes.periodo,
+        MES_NOME: mes.mesNome,
+        ORIGEM:
+          mes.origem === "HISTORICO_IMPORTADO"
+            ? "HISTORICO IMPORTADO"
+            : "CONTROLE DIARIO",
+        FATURAMENTO_TRABALHO: mes.faturamentoTrabalho,
+        FEITO_POR_FORA: mes.feitoPorFora,
+        FATURAMENTO_TOTAL: mes.faturamentoTotal,
+        GASOLINA: mes.gasolina,
+        MANUTENCAO: mes.manutencao,
+        ALIMENTACAO: mes.alimentacao,
+        OUTRAS_DESPESAS: mes.outrasDespesas,
+        DESPESAS_TOTAIS: mes.despesasTotais,
+        LUCRO_LIQUIDO: mes.lucroLiquido,
+        DIAS_TRABALHADOS: mes.diasTrabalhados,
+        KM_RODADOS: mes.kmRodados,
+        KM_ONLINE: mes.kmOnline,
+        TEMPO_ONLINE_SEGUNDOS: mes.tempoOnlineSegundos,
+      }));
+
+      const workbook = XLSX.utils.book_new();
+
+      const resumoSheet = XLSX.utils.aoa_to_sheet(resumoLinhas);
+      const anosSheet = XLSX.utils.json_to_sheet(anosLinhas);
+      const mesesSheet = XLSX.utils.json_to_sheet(mesesLinhas);
+
+      resumoSheet["!cols"] = [{ wch: 34 }, { wch: 70 }];
+      anosSheet["!cols"] = [
+        { wch: 10 },
+        { wch: 10 },
+        { wch: 22 },
+        { wch: 22 },
+        { wch: 22 },
+        { wch: 20 },
+        { wch: 20 },
+      ];
+      mesesSheet["!cols"] = [
+        { wch: 10 },
+        { wch: 8 },
+        { wch: 12 },
+        { wch: 16 },
+        { wch: 22 },
+        { wch: 24 },
+        { wch: 20 },
+        { wch: 22 },
+        { wch: 16 },
+        { wch: 18 },
+        { wch: 16 },
+        { wch: 20 },
+        { wch: 20 },
+        { wch: 20 },
+        { wch: 18 },
+        { wch: 15 },
+        { wch: 15 },
+        { wch: 24 },
+      ];
+
+      XLSX.utils.book_append_sheet(workbook, resumoSheet, "RESUMO");
+      XLSX.utils.book_append_sheet(workbook, anosSheet, "ANOS");
+      XLSX.utils.book_append_sheet(workbook, mesesSheet, "MESES");
+
+      const periodoArquivo =
+        dados.filtros.inicio || dados.filtros.fim
+          ? `${dados.filtros.inicio || "inicio"}_${dados.filtros.fim || "atual"}`
+          : "completo";
+
+      const nomeSeguro = dados.motoboy.nome
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "")
+        .toLowerCase();
+
+      XLSX.writeFile(
+        workbook,
+        `relatorio_operacao_${nomeSeguro || "motoboy"}_${periodoArquivo}.xlsx`
+      );
+    } catch (erroExportacao) {
+      setErro(
+        erroExportacao instanceof Error
+          ? erroExportacao.message
+          : "Não foi possível exportar o relatório em Excel."
+      );
+    } finally {
+      setExportandoExcel(false);
     }
   }
 
@@ -224,18 +374,39 @@ export default function RelatorioOperacaoMotoboyPage() {
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={() => void carregar(true)}
-                disabled={atualizando || periodoInvalido}
-                className="flex h-12 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-5 font-semibold text-white transition hover:bg-white/15 disabled:opacity-60"
-              >
-                <RefreshCw
-                  size={18}
-                  className={atualizando ? "animate-spin" : ""}
-                />
-                Atualizar
-              </button>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => void exportarExcel()}
+                  disabled={
+                    !dados ||
+                    exportandoExcel ||
+                    periodoInvalido ||
+                    dados.meses.length === 0
+                  }
+                  className="flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {exportandoExcel ? (
+                    <Loader2 size={18} className="animate-spin" />
+                  ) : (
+                    <FileSpreadsheet size={18} />
+                  )}
+                  Exportar Excel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => void carregar(true)}
+                  disabled={atualizando || periodoInvalido}
+                  className="flex h-12 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-5 font-semibold text-white transition hover:bg-white/15 disabled:opacity-60"
+                >
+                  <RefreshCw
+                    size={18}
+                    className={atualizando ? "animate-spin" : ""}
+                  />
+                  Atualizar
+                </button>
+              </div>
             </div>
           </div>
         </header>
