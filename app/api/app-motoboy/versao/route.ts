@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 
 const VERSAO_ATUAL = {
-  versionCode: 3,
-  versionName: "1.1.1",
+  versionCode: 4,
+  versionName: "1.1.2",
   obrigatoria: false,
   mensagem:
-    "Uma nova versão do Express Manager está disponível. Esta atualização valida o novo sistema automático de atualização do aplicativo.",
+    "Nova versão com botões inteligentes para abrir localização, GPS, notificações, bateria e configurações especiais do aparelho.",
   apkUrl:
-    "https://express-manager1.vercel.app/downloads/express-manager-motoboy-1.1.1.apk",
+    "https://express-manager1.vercel.app/downloads/express-manager-motoboy-1.1.2.apk",
 };
 
 export async function GET() {
