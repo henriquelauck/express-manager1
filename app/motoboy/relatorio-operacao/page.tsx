@@ -10,6 +10,7 @@ import {
   Fuel,
   Gauge,
   FileSpreadsheet,
+  Printer,
   Loader2,
   RefreshCw,
   TrendingDown,
@@ -305,6 +306,14 @@ export default function RelatorioOperacaoMotoboyPage() {
     }
   }
 
+  function exportarPdf() {
+    if (!dados || dados.meses.length === 0 || periodoInvalido) {
+      return;
+    }
+
+    window.print();
+  }
+
   useEffect(() => {
     void carregar();
   }, []);
@@ -354,7 +363,7 @@ export default function RelatorioOperacaoMotoboyPage() {
               <div>
                 <Link
                   href="/motoboy/minha-operacao"
-                  className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-300 transition hover:text-emerald-200"
+                  className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-300 transition hover:text-emerald-200 print:hidden"
                 >
                   <ArrowLeft size={17} />
                   Voltar à Minha operação
@@ -374,7 +383,7 @@ export default function RelatorioOperacaoMotoboyPage() {
                 </p>
               </div>
 
-              <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="flex flex-col gap-3 sm:flex-row print:hidden">
                 <button
                   type="button"
                   onClick={() => void exportarExcel()}
@@ -392,6 +401,20 @@ export default function RelatorioOperacaoMotoboyPage() {
                     <FileSpreadsheet size={18} />
                   )}
                   Exportar Excel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={exportarPdf}
+                  disabled={
+                    !dados ||
+                    periodoInvalido ||
+                    dados.meses.length === 0
+                  }
+                  className="flex h-12 items-center justify-center gap-2 rounded-xl bg-white px-5 font-semibold text-slate-950 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Printer size={18} />
+                  Exportar PDF
                 </button>
 
                 <button
@@ -418,7 +441,7 @@ export default function RelatorioOperacaoMotoboyPage() {
           </div>
         )}
 
-        <section className="mt-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <section className="mt-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm print:hidden">
           <div className="flex items-center gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-5 sm:px-6">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
               <CalendarDays size={20} />
@@ -819,17 +842,74 @@ export default function RelatorioOperacaoMotoboyPage() {
               )}
             </section>
 
-            <div className="mt-6 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-800">
+            <div className="mt-6 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-800 print:hidden">
               <strong>Como os dados são unidos:</strong>{" "}
               {dados.regraConsolidacao}
             </div>
           </>
         )}
 
-        <footer className="py-8 text-center text-xs text-slate-400">
+        <footer className="py-8 text-center text-xs text-slate-400 print:hidden">
           Express Manager • Relatório da operação do motoboy
         </footer>
       </div>
+
+      <style jsx global>{`
+        @media print {
+          @page {
+            size: A4 landscape;
+            margin: 10mm;
+          }
+
+          html,
+          body {
+            background: #ffffff !important;
+          }
+
+          body {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+
+          main {
+            background: #ffffff !important;
+            padding: 0 !important;
+          }
+
+          main > div {
+            max-width: none !important;
+          }
+
+          header {
+            box-shadow: none !important;
+            border-radius: 16px !important;
+          }
+
+          section,
+          article,
+          table,
+          tr,
+          .rounded-3xl,
+          .rounded-2xl {
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+
+          table {
+            font-size: 9px !important;
+          }
+
+          th,
+          td {
+            padding: 6px !important;
+          }
+
+          .shadow-sm,
+          .shadow-lg {
+            box-shadow: none !important;
+          }
+        }
+      `}</style>
     </main>
   );
 }
