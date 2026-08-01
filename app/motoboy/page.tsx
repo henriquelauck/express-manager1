@@ -13,6 +13,10 @@ import {
   Loader2,
   LocateFixed,
   LogOut,
+  Menu,
+  X,
+  Home,
+  BarChart3,
   MapPin,
   PackageCheck,
   RefreshCw,
@@ -256,7 +260,9 @@ export default function MotoboyPage() {
   const [verificandoAtualizacao, setVerificandoAtualizacao] = useState(false);
   const [baixandoAtualizacao, setBaixandoAtualizacao] = useState(false);
   const [erroAtualizacaoApp, setErroAtualizacaoApp] = useState("");
+  const [menuAberto, setMenuAberto] = useState(false);
 
+  const entregasConcluidasRef = useRef<HTMLElement | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const ultimaPosicaoRef = useRef<{
     latitude: number;
@@ -1465,6 +1471,41 @@ export default function MotoboyPage() {
     }
   }, [permissoesLocalizacao, preparacaoCompleta]);
 
+  function fecharMenu() {
+    setMenuAberto(false);
+  }
+
+  function irParaEntregasConcluidas() {
+    fecharMenu();
+
+    window.setTimeout(() => {
+      entregasConcluidasRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 120);
+  }
+
+  useEffect(() => {
+    if (!menuAberto) {
+      return;
+    }
+
+    const fecharComEscape = (evento: KeyboardEvent) => {
+      if (evento.key === "Escape") {
+        fecharMenu();
+      }
+    };
+
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", fecharComEscape);
+
+    return () => {
+      document.body.style.overflow = "";
+      document.removeEventListener("keydown", fecharComEscape);
+    };
+  }, [menuAberto]);
+
   if (carregando) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
@@ -1517,17 +1558,174 @@ export default function MotoboyPage() {
 
                 <button
                   type="button"
-                  onClick={() => void sair()}
-                  aria-label="Sair do aplicativo"
-                  title="Sair"
-                  className="flex h-11 w-11 items-center justify-center rounded-2xl border border-red-400/30 bg-red-500/10 text-red-200 transition hover:bg-red-500/20"
+                  onClick={() => setMenuAberto(true)}
+                  aria-label="Abrir menu"
+                  title="Menu"
+                  className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white transition hover:bg-white/15"
                 >
-                  <LogOut size={19} />
+                  <Menu size={20} />
                 </button>
               </div>
             </div>
           </div>
         </header>
+
+        {menuAberto && (
+          <div className="fixed inset-0 z-[100]">
+            <button
+              type="button"
+              aria-label="Fechar menu"
+              onClick={fecharMenu}
+              className="absolute inset-0 bg-slate-950/55 backdrop-blur-[2px]"
+            />
+
+            <aside className="absolute bottom-0 right-0 top-0 flex w-[86%] max-w-sm flex-col bg-white shadow-2xl">
+              <div className="bg-slate-950 px-5 pb-5 pt-[calc(env(safe-area-inset-top)+18px)] text-white">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-slate-950">
+                      <Bike size={24} />
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
+                        Express Manager
+                      </p>
+                      <h2 className="truncate text-lg font-bold">
+                        {usuario?.nome || "Motoboy"}
+                      </h2>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={fecharMenu}
+                    aria-label="Fechar menu"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div className="mt-5 flex items-center justify-between rounded-2xl bg-white/10 px-4 py-3">
+                  <div>
+                    <p className="text-xs text-slate-300">Status atual</p>
+                    <strong className="mt-1 block text-sm">
+                      {statusPainel.rotulo} • {statusPainel.subtitulo}
+                    </strong>
+                  </div>
+
+                  <span
+                    className={`h-3 w-3 rounded-full ${
+                      statusPainel.tipo === "ONLINE"
+                        ? "bg-emerald-400"
+                        : statusPainel.tipo === "REDE_RUIM"
+                          ? "bg-amber-400"
+                          : "bg-slate-400"
+                    }`}
+                  />
+                </div>
+              </div>
+
+              <nav className="flex-1 overflow-y-auto p-4">
+                <button
+                  type="button"
+                  onClick={fecharMenu}
+                  className="flex w-full items-center gap-3 rounded-2xl bg-emerald-50 px-4 py-4 text-left font-semibold text-emerald-800"
+                >
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+                    <Home size={19} />
+                  </span>
+                  Início
+                </button>
+
+                <Link
+                  href="/motoboy/minha-operacao"
+                  onClick={fecharMenu}
+                  className="mt-2 flex items-center gap-3 rounded-2xl px-4 py-4 font-semibold text-slate-800 transition hover:bg-slate-50"
+                >
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                    <CircleDollarSign size={19} />
+                  </span>
+                  Minha operação
+                </Link>
+
+                <Link
+                  href="/motoboy/extrato"
+                  onClick={fecharMenu}
+                  className="mt-2 flex items-center gap-3 rounded-2xl px-4 py-4 font-semibold text-slate-800 transition hover:bg-slate-50"
+                >
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+                    <WalletCards size={19} />
+                  </span>
+                  Extrato
+                </Link>
+
+                <Link
+                  href="/motoboy/relatorio-operacao"
+                  onClick={fecharMenu}
+                  className="mt-2 flex items-center gap-3 rounded-2xl px-4 py-4 font-semibold text-slate-800 transition hover:bg-slate-50"
+                >
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-700">
+                    <BarChart3 size={19} />
+                  </span>
+                  Relatório da operação
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={irParaEntregasConcluidas}
+                  className="mt-2 flex w-full items-center gap-3 rounded-2xl px-4 py-4 text-left font-semibold text-slate-800 transition hover:bg-slate-50"
+                >
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                    <CheckCircle2 size={19} />
+                  </span>
+
+                  <span className="min-w-0 flex-1">
+                    <span className="block">Entregas concluídas</span>
+                    <span className="mt-0.5 block text-xs font-normal text-slate-500">
+                      {entregasConcluidas.length} hoje
+                    </span>
+                  </span>
+
+                  <ChevronRight size={18} className="text-slate-400" />
+                </button>
+
+                <div className="my-4 border-t border-slate-100" />
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    fecharMenu();
+                    void carregarDados(true);
+                  }}
+                  disabled={atualizando || Boolean(teleAtualizando)}
+                  className="flex w-full items-center gap-3 rounded-2xl px-4 py-4 text-left font-semibold text-slate-800 transition hover:bg-slate-50 disabled:opacity-60"
+                >
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                    <RefreshCw
+                      size={19}
+                      className={atualizando ? "animate-spin" : ""}
+                    />
+                  </span>
+                  Atualizar painel
+                </button>
+              </nav>
+
+              <div className="border-t border-slate-100 p-4 pb-[calc(env(safe-area-inset-bottom)+16px)]">
+                <button
+                  type="button"
+                  onClick={() => void sair()}
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-red-50 font-semibold text-red-700 transition hover:bg-red-100"
+                >
+                  <LogOut size={18} />
+                  Sair do aplicativo
+                </button>
+              </div>
+            </aside>
+          </div>
+        )}
+
         {executandoNoAppAndroid() && atualizacaoDisponivel && (
           <section className="mt-5 overflow-hidden rounded-3xl border border-blue-300 bg-blue-50 shadow-sm">
             <div className="p-5 sm:p-6">
@@ -1957,24 +2155,6 @@ export default function MotoboyPage() {
             </div>
           </article>
 
-          <div className="grid grid-cols-2 gap-3 px-4 pt-4 sm:px-0">
-            <Link
-              href="/motoboy/minha-operacao"
-              className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-slate-900 px-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
-            >
-              <CircleDollarSign size={19} />
-              Minha operação
-            </Link>
-
-            <Link
-              href="/motoboy/extrato"
-              className="flex h-14 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-            >
-              <WalletCards size={19} />
-              Extrato
-            </Link>
-          </div>
-
           <div className="mt-3 grid grid-cols-3 gap-2 px-4 sm:px-0">
             <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
@@ -2211,7 +2391,10 @@ export default function MotoboyPage() {
           )}
         </section>
 
-        <section className="mx-4 mt-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm sm:mx-0 sm:mt-8">
+        <section
+          ref={entregasConcluidasRef}
+          className="mx-4 mt-6 scroll-mt-4 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm sm:mx-0 sm:mt-8"
+        >
           <CabecalhoSecao
             titulo="Entregas concluídas"
             descricao="Teles finalizadas hoje."
