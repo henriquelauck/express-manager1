@@ -47,6 +47,9 @@ import com.getcapacitor.annotation.PermissionCallback;
 )
 public class LocalizacaoPlugin extends Plugin {
 
+    private static final String PREFERENCIAS = "express_manager_seguro";
+    private static final String CHAVE_MOTOBOY_ONLINE = "motoboy_online";
+
     @PluginMethod
     public void verificarPermissoes(PluginCall call) {
         boolean localizacaoDuranteUso = temPermissaoLocalizacao();
@@ -415,6 +418,18 @@ public class LocalizacaoPlugin extends Plugin {
                     intent
             );
 
+            getContext()
+                    .getSharedPreferences(
+                            PREFERENCIAS,
+                            Context.MODE_PRIVATE
+                    )
+                    .edit()
+                    .putBoolean(
+                            CHAVE_MOTOBOY_ONLINE,
+                            true
+                    )
+                    .apply();
+
             JSObject resposta = new JSObject();
             resposta.put("ativo", true);
 
@@ -460,6 +475,18 @@ public class LocalizacaoPlugin extends Plugin {
                     getContext(),
                     LocalizacaoService.class
             );
+
+            getContext()
+                    .getSharedPreferences(
+                            PREFERENCIAS,
+                            Context.MODE_PRIVATE
+                    )
+                    .edit()
+                    .putBoolean(
+                            CHAVE_MOTOBOY_ONLINE,
+                            false
+                    )
+                    .apply();
 
             boolean parou = getContext().stopService(intent);
 
