@@ -1,6 +1,7 @@
 package com.lauckdastele.expressmanager;
 
 import android.Manifest;
+import android.app.AlarmManager;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -19,6 +20,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.os.SystemClock;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
@@ -58,6 +60,8 @@ public class LocalizacaoService extends Service {
     private static final String CANAL_NOVAS_TELES_ID = "express_novas_teles";
     private static final int NOTIFICACAO_ID = 1001;
     private static final int NOTIFICACAO_NOVA_TELE_ID = 2001;
+    private static final int REQUISICAO_REINICIO_SERVICO = 3001;
+    private static final long ATRASO_REINICIO_SERVICO_MS = 3000L;
     private static final long INTERVALO_CONSULTA_TELES_MS = 10000L;
 
     private static final String PREFERENCIAS = "express_manager_seguro";
@@ -1052,6 +1056,90 @@ private void buscarUltimaLocalizacaoConhecida() {
                 getSystemService(NotificationManager.class);
 
         gerenciador.createNotificationChannel(canal);
+    }
+
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        /*
+         * Alguns fabricantes encerram a tarefa do aplicativo poucos segundos
+         * depois que ela é removida da tela de recentes. Como o motoboy pode
+         * continuar online sem manter a tela aberta, agendamos uma tentativa
+         * curta de recuperação do próprio serviço.
+         *
+         * O botão "Ficar offline" usa stopService() e não passa por este
+         * método, portanto o encerramento voluntário continua respeitado.
+         */
+        agendarRecuperacaoDoServico();
+
+        Log.w(
+                TAG,
+                "Tarefa do aplicativo removida. Recuperação do serviço agendada."
+        );
+
+        super.onTaskRemoved(rootIntent);
+    }
+
+    private void agendarRecuperacaoDoServico() {
+        try {
+            AlarmManager alarmManager =
+                    (AlarmManager) getSystemService(
+                            Context.ALARM_SERVICE
+                    );
+
+            if (alarmManager == null) {
+                Log.e(
+                        TAG,
+                        "Não foi possível acessar o AlarmManager para recuperar o serviço."
+                );
+                return;
+            }
+
+            Intent intentReinicio =
+                    new Intent(
+                            getApplicationContext(),
+                            LocalizacaoService.class
+                    );
+
+            int flagsPendingIntent =
+                    PendingIntent.FLAG_UPDATE_CURRENT;
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                flagsPendingIntent |= PendingIntent.FLAG_IMMUTABLE;
+            }
+
+            PendingIntent pendingIntent =
+                    PendingIntent.getService(
+                            getApplicationContext(),
+                            REQUISICAO_REINICIO_SERVICO,
+                            intentReinicio,
+                            flagsPendingIntent
+                    );
+
+            long momentoReinicio =
+                    SystemClock.elapsedRealtime()
+                            + ATRASO_REINICIO_SERVICO_MS;
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setAndAllowWhileIdle(
+                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        momentoReinicio,
+                        pendingIntent
+                );
+            } else {
+                alarmManager.set(
+                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        momentoReinicio,
+                        pendingIntent
+                );
+            }
+        } catch (Exception erro) {
+            Log.e(
+                    TAG,
+                    "Não foi possível agendar a recuperação do serviço.",
+                    erro
+            );
+        }
     }
 
     @Override
