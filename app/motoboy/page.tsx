@@ -5,6 +5,7 @@ import {
   Bike,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   CircleDollarSign,
   Download,
@@ -246,6 +247,7 @@ export default function MotoboyPage() {
   const [abrindoConfiguracoesFabricante, setAbrindoConfiguracoesFabricante] =
     useState(false);
   const [reiniciandoServicoNativo, setReiniciandoServicoNativo] = useState(false);
+  const [preparacaoExpandida, setPreparacaoExpandida] = useState(false);
   const [atualizacaoDisponivel, setAtualizacaoDisponivel] =
     useState<VersaoAplicativo | null>(null);
   const [versaoInstalada, setVersaoInstalada] = useState<string | null>(null);
@@ -1369,6 +1371,25 @@ export default function MotoboyPage() {
     [telesHoje]
   );
 
+  const preparacaoCompleta =
+    permissoesLocalizacao !== null &&
+    permissoesLocalizacao.localizacaoDuranteUso &&
+    permissoesLocalizacao.localizacaoSegundoPlano &&
+    permissoesLocalizacao.notificacoes &&
+    permissoesLocalizacao.gpsAtivo &&
+    permissoesLocalizacao.bateriaSemRestricao &&
+    (!online || permissoesLocalizacao.servicoAtivo);
+
+  useEffect(() => {
+    if (!permissoesLocalizacao) {
+      return;
+    }
+
+    if (!preparacaoCompleta) {
+      setPreparacaoExpandida(true);
+    }
+  }, [permissoesLocalizacao, preparacaoCompleta]);
+
   if (carregando) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
@@ -1500,6 +1521,35 @@ export default function MotoboyPage() {
         )}
 
         {executandoNoAppAndroid() && permissoesLocalizacao && (
+          preparacaoCompleta && !preparacaoExpandida ? (
+            <section className="mt-5 overflow-hidden rounded-3xl border border-emerald-300 bg-emerald-50 shadow-sm">
+              <button
+                type="button"
+                onClick={() => setPreparacaoExpandida(true)}
+                className="flex w-full items-center justify-between gap-4 p-4 text-left sm:p-5"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white">
+                    <CheckCircle2 size={22} />
+                  </div>
+
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                      Preparação obrigatória
+                    </p>
+                    <h2 className="mt-1 font-bold text-slate-900">
+                      Celular preparado para operar
+                    </h2>
+                  </div>
+                </div>
+
+                <span className="flex shrink-0 items-center gap-1.5 text-sm font-semibold text-emerald-700">
+                  Ver detalhes
+                  <ChevronDown size={18} />
+                </span>
+              </button>
+            </section>
+          ) : (
           <section
             className={`mt-5 overflow-hidden rounded-3xl border shadow-sm ${
               permissoesLocalizacao.prontoParaFicarOnline
@@ -1544,6 +1594,17 @@ export default function MotoboyPage() {
                     O Express Manager precisa dessas permissões para receber teles e continuar
                     enviando a localização com o aplicativo minimizado ou com a tela bloqueada.
                   </p>
+
+                  {preparacaoCompleta && (
+                    <button
+                      type="button"
+                      onClick={() => setPreparacaoExpandida(false)}
+                      className="mt-4 flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-white px-4 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
+                    >
+                      Recolher detalhes
+                      <ChevronDown size={17} className="rotate-180" />
+                    </button>
+                  )}
 
                   {(permissoesLocalizacao.fabricante ||
                     permissoesLocalizacao.modelo ||
@@ -1698,6 +1759,7 @@ export default function MotoboyPage() {
               </div>
             </div>
           </section>
+          )
         )}
 
         <section
