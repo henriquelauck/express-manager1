@@ -1465,6 +1465,41 @@ export default function MotoboyPage() {
   const polylineDestaqueMapa =
     rotaDestaqueMapa?.polylineTotal || rotaDestaqueMapa?.polyline || null;
 
+  const teleRotaAtivaMapa =
+    entregasAndamento.find((tele) => tele.rotaAtiva) || null;
+
+  const destinoRotaAtivaMapa = useMemo(() => {
+    if (!teleRotaAtivaMapa) {
+      return null;
+    }
+
+    const paradas = Array.isArray(teleRotaAtivaMapa.paradas)
+      ? [...teleRotaAtivaMapa.paradas].sort(
+          (a, b) => Number(a.ordem || 0) - Number(b.ordem || 0)
+        )
+      : [];
+
+    const indice = Math.max(
+      0,
+      Math.min(
+        Number(teleRotaAtivaMapa.paradaAtualMotoboy || 0),
+        Math.max(paradas.length - 1, 0)
+      )
+    );
+
+    return String(paradas[indice]?.endereco || "").trim() || null;
+  }, [teleRotaAtivaMapa]);
+
+  const mapaRotaDinamicaSrc =
+    teleRotaAtivaMapa &&
+    destinoRotaAtivaMapa &&
+    latitudeAtual !== null &&
+    longitudeAtual !== null
+      ? `https://maps.google.com/maps?saddr=${latitudeAtual},${longitudeAtual}&daddr=${encodeURIComponent(
+          destinoRotaAtivaMapa
+        )}&dirflg=d&z=16&output=embed`
+      : null;
+
   const mapaLocalizacaoSrc =
     latitudeAtual !== null && longitudeAtual !== null
       ? `https://maps.google.com/maps?q=${latitudeAtual},${longitudeAtual}&z=16&output=embed`
@@ -1549,7 +1584,7 @@ export default function MotoboyPage() {
   }
 
   useEffect(() => {
-    if (!menuAberto && !concluidasAberto) {
+    if (!menuAberto && !concluidasAberto && telesAguardandoAceite.length === 0) {
       return;
     }
 
@@ -1566,7 +1601,7 @@ export default function MotoboyPage() {
       document.body.style.overflow = "";
       document.removeEventListener("keydown", fecharComEscape);
     };
-  }, [menuAberto, concluidasAberto]);
+  }, [menuAberto, concluidasAberto, telesAguardandoAceite.length]);
 
   if (carregando) {
     return (
@@ -1631,6 +1666,21 @@ export default function MotoboyPage() {
             </div>
           </div>
         </header>
+
+        {telesAguardandoAceite[0] && (
+          <PainelAceiteTele
+            tele={telesAguardandoAceite[0]}
+            miniMapa={miniMapas[telesAguardandoAceite[0].id]}
+            atualizando={teleAtualizando === telesAguardandoAceite[0].id}
+            bloqueado={Boolean(teleAtualizando)}
+            onAceitar={() =>
+              void responderAceite(telesAguardandoAceite[0], "ACEITAR")
+            }
+            onRecusar={() =>
+              void responderAceite(telesAguardandoAceite[0], "RECUSAR")
+            }
+          />
+        )}
 
         {menuAberto && (
           <div className="fixed inset-0 z-[100]">
@@ -2161,7 +2211,16 @@ export default function MotoboyPage() {
         <section className="sm:mt-5">
           <article className="overflow-hidden border-y border-slate-200 bg-white shadow-sm sm:rounded-[2rem] sm:border">
             <div className="relative h-[500px] sm:h-[520px]">
-              {polylineDestaqueMapa ? (
+              {mapaRotaDinamicaSrc ? (
+                <iframe
+                  key={`${teleRotaAtivaMapa?.id}-${latitudeAtual?.toFixed(5)}-${longitudeAtual?.toFixed(5)}-${destinoRotaAtivaMapa}`}
+                  title="Mapa acompanhando a rota ativa"
+                  src={mapaRotaDinamicaSrc}
+                  className="h-full w-full border-0"
+                  loading="eager"
+                  referrerPolicy="no-referrer-when-downgrade"
+                />
+              ) : polylineDestaqueMapa ? (
                 <img
                   src={`/api/maps/imagem-rota?polyline=${encodeURIComponent(
                     polylineDestaqueMapa
@@ -2271,7 +2330,9 @@ export default function MotoboyPage() {
                         (tele) => tele.id === teleDestaqueMapa.id
                       )
                         ? "Nova tele no mapa"
-                        : "Rota em andamento"}
+                        : mapaRotaDinamicaSrc
+                          ? "Acompanhando sua rota"
+                          : "Rota em andamento"}
                     </p>
                     <p className="mt-1 truncate text-sm font-bold">
                       {teleDestaqueMapa.solicitante || "Solicitante não informado"}
@@ -2578,6 +2639,181 @@ export default function MotoboyPage() {
         </footer>
       </div>
     </main>
+  );
+}
+
+function PainelAceiteTele({
+  tele,
+  miniMapa,
+  atualizando,
+  bloqueado,
+  onAceitar,
+  onRecusar,
+}: {
+  tele: Tele;
+  miniMapa?: EstadoMiniMapa;
+  atualizando: boolean;
+  bloqueado: boolean;
+  onAceitar: () => void;
+  onRecusar: () => void;
+}) {
+  const [agora, setAgora] = useState(() => Date.now());
+
+  useEffect(() => {
+    const intervalo = window.setInterval(() => {
+      setAgora(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(intervalo);
+  }, []);
+
+  const segundosRestantes = calcularSegundosRestantesAceite(
+    tele.atribuidaAoMotoboyEm,
+    agora
+  );
+
+  const expirado = segundosRestantes === 0;
+  const resultado = miniMapa?.resultado || null;
+  const total = Number(tele.total || 0);
+  const paradas = Array.isArray(tele.paradas)
+    ? [...tele.paradas].sort(
+        (a, b) => Number(a.ordem || 0) - Number(b.ordem || 0)
+      )
+    : [];
+  const primeiraParada = paradas[0];
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-slate-950/75 px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-[calc(env(safe-area-inset-top)+12px)] backdrop-blur-sm sm:items-center sm:p-6">
+      <section className="max-h-[94vh] w-full max-w-lg overflow-y-auto rounded-[2rem] bg-white shadow-2xl">
+        <div className="bg-slate-950 px-5 py-5 text-white">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-300">
+                Nova tele aguardando resposta
+              </p>
+              <h2 className="mt-2 truncate text-2xl font-bold">
+                {tele.solicitante || "Solicitante não informado"}
+              </h2>
+            </div>
+
+            <div
+              className={`shrink-0 rounded-2xl px-3 py-2 text-center ${
+                segundosRestantes <= 30
+                  ? "bg-red-500 text-white"
+                  : "bg-white/10 text-white"
+              }`}
+            >
+              <p className="text-[9px] font-bold uppercase tracking-wide text-white/70">
+                Responder em
+              </p>
+              <strong className="mt-1 block text-xl tabular-nums">
+                {formatarContagemAceite(segundosRestantes)}
+              </strong>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-5">
+          <div className="flex items-start gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white">
+              <MapPin size={19} />
+            </div>
+
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-blue-700">
+                Primeira coleta
+              </p>
+              <p className="mt-1 font-bold text-slate-900">
+                {primeiraParada?.cliente ||
+                  tituloTipoParada(primeiraParada?.tipo) ||
+                  "Coleta"}
+              </p>
+              <p className="mt-1 break-words text-sm leading-5 text-slate-600">
+                {primeiraParada?.endereco || "Endereço não informado"}
+              </p>
+            </div>
+          </div>
+
+          {miniMapa?.carregando ? (
+            <div className="mt-4 flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+              <Loader2 size={18} className="animate-spin" />
+              Calculando distância e tempo...
+            </div>
+          ) : resultado ? (
+            <MetricasRota tele={tele} resultado={resultado} destaque />
+          ) : miniMapa?.erro ? (
+            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-700">
+              {miniMapa.erro}
+            </div>
+          ) : null}
+
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                Valor da tele
+              </p>
+              <strong className="mt-1 block text-lg text-slate-900">
+                {formatarMoeda(total)}
+              </strong>
+            </div>
+
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600">
+                Seu líquido
+              </p>
+              <strong className="mt-1 block text-lg text-emerald-800">
+                {formatarMoeda(total * 0.8)}
+              </strong>
+            </div>
+          </div>
+
+          <p className="mt-4 text-center text-xs leading-5 text-slate-500">
+            A rota completa está visível no mapa principal ao fundo.
+          </p>
+
+          <div className="mt-5 grid grid-cols-[0.9fr_1.4fr] gap-3">
+            <button
+              type="button"
+              onClick={onRecusar}
+              disabled={bloqueado || expirado}
+              className="flex min-h-16 items-center justify-center gap-2 rounded-2xl border-2 border-red-200 bg-red-50 px-4 text-base font-bold text-red-700 transition active:scale-[0.98] disabled:opacity-50"
+            >
+              {atualizando ? (
+                <Loader2 size={20} className="animate-spin" />
+              ) : (
+                <XCircle size={21} />
+              )}
+              Recusar
+            </button>
+
+            <button
+              type="button"
+              onClick={onAceitar}
+              disabled={bloqueado || expirado}
+              className="flex min-h-16 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 text-lg font-bold text-white shadow-lg shadow-emerald-600/25 transition active:scale-[0.98] disabled:opacity-50"
+            >
+              {atualizando ? (
+                <>
+                  <Loader2 size={21} className="animate-spin" />
+                  Processando...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 size={22} />
+                  Aceitar tele
+                </>
+              )}
+            </button>
+          </div>
+
+          {expirado && (
+            <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-center text-sm font-semibold text-red-700">
+              O prazo desta tele terminou.
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
   );
 }
 
