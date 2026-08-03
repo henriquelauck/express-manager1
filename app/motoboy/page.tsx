@@ -247,6 +247,8 @@ export default function MotoboyPage() {
   const [localizacaoAtualizadaEm, setLocalizacaoAtualizadaEm] = useState<string | null>(null);
   const [latitudeAtual, setLatitudeAtual] = useState<number | null>(null);
   const [longitudeAtual, setLongitudeAtual] = useState<number | null>(null);
+  const [latitudeMapa, setLatitudeMapa] = useState<number | null>(null);
+  const [longitudeMapa, setLongitudeMapa] = useState<number | null>(null);
   const [miniMapas, setMiniMapas] = useState<Record<string, EstadoMiniMapa>>({});
   const [permissoesLocalizacao, setPermissoesLocalizacao] =
     useState<EstadoPermissoesLocalizacao | null>(null);
@@ -277,6 +279,12 @@ export default function MotoboyPage() {
     longitude: number;
   } | null>(null);
   const ultimoEnvioEmRef = useRef(0);
+  const coordenadasRecentesMapaRef = useRef<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+  const ultimaAtualizacaoVisualMapaEmRef = useRef(0);
+  const timerAtualizacaoVisualMapaRef = useRef<number | null>(null);
   const atualizacaoAutomaticaEmAndamentoRef = useRef(false);
   const teleAtualizandoRef = useRef<string | null>(null);
   const miniMapasConsultadosRef = useRef<Set<string>>(new Set());
@@ -574,6 +582,63 @@ export default function MotoboyPage() {
   }, [teleAtualizando]);
 
   useEffect(() => {
+    if (latitudeAtual === null || longitudeAtual === null) {
+      coordenadasRecentesMapaRef.current = null;
+      ultimaAtualizacaoVisualMapaEmRef.current = 0;
+
+      if (timerAtualizacaoVisualMapaRef.current !== null) {
+        window.clearTimeout(timerAtualizacaoVisualMapaRef.current);
+        timerAtualizacaoVisualMapaRef.current = null;
+      }
+
+      setLatitudeMapa(null);
+      setLongitudeMapa(null);
+      return;
+    }
+
+    coordenadasRecentesMapaRef.current = {
+      latitude: latitudeAtual,
+      longitude: longitudeAtual,
+    };
+
+    const atualizarMapa = () => {
+      const coordenadas = coordenadasRecentesMapaRef.current;
+
+      if (!coordenadas) {
+        return;
+      }
+
+      setLatitudeMapa(coordenadas.latitude);
+      setLongitudeMapa(coordenadas.longitude);
+      ultimaAtualizacaoVisualMapaEmRef.current = Date.now();
+      timerAtualizacaoVisualMapaRef.current = null;
+    };
+
+    if (ultimaAtualizacaoVisualMapaEmRef.current === 0) {
+      atualizarMapa();
+      return;
+    }
+
+    if (timerAtualizacaoVisualMapaRef.current !== null) {
+      return;
+    }
+
+    const tempoDecorrido =
+      Date.now() - ultimaAtualizacaoVisualMapaEmRef.current;
+    const tempoRestante = Math.max(30000 - tempoDecorrido, 0);
+
+    if (tempoRestante === 0) {
+      atualizarMapa();
+      return;
+    }
+
+    timerAtualizacaoVisualMapaRef.current = window.setTimeout(
+      atualizarMapa,
+      tempoRestante
+    );
+  }, [latitudeAtual, longitudeAtual]);
+
+  useEffect(() => {
     void carregarDados();
     void carregarPresenca();
     void verificarPermissoesLocalizacao();
@@ -595,6 +660,12 @@ export default function MotoboyPage() {
     return () => {
       window.clearInterval(intervaloAtualizacao);
       document.removeEventListener("visibilitychange", verificarAoRetornar);
+
+      if (timerAtualizacaoVisualMapaRef.current !== null) {
+        window.clearTimeout(timerAtualizacaoVisualMapaRef.current);
+        timerAtualizacaoVisualMapaRef.current = null;
+      }
+
       pararMonitoramentoLocal();
     };
   }, []);
@@ -1501,10 +1572,10 @@ export default function MotoboyPage() {
   const mapaRotaDinamicaSrc =
     teleRotaAtivaMapa &&
     enderecosPendentesRotaAtivaMapa.length > 0 &&
-    latitudeAtual !== null &&
-    longitudeAtual !== null
+    latitudeMapa !== null &&
+    longitudeMapa !== null
       ? `https://maps.google.com/maps?saddr=${encodeURIComponent(
-          `${latitudeAtual},${longitudeAtual}`
+          `${latitudeMapa},${longitudeMapa}`
         )}&daddr=${enderecosPendentesRotaAtivaMapa
           .map((endereco) => encodeURIComponent(endereco))
           .join("+to:")}&dirflg=d&output=embed`
@@ -1534,8 +1605,8 @@ export default function MotoboyPage() {
       : null;
 
   const mapaLocalizacaoSrc =
-    latitudeAtual !== null && longitudeAtual !== null
-      ? `https://maps.google.com/maps?q=${latitudeAtual},${longitudeAtual}&z=16&output=embed`
+    latitudeMapa !== null && longitudeMapa !== null
+      ? `https://maps.google.com/maps?q=${latitudeMapa},${longitudeMapa}&z=16&output=embed`
       : null;
 
   const segundosSemAtualizacao = useMemo(() => {
@@ -1716,8 +1787,8 @@ export default function MotoboyPage() {
             miniMapa={miniMapas[telesAguardandoAceite[0].id]}
             atualizando={teleAtualizando === telesAguardandoAceite[0].id}
             bloqueado={Boolean(teleAtualizando)}
-            latitudeAtual={latitudeAtual}
-            longitudeAtual={longitudeAtual}
+            latitudeAtual={latitudeMapa}
+            longitudeAtual={longitudeMapa}
             onAceitar={() =>
               void responderAceite(telesAguardandoAceite[0], "ACEITAR")
             }
@@ -2475,7 +2546,7 @@ export default function MotoboyPage() {
             <div className="relative h-[52svh] min-h-[390px] max-h-[560px] w-full min-w-0 overscroll-contain bg-slate-200 sm:h-[560px] sm:max-h-none">
               {mapaRotaDinamicaSrc ? (
                 <iframe
-                  key={`${teleRotaAtivaMapa?.id}-${latitudeAtual?.toFixed(5)}-${longitudeAtual?.toFixed(5)}-${enderecosPendentesRotaAtivaMapa.join("|")}`}
+                  key={`${teleRotaAtivaMapa?.id}-${latitudeMapa?.toFixed(5)}-${longitudeMapa?.toFixed(5)}-${enderecosPendentesRotaAtivaMapa.join("|")}`}
                   title="Mapa interativo da rota completa"
                   src={mapaRotaDinamicaSrc}
                   className="pointer-events-auto block h-full w-full min-w-0 max-w-full border-0"
