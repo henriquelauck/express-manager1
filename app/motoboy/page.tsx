@@ -986,43 +986,42 @@ export default function MotoboyPage() {
     setErroLocalizacao("");
 
     try {
-      /*
-       * No aplicativo Android, o serviço nativo já:
-       * - solicita e valida as permissões;
-       * - obtém a localização pelo Fused Location Provider;
-       * - envia ONLINE para a API quando necessário;
-       * - continua funcionando em segundo plano.
-       *
-       * Portanto, não devemos aguardar navigator.geolocation no WebView.
-       * Em alguns aparelhos essa chamada fica pendurada e o botão parece
-       * não funcionar.
-       */
+      // Fluxo da versao que funcionava no celular:
+      // 1. validar permissoes obrigatorias;
+      // 2. obter uma posicao real;
+      // 3. confirmar ONLINE na API;
+      // 4. iniciar o servico nativo somente depois da confirmacao.
       if (executandoNoAppAndroid()) {
-        await garantirTokenNativo();
+        const permissaoPronta = await verificarPermissoesLocalizacao();
 
-        const resultado = await LocalizacaoNativa.iniciar();
-
-        if (!resultado?.ativo) {
-          throw new Error("O serviço de localização não foi iniciado.");
+        if (!permissaoPronta) {
+          throw new Error(
+            "Libere localizacao o tempo todo, notificacoes, GPS e bateria sem restricao antes de ficar online."
+          );
         }
-
-        setOnline(true);
-
-        window.setTimeout(() => {
-          void carregarPresenca();
-          void verificarPermissoesLocalizacao();
-        }, 1500);
-
-        return;
       }
 
       if (typeof navigator === "undefined" || !navigator.geolocation) {
-        throw new Error("Este aparelho não oferece suporte à localização.");
+        throw new Error("Este aparelho nao oferece suporte a localizacao.");
       }
 
       const posicao = await obterPosicaoAtual();
 
       await enviarLocalizacao("ONLINE", posicao);
+
+      if (executandoNoAppAndroid()) {
+        const resultado = await LocalizacaoNativa.iniciar();
+
+        if (!resultado?.ativo) {
+          throw new Error("O servico de localizacao em segundo plano nao foi iniciado.");
+        }
+
+        window.setTimeout(() => {
+          void carregarPresenca();
+          void verificarPermissoesLocalizacao();
+        }, 1500);
+      }
+
       iniciarWatchPosition();
     } catch (erroOnline) {
       try {
@@ -1033,13 +1032,12 @@ export default function MotoboyPage() {
 
       setOnline(false);
       setErroLocalizacao(
-        erroOnline instanceof Error ? erroOnline.message : "Não foi possível ficar online."
+        erroOnline instanceof Error ? erroOnline.message : "Nao foi possivel ficar online."
       );
     } finally {
       setAlterandoPresenca(false);
     }
   }
-
   async function ficarOffline() {
     if (alterandoPresenca || !online) return;
 
