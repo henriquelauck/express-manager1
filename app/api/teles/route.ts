@@ -175,6 +175,18 @@ function formatarTeleParaTela(tele: any) {
     dataRecebimento: tele.dataRecebimento,
     motoboyRecebedor: tele.motoboyRecebedor,
     fechamentoId: tele.fechamentoId,
+    recebimentosHistorico: Array.isArray(tele.recebimentosHistorico)
+      ? tele.recebimentosHistorico.map((item: any) => ({
+          id: item.id,
+          valor: Number(item.valor || 0),
+          recebedor: recebimentoParaTela(item.recebedor),
+          motoboyId: item.motoboyId,
+          motoboyNome: item.motoboyNome,
+          dataRecebimento: item.dataRecebimento,
+          origem: item.origem,
+          fechamentoId: item.fechamentoId,
+        }))
+      : [],
 
     observacaoGeral: tele.observacaoGeral || "",
 
@@ -304,6 +316,11 @@ export async function GET() {
       },
       motoboy: true,
       cliente: true,
+      recebimentosHistorico: {
+        orderBy: {
+          dataRecebimento: "asc",
+        },
+      },
     },
     orderBy: {
       createdAt: "desc",
@@ -624,7 +641,7 @@ export async function PATCH(request: Request) {
     const body = await request.json();
 
     if (!body?.id) {
-      return NextResponse.json({ erro: "Tele nÃƒÂ£o informada." }, { status: 400 });
+      return NextResponse.json({ erro: "Tele não informada." }, { status: 400 });
     }
 
     const teleAtual = await prisma.tele.findUnique({
@@ -643,7 +660,7 @@ export async function PATCH(request: Request) {
     });
 
     if (!teleAtual) {
-      return NextResponse.json({ erro: "Tele nÃƒÂ£o encontrada." }, { status: 404 });
+      return NextResponse.json({ erro: "Tele não encontrada." }, { status: 404 });
     }
 
     if (teleAtual.orcamento) {
@@ -752,7 +769,7 @@ export async function PATCH(request: Request) {
   } catch (error: any) {
     return NextResponse.json(
       {
-        erro: error.message || "NÃƒÂ£o foi possÃƒÂ­vel atualizar o recebimento da tele.",
+        erro: error.message || "Não foi possível atualizar o recebimento da tele.",
       },
       { status: 500 }
     );

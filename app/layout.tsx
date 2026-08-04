@@ -68,8 +68,25 @@ export default function RootLayout({
   return (
     <html
       lang="pt-BR"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function () {
+                try {
+                  var tema = localStorage.getItem("express-manager-tema");
+                  var escuro = tema === "escuro";
+                  document.documentElement.classList.toggle("dark", escuro);
+                  document.documentElement.style.colorScheme = escuro ? "dark" : "light";
+                } catch (_) {}
+              })();
+            `,
+          }}
+        />
+      </head>
       <body>
         <RegistrarServiceWorker />
         <AppProtegido>{children}</AppProtegido>

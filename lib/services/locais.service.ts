@@ -4,6 +4,7 @@ export type LocalFrequente = {
   cliente: string;
   endereco: string;
   contato: string;
+  observacao?: string;
 };
 
 export function obterLocaisFrequentes(teles: Tele[], solicitante: string): LocalFrequente[] {
@@ -15,6 +16,7 @@ export function obterLocaisFrequentes(teles: Tele[], solicitante: string): Local
       cliente: parada.cliente,
       endereco: parada.endereco,
       contato: parada.contato || "",
+      observacao: parada.observacao || "",
     }));
 
   return Array.from(

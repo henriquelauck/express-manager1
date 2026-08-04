@@ -28,6 +28,37 @@ function saldoTele(tele: any) {
   return Math.max(valorTotalTele(tele) - valorRecebidoTele(tele), 0);
 }
 
+function totaisRecebedoresTele(tele: any) {
+  const historico = Array.isArray(tele.recebimentosHistorico)
+    ? tele.recebimentosHistorico
+    : [];
+
+  if (historico.length > 0) {
+    return historico.reduce(
+      (totais: { escritorio: number; motoboy: number }, item: any) => {
+        const valor = Math.max(0, converterValor(item.valor));
+        const recebedor = String(item.recebedor || "").toLowerCase();
+
+        if (recebedor === "motoboy") {
+          totais.motoboy += valor;
+        } else if (recebedor === "escritorio") {
+          totais.escritorio += valor;
+        }
+
+        return totais;
+      },
+      { escritorio: 0, motoboy: 0 }
+    );
+  }
+
+  const recebido = valorRecebidoTele(tele);
+  const tipo = String(tele.recebimento || "pendente").toLowerCase();
+
+  return tipo === "motoboy"
+    ? { escritorio: 0, motoboy: recebido }
+    : { escritorio: recebido, motoboy: 0 };
+}
+
 function dataLocalISO(valor: unknown) {
   if (!valor) return "";
 
@@ -84,9 +115,12 @@ function recebedorFinanceiro(tele: any) {
 
   if (recebido <= 0.009) return "Pendente";
 
-  const tipo = String(tele.recebimento || "").toLowerCase();
+  const totais = totaisRecebedoresTele(tele);
+  const temEscritorio = totais.escritorio > 0.009;
+  const temMotoboy = totais.motoboy > 0.009;
 
-  if (tipo === "motoboy") return "Motoboy";
+  if (temEscritorio && temMotoboy) return "Misto";
+  if (temMotoboy) return "Motoboy";
   return "Escritório";
 }
 
@@ -171,11 +205,13 @@ export default function ExtratoFinanceiro() {
           return false;
         }
 
-        if (recebimentoFiltro === "escritorio" && recebedor !== "escritório") {
+        const totaisRecebedores = totaisRecebedoresTele(tele);
+
+        if (recebimentoFiltro === "escritorio" && totaisRecebedores.escritorio <= 0.009) {
           return false;
         }
 
-        if (recebimentoFiltro === "motoboy" && recebedor !== "motoboy") {
+        if (recebimentoFiltro === "motoboy" && totaisRecebedores.motoboy <= 0.009) {
           return false;
         }
       }
@@ -190,19 +226,13 @@ export default function ExtratoFinanceiro() {
         const total = valorTotalTele(tele);
         const recebido = valorRecebidoTele(tele);
         const saldo = saldoTele(tele);
-        const recebedor = recebedorFinanceiro(tele);
+        const totaisRecebedores = totaisRecebedoresTele(tele);
 
         acc.total += total;
         acc.recebido += recebido;
         acc.pendente += saldo;
-
-        if (recebedor === "Escritório") {
-          acc.recebidoEscritorio += recebido;
-        }
-
-        if (recebedor === "Motoboy") {
-          acc.recebidoMotoboy += recebido;
-        }
+        acc.recebidoEscritorio += totaisRecebedores.escritorio;
+        acc.recebidoMotoboy += totaisRecebedores.motoboy;
 
         return acc;
       },

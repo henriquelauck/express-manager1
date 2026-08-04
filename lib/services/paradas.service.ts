@@ -5,6 +5,7 @@ type LocalFrequente = {
   cliente: string;
   endereco: string;
   contato: string;
+  observacao?: string;
 };
 
 export function atualizarParadaService(
@@ -42,6 +43,7 @@ export function atualizarParadaService(
     novasParadas[index].endereco = local.endereco || "";
 
     novasParadas[index].contato = local.contato || "";
+    novasParadas[index].observacao = local.observacao || "";
   }
 
   return novasParadas;

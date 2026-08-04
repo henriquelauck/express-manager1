@@ -1,8 +1,21 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --surface: #ffffff;
+  --surface-soft: #f7f8fb;
+  --border: #e2e8f0;
+}
+
+:root.dark {
+  --background: #020617;
+  --foreground: #e2e8f0;
+  --surface: #0f172a;
+  --surface-soft: #020617;
+  --border: #334155;
 }
 
 @theme inline {
@@ -12,15 +25,158 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: var(--background);
 }
 
 body {
+  min-height: 100%;
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.dark {
+  color-scheme: dark;
+}
+
+/*
+ * Compatibilidade global:
+ * As telas antigas ainda usam classes claras diretamente.
+ * Estes seletores convertem as superfícies neutras sem alterar
+ * as cores de ação (verde, azul, vermelho e amarelo).
+ */
+.dark [class~="bg-white"] {
+  background-color: #0f172a !important;
+}
+
+.dark [class~="bg-[#f7f8fb]"],
+.dark [class~="bg-slate-50"] {
+  background-color: #020617 !important;
+}
+
+.dark [class~="bg-slate-100"] {
+  background-color: #1e293b !important;
+}
+
+.dark [class~="bg-slate-200"] {
+  background-color: #334155 !important;
+}
+
+.dark [class~="text-slate-900"] {
+  color: #f8fafc !important;
+}
+
+.dark [class~="text-slate-800"] {
+  color: #f1f5f9 !important;
+}
+
+.dark [class~="text-slate-700"] {
+  color: #e2e8f0 !important;
+}
+
+.dark [class~="text-slate-600"] {
+  color: #cbd5e1 !important;
+}
+
+.dark [class~="text-slate-500"] {
+  color: #94a3b8 !important;
+}
+
+.dark [class~="text-slate-400"] {
+  color: #94a3b8 !important;
+}
+
+.dark [class~="border-slate-100"],
+.dark [class~="border-slate-200"],
+.dark [class~="border-slate-300"] {
+  border-color: #334155 !important;
+}
+
+.dark [class~="divide-slate-100"] > :not([hidden]) ~ :not([hidden]),
+.dark [class~="divide-slate-200"] > :not([hidden]) ~ :not([hidden]) {
+  border-color: #334155 !important;
+}
+
+.dark input,
+.dark select,
+.dark textarea {
+  border-color: #334155;
+  background-color: #0f172a;
+  color: #f8fafc;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #64748b;
+}
+
+.dark select option {
+  background-color: #0f172a;
+  color: #f8fafc;
+}
+
+.dark table {
+  color: #e2e8f0;
+}
+
+.dark thead {
+  background-color: #1e293b;
+}
+
+.dark tbody tr {
+  border-color: #334155;
+}
+
+.dark tbody tr:hover {
+  background-color: rgba(30, 41, 59, 0.65);
+}
+
+.dark [role="dialog"],
+.dark dialog {
+  background-color: #0f172a;
+  color: #e2e8f0;
+}
+
+.dark .shadow-sm,
+.dark .shadow,
+.dark .shadow-md,
+.dark .shadow-lg,
+.dark .shadow-xl,
+.dark .shadow-2xl {
+  --tw-shadow-color: rgb(0 0 0 / 0.45);
+}
+
+.dark ::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: #020617;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  border: 3px solid #020617;
+  border-radius: 9999px;
+  background: #475569;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
 }

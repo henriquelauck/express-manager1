@@ -1,0 +1,13 @@
+﻿CORREÇÃO DE CODIFICAÇÃO DO EXPRESS MANAGER
+Data: 03/08/2026 16:42:53
+Backup: C:\Projetos\express-manager-backup-codificacao-20260803-164253
+
+ARQUIVOS ALTERADOS:
+- app\page.tsx | marcadores: 75 -> 6
+- app\api\teles\route.ts | marcadores: 79 -> 46
+- app\teles\page.tsx | marcadores: 242 -> 29
+- prisma\schema.prisma | marcadores: 65 -> 24
+
+VALIDAÇÕES:
+- npx tsc --noEmit: OK
+- npm run build: OK

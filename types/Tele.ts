@@ -11,6 +11,18 @@ export type FormaCobranca = "na_hora" | "semanal" | "quinzenal" | "mensal";
 
 export type StatusRecebimento = "pendente" | "escritorio" | "motoboy";
 
+export type RecebimentoHistoricoTele = {
+  id: string;
+  valor: number;
+  recebedor: StatusRecebimento;
+  motoboyId: string | null;
+  motoboyNome: string | null;
+  dataRecebimento: string;
+  origem: string;
+  fechamentoId: string | null;
+  recebimentosHistorico?: RecebimentoHistoricoTele[];
+};
+
 export type StatusAceiteTele = "NAO_ENVIADA" | "AGUARDANDO_ACEITE" | "ACEITA" | "RECUSADA";
 
 export type EtapaMotoboyTele =

@@ -1,6 +1,0 @@
-PASTA NÃO ENCONTRADA: app/relatorios
-
-PASTA NÃO ENCONTRADA: components/relatorios
-
-PASTA NÃO ENCONTRADA: app/api/relatorios
-

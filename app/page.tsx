@@ -233,6 +233,8 @@ export default function Dashboard() {
     return converterValor(tele.total ?? tele.valor);
   }
 
+  const telesOperacionais = teles.filter((tele) => !tele.orcamento);
+
   const hoje = inicioDoDia(new Date());
   const inicioDoMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
   const inicioDosSeteDias = new Date(hoje);
@@ -244,16 +246,16 @@ export default function Dashboard() {
   const fimDaSemana = new Date(inicioDaSemana);
   fimDaSemana.setDate(inicioDaSemana.getDate() + 6);
 
-  const telesHoje = teles.filter(
+  const telesHoje = telesOperacionais.filter(
     (tele) => dataOperacionalDaTele(tele).getTime() === hoje.getTime()
   );
 
   const faturamentoHoje = telesHoje.reduce((total, tele) => total + valorDaTele(tele), 0);
   const faturamentoEscritorioHoje = faturamentoHoje * 0.2;
 
-  const telesEmAndamento = teles.filter((tele) => tele.status !== "Entregue");
+  const telesEmAndamento = telesOperacionais.filter((tele) => tele.status !== "Entregue");
 
-  const entregasMes = teles.filter((tele) => {
+  const entregasMes = telesOperacionais.filter((tele) => {
     const data = dataOperacionalDaTele(tele);
 
     return tele.status === "Entregue" && data >= inicioDoMes && data <= hoje;
@@ -263,7 +265,7 @@ export default function Dashboard() {
     const data = new Date(inicioDosSeteDias);
     data.setDate(inicioDosSeteDias.getDate() + index);
 
-    const total = teles
+    const total = telesOperacionais
       .filter((tele) => dataOperacionalDaTele(tele).getTime() === data.getTime())
       .reduce((soma, tele) => soma + valorDaTele(tele), 0);
 
@@ -291,7 +293,7 @@ export default function Dashboard() {
     .slice(0, 3);
 
   const topClientes = Object.values(
-    teles.reduce<Record<string, { nome: string; quantidade: number; total: number }>>(
+    telesOperacionais.reduce<Record<string, { nome: string; quantidade: number; total: number }>>(
       (acc, tele) => {
         if (!acc[tele.solicitante]) {
           acc[tele.solicitante] = {
@@ -313,7 +315,7 @@ export default function Dashboard() {
     .slice(0, 10);
 
   const rankingMotoboysSemana = Object.values(
-    teles
+    telesOperacionais
       .filter((tele) => {
         const data = dataOperacionalDaTele(tele);
 
@@ -355,9 +357,13 @@ export default function Dashboard() {
       }, {})
   ).sort((a, b) => b.totalBruto - a.totalBruto);
 
-  const contasAReceber = teles
-    .filter((tele) => !tele.recebimento || tele.recebimento === "pendente")
-    .reduce((total, tele) => total + valorDaTele(tele), 0);
+  const contasAReceber = telesOperacionais.reduce((total, tele) => {
+    const valorTotal = valorDaTele(tele);
+    const valorRecebido = Math.max(0, converterValor(tele.valorRecebido || 0));
+    const saldoPendente = Math.max(0, valorTotal - valorRecebido);
+
+    return total + saldoPendente;
+  }, 0);
 
   const telesSemMotoboy = telesEmAndamento.filter((tele) => !tele.motoboy).length;
   const telesAguardandoCliente = telesEmAndamento.filter(

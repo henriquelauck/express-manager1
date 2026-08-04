@@ -1,0 +1,72 @@
+DIAGNOSTICO FINAL DE CODIFICACAO
+
+================================================================================
+ARQUIVO: app\page.tsx
+================================================================================
+385:           titulo="Olá, Henrique! �Ÿ‘‹"
+482:               ? ` �€� ${motoboysComConexaoInterrompida.length} com conexão interrompida`
+903:             {motoboy.placa ? ` �€¢ ${motoboy.placa}` : ""}
+910:           <p className="text-[11px] font-medium text-slate-400">Ãšltima atualização</p>
+1114:               <span className="shrink-0 text-slate-300">�†’</span>
+
+================================================================================
+ARQUIVO: app\teles\page.tsx
+================================================================================
+822: �š�️ Este orçamento é referente à entrega sem retorno. Caso seja necessário retorno ao local de origem, será acrescido o valor de R$ 5,00.`
+833: �š�️ Em caso de cancelamento após a confirmação da tele, será cobrado o valor mínimo referente ao deslocamento do motoboy, no valor de R$ 15,00.
+871:     const texto = `�Ÿš¨ NOVA TELE
+879: ðŸ—�️ Abrir rota:
+1334:                     ? ` �€¢ ${motoboysComConexaoInterrompida.length} com conexÃ£o interrompida`
+1390:                             {[motoboy.moto, motoboy.placa].filter(Boolean).join(" â€� ") ||
+1420:                         <span className="block text-slate-400">�šltima posição</span>
+1544:                   {telesDaSidebar.length} operações �€� R${" "}
+1828:                       OR�‡AMENTO
+2295:   return `${origem} �†’ ${destino}`;
+2642:   const resumoRota = paradas.length > 1 && origem !== destino ? `${origem} �†’ ${destino}` : origem;
+3030:                           )} �€¢ falta R$ ${formatarValor(saldoPendenteDaTele(tele))}`
+3034:                 <span className="text-lg">ðŸŸ¢</span>
+3053:                   <span className="mt-0.5 block text-xs opacity-75">CobranÃ§a semanal pendente</span>
+3055:                 <span className="text-lg">ðŸ”µ</span>
+3078:                 <span className="text-lg">ðŸŸ¡</span>
+3093:                     ? "ðŸ”µ Recebido no escritÃ³rio"
+3095:                       ? "ðŸŸ¢ Recebido pelo motoboy"
+3096:                       : "ðŸŸ¡ Pagamento pendente"}
+3102:                   label="Forma de cobranÃ§a"
+3112:                       ? tele.motoboyRecebedor || tele.motoboy || "â€”"
+3115:                         : "�€”"
+
+================================================================================
+ARQUIVO: types\Tele.ts
+================================================================================
+Nenhum marcador suspeito encontrado.
+
+================================================================================
+ARQUIVO: app\api\teles\route.ts
+================================================================================
+9:     "Aguardando motoboy disponÃƒ­vel": "AGUARDANDO_MOTOBOY",
+21:     AGUARDANDO_MOTOBOY: "Aguardando motoboy dispon�ƒ­vel",
+266:     throw new Error("O motoboy recebedor n�ƒ£o foi encontrado para gerar o extrato.");
+497:       return NextResponse.json({ erro: "Tele n�ƒ£o encontrada." }, { status: 404 });
+502:         { erro: "A edi�ƒ§�ƒ£o de or�ƒ§amentos ser�ƒ¡ liberada na etapa da Central de Opera�ƒ§�ƒµes." },
+644:       return NextResponse.json({ erro: "Tele n�ƒÆ’Ã†â€™Ãƒâ€šÃ‚£o informada." }, { status: 400 });
+663:       return NextResponse.json({ erro: "Tele n�ƒÆ’Ã†â€™Ãƒâ€šÃ‚£o encontrada." }, { status: 404 });
+668:         { erro: "Or�ƒ§amentos n�ƒ£o podem registrar cobran�ƒ§a ou pagamento." },
+772:         erro: error.message || "N�ƒÆ’Ã†â€™Ãƒâ€šÃ‚£o foi poss�ƒÆ’Ã†â€™Ãƒâ€šÃ‚­vel atualizar o recebimento da tele.",
+
+================================================================================
+ARQUIVO: app\api\motoboys\route.ts
+================================================================================
+Nenhum marcador suspeito encontrado.
+
+================================================================================
+ARQUIVO: app\api\motoboys\localizacoes\route.ts
+================================================================================
+Nenhum marcador suspeito encontrado.
+
+RESPOSTA /api/motoboys
+--------------------------------------------------------------------------------
+[{"id":"cmr2d4jhw000004jotsxcc6b0","nome":"Eduardo","telefone":"51 99836-2351","moto":"CG FAN 160","placa":"AAAAAAAA","userId":"cmr2yh63z0002cgu7i0ods8i8","online":true,"latitude":-29.6888285,"longitude":-51.1218986,"precisaoLocalizacao":2.259999990463257,"onlineDesde":"2026-08-03T13:21:12.940Z","localizacaoAtualizadaEm":"2026-08-03T19:55:27.598Z","appTokenHash":"4ea44e79afc9459e872b19bd9590959ac3d1d1e0d285bc73ea2b253ba3ec88cb","appTokenCriadoEm":"2026-07-29T19:38:45.258Z","createdAt":"2026-07-01T17:41:52.436Z","updatedAt":"2026-08-03T19:55:28.294Z"},{"id":"cmr2d22yb000004js5gihk4sw","nome":"Kaua","telefone":"51 997982400","moto":"CG 150","placa":"IMR-2146","userId":"cmr2yh5u20000cgu7f7ykoeuh","online":true,"latitude":-29.6722728,"longitude":-51.1088029,"precisaoLocalizacao":1.465999960899353,"onlineDesde":"2026-08-03T11:26:14.878Z","localizacaoAtualizadaEm":"2026-08-03T19:55:52.459Z","appTokenHash":"15731b4c417fe040da2fa68ef47e25f053475b425c167b144d9d0df8ae38283e","appTokenCriadoEm":"2026-07-28T11:40:20.206Z","createdAt":"2026-07-01T17:39:57.683Z","updatedAt":"2026-08-03T19:55:53.148Z"},{"id":"cmr2v6xl80000g8u7yj1behpy","nome":"Lauck","telefone":"51 99209-9899","moto":"CG FAN 160","placa":"IYW-4F70","userId":"cmrz3db93000ew8u7s0qpgmry","online":true,"latitude":-29.6770735,"longitude":-51.0887063,"precisaoLocalizacao":115.8479995727539,"onlineDesde":"2026-08-01T05:19:14.012Z","localizacaoAtualizadaEm":"2026-08-03T02:36:08.335Z","appTokenHash":"f678ffc3cec6f37a490a7e2e1a617e3a05a74ec5b0717653ec5fe1619aca4230","appTokenCriadoEm":"2026-08-01T01:58:53.768Z","createdAt":"2026-07-02T02:07:37.100Z","updatedAt":"2026-08-03T02:36:09.031Z"},{"id":"cmr1gu7z70000jcu74dbygqlw","nome":"Willian","telefone":"51 99708-8229","moto":"CG TITAN 160","placa":"IYM-4835","userId":"cmr2yh61v0001cgu7pot970do","online":true,"latitude":-29.6521106,"longitude":-51.1618794,"precisaoLocalizacao":1.899999976158142,"onlineDesde":"2026-08-03T18:06:17.244Z","localizacaoAtualizadaEm":"2026-08-03T19:55:46.326Z","appTokenHash":"07d946f2a3a56ecd529cd142aaa21cb76a1e5a573a8c467a1e0263d084886f9e","appTokenCriadoEm":"2026-07-29T15:58:57.859Z","createdAt":"2026-07-01T02:38:03.235Z","updatedAt":"2026-08-03T19:55:47.018Z"}]
+
+RESPOSTA /api/motoboys/localizacoes
+--------------------------------------------------------------------------------
+Nao foi possivel consultar /api/motoboys/localizacoes.

@@ -235,14 +235,15 @@ model Motoboy {
   appTokenHash     String?   @unique
   appTokenCriadoEm DateTime?
 
-  teles                Tele[]
-  movimentos           MovimentoFinanceiroMotoboy[]
-  itensFilaOperacional ItemFilaOperacionalMotoboy[]
-  notificacoesGestor   NotificacaoGestor[]
-  controlesDiarios     ControleDiarioMotoboy[]
-  sessoesOnline        SessaoOnlineMotoboy[]
-  historicosMensais    HistoricoMensalMotoboy[]
-  importacoesHistorico ImportacaoHistoricoMotoboy[]
+  teles                 Tele[]
+  movimentos            MovimentoFinanceiroMotoboy[]
+  recebimentosHistorico RecebimentoTele[]
+  itensFilaOperacional  ItemFilaOperacionalMotoboy[]
+  notificacoesGestor    NotificacaoGestor[]
+  controlesDiarios      ControleDiarioMotoboy[]
+  sessoesOnline         SessaoOnlineMotoboy[]
+  historicosMensais     HistoricoMensalMotoboy[]
+  importacoesHistorico  ImportacaoHistoricoMotoboy[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -261,7 +262,7 @@ model ImportacaoHistoricoMotoboy {
 
   /**
    * Identificador calculado a partir do arquivo para bloquear
-   * a importação acidental do mesmo conteúdo mais de uma vez.
+   * a importaÃƒ§�ƒ£o acidental do mesmo conte�ƒºdo mais de uma vez.
    */
   hashArquivo String
 
@@ -288,13 +289,13 @@ model HistoricoMensalMotoboy {
 
   /**
    * Ganhos antigos relacionados ao trabalho principal.
-   * Na planilha do Henrique corresponde à soma das colunas B e C.
+   * Na planilha do Henrique corresponde �ƒ  soma das colunas B e C.
    */
   faturamentoTrabalho Float @default(0)
 
   /**
    * Trabalhos externos, particulares ou extras.
-   * Na planilha do Henrique corresponde à coluna D.
+   * Na planilha do Henrique corresponde �ƒ  coluna D.
    */
   feitoPorFora Float @default(0)
 
@@ -320,13 +321,13 @@ model ControleDiarioMotoboy {
 
   /**
    * Dia operacional do motoboy.
-   * A aplicação deverá normalizar esta data para o fuso America/Sao_Paulo.
+   * A aplica�ƒ§�ƒ£o dever�ƒ¡ normalizar esta data para o fuso America/Sao_Paulo.
    */
   dataReferencia DateTime
 
   /**
    * Valor calculado pelas teles do Express Manager naquele dia.
-   * Será preenchido/recalculado pela API, não digitado manualmente.
+   * Ser�ƒ¡ preenchido/recalculado pela API, n�ƒ£o digitado manualmente.
    */
   valorExpressManager Float @default(0)
 
@@ -348,13 +349,13 @@ model ControleDiarioMotoboy {
   observacoes             String?
 
   /**
-   * Hodômetro informado manualmente.
+   * Hod�ƒ´metro informado manualmente.
    */
   kmInicial Float?
   kmFinal   Float?
 
   /**
-   * Totais automáticos obtidos pelas sessões online.
+   * Totais autom�ƒ¡ticos obtidos pelas sess�ƒµes online.
    */
   kmOnlineTotal       Float @default(0)
   tempoOnlineSegundos Int   @default(0)
@@ -381,13 +382,13 @@ model SessaoOnlineMotoboy {
   encerradaEm DateTime?
 
   /**
-   * Totais acumulados somente com pontos considerados válidos.
+   * Totais acumulados somente com pontos considerados v�ƒ¡lidos.
    */
   kmOnline      Float @default(0)
   tempoSegundos Int   @default(0)
 
   /**
-   * Último ponto aceito para calcular o próximo trecho.
+   * �ƒÅ¡ltimo ponto aceito para calcular o prÃƒ³ximo trecho.
    */
   ultimaLatitude      Float?
   ultimaLongitude     Float?
@@ -395,7 +396,7 @@ model SessaoOnlineMotoboy {
   ultimaLocalizacaoEm DateTime?
 
   /**
-   * Contadores úteis para auditoria dos filtros de GPS.
+   * Contadores �ƒºteis para auditoria dos filtros de GPS.
    */
   pontosAceitos     Int @default(0)
   pontosDescartados Int @default(0)
@@ -406,6 +407,73 @@ model SessaoOnlineMotoboy {
   @@index([motoboyId, iniciadaEm])
   @@index([motoboyId, encerradaEm])
   @@index([controleDiarioId, iniciadaEm])
+}
+
+model LocalSolicitante {
+  id String @id @default(cuid())
+
+  solicitante    String
+  cliente        String
+  endereco       String
+  contato        String?
+  observacaoFixa String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([solicitante, cliente])
+  @@index([solicitante, cliente])
+}
+
+model RotaSalva {
+  id String @id @default(cuid())
+
+  solicitante String
+  nome        String
+  assinatura  String?
+
+  paradas RotaSalvaParada[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([solicitante, nome])
+  @@index([solicitante, assinatura])
+  @@index([solicitante, nome])
+}
+
+model RotaSalvaParada {
+  id String @id @default(cuid())
+
+  rotaId String
+  rota   RotaSalva @relation(fields: [rotaId], references: [id], onDelete: Cascade)
+
+  ordem      Int
+  tipo       String
+  cliente    String
+  endereco   String
+  contato    String?
+  observacao String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([rotaId, ordem])
+  @@index([rotaId, ordem])
+}
+
+model RotaHistoricaIgnorada {
+  id String @id @default(cuid())
+
+  solicitante String
+  assinatura  String
+  motivo      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([solicitante, assinatura])
+  @@index([solicitante])
 }
 
 model Tele {
@@ -446,14 +514,14 @@ model Tele {
 
   /**
    * Valor acumulado cobrado por espera.
-   * Cada bloco completo de 15 minutos adicionará R$ 5.
+   * Cada bloco completo de 15 minutos adicionar�ƒ¡ R$ 5.
    */
   espera Float @default(0)
 
   /**
-   * Controle do cronômetro ativo.
-   * O horário fica salvo no banco, então fechar ou bloquear
-   * o celular não reinicia a contagem.
+   * Controle do cron�ƒ´metro ativo.
+   * O hor�ƒ¡rio fica salvo no banco, ent�ƒ£o fechar ou bloquear
+   * o celular n�ƒ£o reinicia a contagem.
    */
   esperaAtualIniciadaEm   DateTime?
   blocosEsperaAtual       Int       @default(0)
@@ -475,8 +543,9 @@ model Tele {
 
   observacaoGeral String?
 
-  paradas              TeleParada[]
-  itensFilaOperacional ItemFilaOperacionalMotoboy[]
+  paradas               TeleParada[]
+  itensFilaOperacional  ItemFilaOperacionalMotoboy[]
+  recebimentosHistorico RecebimentoTele[]
 
   mensagensAtendimento MensagemAtendimento[]
   notificacoesGestor   NotificacaoGestor[]
@@ -924,4 +993,30 @@ model MensagemAtendimento {
   @@index([teleId])
   @@index([autor, enviadaEm])
   @@index([direcao, enviadaEm])
+}
+
+model RecebimentoTele {
+  id String @id @default(cuid())
+
+  teleId String
+  tele   Tele   @relation(fields: [teleId], references: [id], onDelete: Cascade)
+
+  valor     Float
+  recebedor Recebimento
+
+  motoboyId   String?
+  motoboy     Motoboy? @relation(fields: [motoboyId], references: [id], onDelete: SetNull)
+  motoboyNome String?
+
+  dataRecebimento DateTime @default(now())
+  origem          String   @default("REGISTRO_MANUAL")
+  fechamentoId    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([teleId, dataRecebimento])
+  @@index([motoboyId, dataRecebimento])
+  @@index([recebedor, dataRecebimento])
+  @@index([fechamentoId])
 }

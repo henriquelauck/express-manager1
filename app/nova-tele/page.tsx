@@ -21,6 +21,7 @@ import {
 import { gerarId } from "@/lib/utils/id";
 import { criarTelePeloOrquestrador } from "@/orchestrator";
 import type { Parada } from "@/types/Parada";
+import type { LocalSolicitante } from "@/types/RotasSalvas";
 import {
   AlertTriangle,
   ArrowRight,
@@ -176,6 +177,7 @@ export default function NovaTelePage() {
   const [erroSugestao, setErroSugestao] = useState("");
   const [teleCriadaId, setTeleCriadaId] = useState<string | null>(null);
   const [resultadoSugestao, setResultadoSugestao] = useState<ResultadoSugestaoMotoboy | null>(null);
+  const [locaisSalvos, setLocaisSalvos] = useState<LocalSolicitante[]>([]);
   const { paradas, setParadas, adicionarParada, removerParada } = useParadas();
 
   useEffect(() => {
@@ -217,7 +219,53 @@ export default function NovaTelePage() {
     }
   }, [setParadas]);
 
-  const locaisFrequentes = obterLocaisFrequentes(teles, solicitante);
+  useEffect(() => {
+    if (!solicitante) {
+      setLocaisSalvos([]);
+      return;
+    }
+
+    let ativo = true;
+
+    async function carregarLocaisDoSolicitante() {
+      try {
+        const parametro = encodeURIComponent(solicitante);
+        const resposta = await fetch(
+          `/api/locais-solicitante?solicitante=${parametro}`,
+          { cache: "no-store" }
+        );
+        const dados = resposta.ok ? await resposta.json() : [];
+
+        if (!ativo) return;
+
+        setLocaisSalvos(Array.isArray(dados) ? dados : []);
+      } catch (error) {
+        console.error("Erro ao carregar locais salvos:", error);
+      }
+    }
+
+    void carregarLocaisDoSolicitante();
+
+    return () => {
+      ativo = false;
+    };
+  }, [solicitante]);
+
+  const locaisDoHistorico = obterLocaisFrequentes(teles, solicitante);
+  const locaisFrequentes = [
+    ...locaisSalvos.map((local) => ({
+      cliente: local.cliente,
+      endereco: local.endereco,
+      contato: local.contato || "",
+      observacao: local.observacaoFixa || "",
+    })),
+    ...locaisDoHistorico.filter(
+      (historico) =>
+        !locaisSalvos.some(
+          (salvo) => salvo.cliente.trim().toLowerCase() === historico.cliente.trim().toLowerCase()
+        )
+    ),
+  ];
 
   const enderecosSugestoes = obterEnderecosSugestoes(clientes, teles);
 
@@ -252,6 +300,41 @@ export default function NovaTelePage() {
   function removerParadaDaRota(index: number) {
     removerParada(index);
     invalidarRotaCalculada();
+  }
+
+  async function salvarRotaAutomaticamente() {
+    if (
+      !solicitante.trim() ||
+      paradas.length === 0 ||
+      paradas.some((parada) => !parada.endereco.trim())
+    ) {
+      return;
+    }
+
+    try {
+      const resposta = await fetch("/api/rotas-salvas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          automatico: true,
+          solicitante,
+          paradas,
+        }),
+      });
+
+      if (!resposta.ok) {
+        const dados = await resposta.json().catch(() => ({}));
+        console.error(
+          "A tele foi criada, mas a rota automática não pôde ser salva:",
+          dados?.erro || resposta.statusText
+        );
+      }
+    } catch (error) {
+      console.error(
+        "A tele foi criada, mas houve erro ao salvar a rota automática:",
+        error
+      );
+    }
   }
 
   async function calcularRota() {
@@ -479,6 +562,8 @@ export default function NovaTelePage() {
 
     const teleCriada = resultado.dados;
 
+    await salvarRotaAutomaticamente();
+
     if (!teleCriada?.id) {
       alert(
         "A tele foi criada, mas não foi possível abrir a sugestão de motoboy. Consulte a Central de Operações."
@@ -676,6 +761,11 @@ export default function NovaTelePage() {
 
         <h2 className="text-2xl font-bold mb-4">Rota</h2>
 
+        <p className="mb-5 text-sm leading-6 text-slate-500">
+          As rotas das teles confirmadas são salvas automaticamente. Para editar ou excluir,
+          acesse Clientes → Gerenciar rotas.
+        </p>
+
         <ListaParadas
           paradas={paradas}
           clientes={clientes}
@@ -684,6 +774,7 @@ export default function NovaTelePage() {
               cliente: string;
               endereco: string;
               contato: string;
+              observacao?: string;
             }[]
           }
           onAtualizar={atualizarParada}

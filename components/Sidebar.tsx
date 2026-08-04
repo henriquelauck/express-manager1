@@ -9,7 +9,9 @@ import {
   Home,
   KeyRound,
   LogOut,
+  Moon,
   Package,
+  Sun,
   Truck,
   User,
   Users,
@@ -33,6 +35,11 @@ type MenuLinkProps = {
 export default function Sidebar() {
   const pathname = usePathname();
   const [usuario, setUsuario] = useState<Usuario | null>(null);
+  const [temaEscuro, setTemaEscuro] = useState(false);
+
+  useEffect(() => {
+    setTemaEscuro(document.documentElement.classList.contains("dark"));
+  }, []);
 
   useEffect(() => {
     let ativo = true;
@@ -62,6 +69,18 @@ export default function Sidebar() {
     };
   }, []);
 
+  function alternarTema() {
+    const proximoTemaEscuro = !temaEscuro;
+
+    document.documentElement.classList.toggle("dark", proximoTemaEscuro);
+    document.documentElement.style.colorScheme = proximoTemaEscuro ? "dark" : "light";
+    localStorage.setItem(
+      "express-manager-tema",
+      proximoTemaEscuro ? "escuro" : "claro"
+    );
+    setTemaEscuro(proximoTemaEscuro);
+  }
+
   async function logout() {
     try {
       await fetch("/api/auth/logout", {
@@ -88,11 +107,11 @@ export default function Sidebar() {
     rotaAtiva("/motoboys/extrato");
 
   return (
-    <aside className="flex min-h-screen w-[300px] max-w-[85vw] flex-col overflow-y-auto border-r border-slate-200 bg-white p-6">
+    <aside className="flex min-h-screen w-[300px] max-w-[85vw] flex-col overflow-y-auto border-r border-slate-200 bg-white p-6 transition-colors dark:border-slate-800 dark:bg-slate-950">
       <div className="mb-10 flex items-center gap-3">
         <Package className="h-12 w-12 text-emerald-600" />
 
-        <div className="text-2xl font-bold leading-6 text-slate-900">
+        <div className="text-2xl font-bold leading-6 text-slate-900 dark:text-slate-100">
           Express <br />
           <span className="text-emerald-600">Manager</span>
         </div>
@@ -136,7 +155,7 @@ export default function Sidebar() {
           ativo={rotaAtiva("/relatorios")}
         />
 
-        <div className="my-4 border-t border-slate-100" />
+        <div className="my-4 border-t border-slate-100 dark:border-slate-800" />
 
         <MenuLink
           href="/clientes"
@@ -160,18 +179,26 @@ export default function Sidebar() {
         />
       </nav>
 
-      <div className="mt-auto border-t border-slate-200 pt-6">
+      <div className="mt-auto border-t border-slate-200 pt-6 dark:border-slate-800">
+        <button
+          type="button"
+          onClick={alternarTema}
+          className="mb-4 flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+        >
+          {temaEscuro ? <Sun size={18} /> : <Moon size={18} />}
+          {temaEscuro ? "Usar modo claro" : "Usar modo escuro"}
+        </button>
         <div className="mb-4 flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
             <User size={20} />
           </div>
 
           <div className="min-w-0">
-            <p className="truncate font-bold leading-5 text-slate-900">
+            <p className="truncate font-bold leading-5 text-slate-900 dark:text-slate-100">
               {usuario?.nome || "Usuário"}
             </p>
 
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               {usuario?.role === "MOTOBOY" ? "Motoboy" : "Gestor"}
             </p>
           </div>
@@ -197,8 +224,8 @@ function MenuLink({ href, icon, text, ativo }: MenuLinkProps) {
       aria-current={ativo ? "page" : undefined}
       className={`flex items-center gap-4 rounded-2xl px-5 py-4 transition ${
         ativo
-          ? "bg-emerald-100 font-semibold text-emerald-700"
-          : "text-slate-700 hover:bg-emerald-50 hover:text-emerald-700"
+          ? "bg-emerald-100 font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+          : "text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 dark:text-slate-300 dark:hover:bg-emerald-950/60 dark:hover:text-emerald-300"
       }`}
     >
       <div className="flex h-6 w-6 items-center justify-center">{icon}</div>

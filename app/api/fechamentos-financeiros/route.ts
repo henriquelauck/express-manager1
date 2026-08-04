@@ -49,6 +49,45 @@ function dataInicioFim(dataInicio: string, dataFim: string) {
   };
 }
 
+
+async function semearHistoricoLegado(tx: any, tele: any) {
+  const quantidade = await tx.recebimentoTele.count({
+    where: { teleId: tele.id },
+  });
+
+  const valorLegado = Math.max(0, converterValor(tele.valorRecebido));
+
+  if (quantidade > 0 || valorLegado <= 0.009) {
+    return;
+  }
+
+  let motoboyId: string | null = null;
+  let motoboyNome: string | null = null;
+
+  if (tele.recebimento === "MOTOBOY" && tele.motoboyRecebedor) {
+    const motoboy = await tx.motoboy.findFirst({
+      where: { nome: tele.motoboyRecebedor },
+      select: { id: true, nome: true },
+    });
+
+    motoboyId = motoboy?.id || null;
+    motoboyNome = motoboy?.nome || tele.motoboyRecebedor;
+  }
+
+  await tx.recebimentoTele.create({
+    data: {
+      teleId: tele.id,
+      valor: valorLegado,
+      recebedor: tele.recebimento === "MOTOBOY" ? "MOTOBOY" : "ESCRITORIO",
+      motoboyId,
+      motoboyNome,
+      dataRecebimento: tele.dataRecebimento || tele.updatedAt || new Date(),
+      origem: "MIGRACAO_LEGADO",
+      fechamentoId: tele.fechamentoId || null,
+    },
+  });
+}
+
 function respostaErro(mensagem: string, status: number) {
   return NextResponse.json({ erro: mensagem }, { status });
 }
@@ -170,6 +209,10 @@ export async function POST(request: Request) {
         throw new Error("SEM_TELES_ABERTAS");
       }
 
+      for (const estado of telesEmAberto) {
+        await semearHistoricoLegado(tx, estado.tele);
+      }
+
       const totalBruto = telesEmAberto.reduce((soma, item) => soma + item.saldo, 0);
 
       const totalRecebidoAgora = recebimentosValidos.reduce(
@@ -225,6 +268,7 @@ export async function POST(request: Request) {
       let indiceTele = 0;
 
       for (const recebimento of recebimentosValidos) {
+        const recebedorTipo = recebimento.recebedorTipo as RecebedorTipo;
         let restante = recebimento.valorRecebido;
 
         while (restante > 0.009 && indiceTele < telesEmAberto.length) {
@@ -239,13 +283,32 @@ export async function POST(request: Request) {
           const valorAlocado = Math.min(restante, saldoAtual);
 
           estado.recebidoAgora += valorAlocado;
-          estado.ultimoRecebedor = recebimento.recebedorTipo;
+          estado.ultimoRecebedor = recebedorTipo;
           estado.ultimoMotoboyNome =
-            recebimento.recebedorTipo === "MOTOBOY"
+            recebedorTipo === "MOTOBOY"
               ? mapaMotoboys.get(recebimento.motoboyId as string)?.nome || null
               : null;
 
-          if (recebimento.recebedorTipo === "MOTOBOY" && recebimento.motoboyId) {
+          const motoboyRecebedor =
+            recebedorTipo === "MOTOBOY" && recebimento.motoboyId
+              ? mapaMotoboys.get(recebimento.motoboyId)?.nome || recebimento.motoboyNome || null
+              : null;
+
+          await tx.recebimentoTele.create({
+            data: {
+              teleId: estado.tele.id,
+              valor: valorAlocado,
+              recebedor: recebedorTipo,
+              motoboyId:
+                recebedorTipo === "MOTOBOY" ? recebimento.motoboyId : null,
+              motoboyNome: motoboyRecebedor,
+              dataRecebimento: new Date(),
+              origem: "FECHAMENTO_CLIENTE",
+              fechamentoId: fechamento.id,
+            },
+          });
+
+          if (recebedorTipo === "MOTOBOY" && recebimento.motoboyId) {
             await tx.movimentoFinanceiroMotoboy.create({
               data: {
                 motoboyId: recebimento.motoboyId,

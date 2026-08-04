@@ -28,6 +28,37 @@ function saldoTele(tele: any) {
   return Math.max(valorTotalTele(tele) - valorRecebidoTele(tele), 0);
 }
 
+function totaisRecebedoresTele(tele: any) {
+  const historico = Array.isArray(tele.recebimentosHistorico)
+    ? tele.recebimentosHistorico
+    : [];
+
+  if (historico.length > 0) {
+    return historico.reduce(
+      (totais: { escritorio: number; motoboy: number }, item: any) => {
+        const valor = Math.max(0, converterValor(item.valor));
+        const recebedor = String(item.recebedor || "").toLowerCase();
+
+        if (recebedor === "motoboy") {
+          totais.motoboy += valor;
+        } else if (recebedor === "escritorio") {
+          totais.escritorio += valor;
+        }
+
+        return totais;
+      },
+      { escritorio: 0, motoboy: 0 }
+    );
+  }
+
+  const recebido = valorRecebidoTele(tele);
+  const tipo = String(tele.recebimento || "pendente").toLowerCase();
+
+  return tipo === "motoboy"
+    ? { escritorio: 0, motoboy: recebido }
+    : { escritorio: recebido, motoboy: 0 };
+}
+
 export default function ResumoFinanceiro() {
   const { teles } = useExpressManager();
 
@@ -37,20 +68,15 @@ export default function ResumoFinanceiro() {
         const total = valorTotalTele(tele);
         const recebido = valorRecebidoTele(tele);
         const saldo = saldoTele(tele);
-        const tipoRecebimento = String(tele.recebimento || "pendente").toLowerCase();
+        const totaisRecebedores = totaisRecebedoresTele(tele);
 
         resumo.totalGeral += total;
         resumo.totalRecebido += recebido;
         resumo.totalPendente += saldo;
         resumo.quantidade += 1;
 
-        if (recebido > 0.009) {
-          if (tipoRecebimento === "motoboy") {
-            resumo.totalMotoboy += recebido;
-          } else {
-            resumo.totalEscritorio += recebido;
-          }
-        }
+        resumo.totalMotoboy += totaisRecebedores.motoboy;
+        resumo.totalEscritorio += totaisRecebedores.escritorio;
 
         if (saldo <= 0.009) {
           resumo.telesQuitadas += 1;

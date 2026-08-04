@@ -1,4 +1,0 @@
-﻿===== prisma\migrations\20260724110000_add_aguardando_coleta_status\migration.sql =====
-ALTER TYPE "StatusTele
-ADD VALUE IF NOT EXISTS 'AGUARDANDO_COLETA';
-

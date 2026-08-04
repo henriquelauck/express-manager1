@@ -1,10 +1,11 @@
 import { prisma } from "@/lib/prisma";
-import type { TipoMovimentoFinanceiro } from "@prisma/client";
 import { NextResponse } from "next/server";
 
-type RecebimentoBody = {
+type TipoRecebedorTela = "pendente" | "escritorio" | "motoboy";
+
+type Body = {
   id?: string;
-  recebimento?: string;
+  recebimento?: TipoRecebedorTela;
   valor?: number | string;
   motoboy?: string | null;
 };
@@ -14,191 +15,167 @@ function converterValor(valor: unknown) {
   return Number.isFinite(numero) ? numero : 0;
 }
 
-function normalizarRecebimento(valor: unknown) {
-  const recebimento = String(valor || "")
-    .trim()
-    .toLowerCase();
-
-  if (recebimento === "pendente" || recebimento === "escritorio" || recebimento === "motoboy") {
-    return recebimento;
-  }
-
-  return null;
-}
-
-function recebimentoParaBanco(recebimento: string) {
-  const mapa = {
-    pendente: "PENDENTE",
-    escritorio: "ESCRITORIO",
-    motoboy: "MOTOBOY",
-  } as const;
-
-  return mapa[recebimento as keyof typeof mapa] || "PENDENTE";
-}
-
 function respostaErro(mensagem: string, status: number) {
   return NextResponse.json({ erro: mensagem }, { status });
 }
 
-async function sincronizarMovimentoMotoboy({
-  tx,
-  teleId,
-  solicitante,
-  recebimento,
-  valorRecebido,
-  motoboyRecebedor,
-}: {
-  tx: any;
-  teleId: string;
-  solicitante: string;
-  recebimento: string;
-  valorRecebido: number;
-  motoboyRecebedor: string | null;
-}) {
-  const tipoMovimento: TipoMovimentoFinanceiro = "CLIENTE";
+function recebimentoParaBanco(tipo: TipoRecebedorTela) {
+  if (tipo === "motoboy") return "MOTOBOY";
+  if (tipo === "escritorio") return "ESCRITORIO";
+  return "PENDENTE";
+}
 
-  const movimentosExistentes = await tx.movimentoFinanceiroMotoboy.findMany({
+async function reconstruirMovimentosMotoboy(tx: any, teleId: string, solicitante: string) {
+  await tx.movimentoFinanceiroMotoboy.deleteMany({
     where: {
       teleId,
-      tipo: tipoMovimento,
+      tipo: "CLIENTE",
+    },
+  });
+
+  const recebimentosMotoboy = await tx.recebimentoTele.findMany({
+    where: {
+      teleId,
+      recebedor: "MOTOBOY",
+      motoboyId: {
+        not: null,
+      },
+      valor: {
+        gt: 0.009,
+      },
     },
     orderBy: {
       createdAt: "asc",
     },
   });
 
-  const deveTerMovimento =
-    recebimento === "motoboy" && valorRecebido > 0.009 && Boolean(motoboyRecebedor);
-
-  if (!deveTerMovimento) {
-    if (movimentosExistentes.length > 0) {
-      await tx.movimentoFinanceiroMotoboy.deleteMany({
-        where: {
-          teleId,
-          tipo: tipoMovimento,
-        },
-      });
-    }
-
-    return;
-  }
-
-  const motoboy = await tx.motoboy.findFirst({
-    where: {
-      nome: motoboyRecebedor!,
-    },
-    select: {
-      id: true,
-      nome: true,
-    },
-  });
-
-  if (!motoboy) {
-    throw new Error("O motoboy selecionado não foi encontrado.");
-  }
-
-  const dadosMovimento = {
-    motoboyId: motoboy.id,
-    tipo: tipoMovimento,
-    clienteNome: solicitante || null,
-    valor: valorRecebido,
-    descricao: `Recebimento da tele de ${solicitante}`,
-    teleId,
-    fechamentoId: null,
-  };
-
-  if (movimentosExistentes.length === 0) {
+  for (const recebimento of recebimentosMotoboy) {
     await tx.movimentoFinanceiroMotoboy.create({
-      data: dadosMovimento,
-    });
-
-    return;
-  }
-
-  const movimentoPrincipal = movimentosExistentes[0];
-
-  await tx.movimentoFinanceiroMotoboy.update({
-    where: {
-      id: movimentoPrincipal.id,
-    },
-    data: dadosMovimento,
-  });
-
-  if (movimentosExistentes.length > 1) {
-    await tx.movimentoFinanceiroMotoboy.deleteMany({
-      where: {
+      data: {
+        motoboyId: recebimento.motoboyId!,
+        tipo: "CLIENTE",
+        clienteNome: solicitante || null,
+        valor: recebimento.valor,
+        descricao: `Recebimento da tele de ${solicitante}`,
         teleId,
-        tipo: tipoMovimento,
-        id: {
-          not: movimentoPrincipal.id,
-        },
+        fechamentoId: recebimento.fechamentoId || null,
+        dataReferenciaInicio: recebimento.dataRecebimento,
+        dataReferenciaFim: recebimento.dataRecebimento,
       },
     });
   }
 }
 
+async function semearHistoricoLegado(tx: any, tele: any) {
+  const quantidade = await tx.recebimentoTele.count({
+    where: {
+      teleId: tele.id,
+    },
+  });
+
+  const valorLegado = Math.max(0, Number(tele.valorRecebido || 0));
+
+  if (quantidade > 0 || valorLegado <= 0.009) {
+    return;
+  }
+
+  let motoboyId: string | null = null;
+  let motoboyNome: string | null = null;
+
+  if (tele.recebimento === "MOTOBOY" && tele.motoboyRecebedor) {
+    const motoboy = await tx.motoboy.findFirst({
+      where: {
+        nome: tele.motoboyRecebedor,
+      },
+      select: {
+        id: true,
+        nome: true,
+      },
+    });
+
+    motoboyId = motoboy?.id || null;
+    motoboyNome = motoboy?.nome || tele.motoboyRecebedor;
+  }
+
+  await tx.recebimentoTele.create({
+    data: {
+      teleId: tele.id,
+      valor: valorLegado,
+      recebedor: tele.recebimento === "MOTOBOY" ? "MOTOBOY" : "ESCRITORIO",
+      motoboyId,
+      motoboyNome,
+      dataRecebimento: tele.dataRecebimento || tele.updatedAt || new Date(),
+      origem: "MIGRACAO_LEGADO",
+      fechamentoId: tele.fechamentoId || null,
+    },
+  });
+}
+
+async function reduzirHistorico(tx: any, teleId: string, valorAReduzir: number) {
+  let restante = valorAReduzir;
+
+  const itens = await tx.recebimentoTele.findMany({
+    where: {
+      teleId,
+    },
+    orderBy: [
+      {
+        dataRecebimento: "desc",
+      },
+      {
+        createdAt: "desc",
+      },
+    ],
+  });
+
+  for (const item of itens) {
+    if (restante <= 0.009) break;
+
+    const valorItem = Number(item.valor || 0);
+
+    if (valorItem <= restante + 0.009) {
+      await tx.recebimentoTele.delete({
+        where: {
+          id: item.id,
+        },
+      });
+
+      restante -= valorItem;
+      continue;
+    }
+
+    await tx.recebimentoTele.update({
+      where: {
+        id: item.id,
+      },
+      data: {
+        valor: Math.max(0, valorItem - restante),
+      },
+    });
+
+    restante = 0;
+  }
+}
+
 export async function PUT(request: Request) {
   try {
-    const body = (await request.json()) as RecebimentoBody;
-
+    const body = (await request.json()) as Body;
     const teleId = String(body.id || "").trim();
-    const recebimentoInformado = normalizarRecebimento(body.recebimento);
 
     if (!teleId) {
       return respostaErro("Tele não informada.", 400);
     }
 
-    if (!recebimentoInformado) {
-      return respostaErro("Situação do recebimento inválida.", 400);
+    const tipoTela = body.recebimento || "pendente";
+
+    if (!["pendente", "escritorio", "motoboy"].includes(tipoTela)) {
+      return respostaErro("Tipo de recebimento inválido.", 400);
     }
 
-    const teleAtual = await prisma.tele.findUnique({
-      where: {
-        id: teleId,
-      },
-      select: {
-        id: true,
-        solicitante: true,
-        total: true,
-      },
-    });
-
-    if (!teleAtual) {
-      return respostaErro("Tele não encontrada.", 404);
-    }
-
-    const total = Number(teleAtual.total || 0);
-    const valorInformado = recebimentoInformado === "pendente" ? 0 : converterValor(body.valor);
-
-    if (valorInformado < 0) {
-      return respostaErro("O valor recebido não pode ser negativo.", 400);
-    }
-
-    if (valorInformado > total + 0.009) {
-      return respostaErro("O valor recebido não pode ser maior que o total da tele.", 400);
-    }
-
-    const possuiRecebimento = valorInformado > 0.009;
-
-    const recebimento = possuiRecebimento ? recebimentoInformado : "pendente";
-
-    const motoboyRecebedor =
-      recebimento === "motoboy" ? String(body.motoboy || "").trim() || null : null;
-
-    if (recebimento === "motoboy" && !motoboyRecebedor) {
-      return respostaErro("Selecione o motoboy que recebeu.", 400);
-    }
-
-    const teleAtualizada = await prisma.$transaction(async (tx) => {
-      const tele = await tx.tele.update({
+    const resultado = await prisma.$transaction(async (tx) => {
+      const tele = await tx.tele.findUnique({
         where: {
           id: teleId,
-        },
-        data: {
-          recebimento: recebimentoParaBanco(recebimento),
-          valorRecebido: valorInformado,
-          dataRecebimento: possuiRecebimento ? new Date() : null,
-          motoboyRecebedor,
         },
         include: {
           paradas: {
@@ -211,32 +188,133 @@ export async function PUT(request: Request) {
         },
       });
 
-      await sincronizarMovimentoMotoboy({
-        tx,
-        teleId: tele.id,
-        solicitante: tele.solicitante,
-        recebimento,
-        valorRecebido: valorInformado,
-        motoboyRecebedor,
+      if (!tele) {
+        throw new Error("Tele não encontrada.");
+      }
+
+      if (tele.orcamento) {
+        throw new Error("Orçamentos não podem registrar recebimentos.");
+      }
+
+      await semearHistoricoLegado(tx, tele);
+
+      const totalTele = Math.max(0, Number(tele.total || 0));
+      const valorDesejado =
+        tipoTela === "pendente"
+          ? 0
+          : Math.max(0, Math.min(converterValor(body.valor), totalTele));
+
+      const agregadoAtual = await tx.recebimentoTele.aggregate({
+        where: {
+          teleId,
+        },
+        _sum: {
+          valor: true,
+        },
       });
 
-      return tele;
+      const valorAtual = Math.max(0, Number(agregadoAtual._sum.valor || 0));
+      const diferenca = valorDesejado - valorAtual;
+
+      if (diferenca > 0.009) {
+        let motoboyId: string | null = null;
+        let motoboyNome: string | null = null;
+
+        if (tipoTela === "motoboy") {
+          const nomeInformado = String(body.motoboy || "").trim();
+
+          if (!nomeInformado) {
+            throw new Error("Selecione o motoboy que recebeu.");
+          }
+
+          const motoboy = await tx.motoboy.findFirst({
+            where: {
+              nome: nomeInformado,
+            },
+            select: {
+              id: true,
+              nome: true,
+            },
+          });
+
+          if (!motoboy) {
+            throw new Error("Motoboy recebedor não encontrado.");
+          }
+
+          motoboyId = motoboy.id;
+          motoboyNome = motoboy.nome;
+        }
+
+        await tx.recebimentoTele.create({
+          data: {
+            teleId,
+            valor: diferenca,
+            recebedor: recebimentoParaBanco(tipoTela),
+            motoboyId,
+            motoboyNome,
+            dataRecebimento: new Date(),
+            origem: "REGISTRO_MANUAL",
+            fechamentoId: tele.fechamentoId || null,
+          },
+        });
+      } else if (diferenca < -0.009) {
+        await reduzirHistorico(tx, teleId, Math.abs(diferenca));
+      }
+
+      const historico = await tx.recebimentoTele.findMany({
+        where: {
+          teleId,
+        },
+        orderBy: [
+          {
+            dataRecebimento: "asc",
+          },
+          {
+            createdAt: "asc",
+          },
+        ],
+      });
+
+      const valorRecebido = historico.reduce(
+        (soma: number, item: any) => soma + Number(item.valor || 0),
+        0
+      );
+
+      const ultimo = historico[historico.length - 1] || null;
+
+      const teleAtualizada = await tx.tele.update({
+        where: {
+          id: teleId,
+        },
+        data: {
+          valorRecebido,
+          recebimento: ultimo?.recebedor || "PENDENTE",
+          dataRecebimento: ultimo?.dataRecebimento || null,
+          motoboyRecebedor:
+            ultimo?.recebedor === "MOTOBOY" ? ultimo.motoboyNome || null : null,
+        },
+        include: {
+          paradas: {
+            orderBy: {
+              ordem: "asc",
+            },
+          },
+          motoboy: true,
+          cliente: true,
+        },
+      });
+
+      await reconstruirMovimentosMotoboy(tx, teleId, tele.solicitante);
+
+      return {
+        ...teleAtualizada,
+        recebimentosHistorico: historico,
+      };
     });
 
-    return NextResponse.json({
-      ok: true,
-      tele: {
-        id: teleAtualizada.id,
-        recebimento: recebimento,
-        valorRecebido: Number(teleAtualizada.valorRecebido || 0),
-        dataRecebimento: teleAtualizada.dataRecebimento,
-        motoboyRecebedor: teleAtualizada.motoboyRecebedor,
-        recebido:
-          Number(teleAtualizada.valorRecebido || 0) >= Number(teleAtualizada.total || 0) - 0.009,
-      },
-    });
+    return NextResponse.json(resultado);
   } catch (erro) {
-    console.error("Erro ao atualizar recebimento da tele:", erro);
+    console.error("Erro ao registrar histórico de recebimento:", erro);
 
     return respostaErro(
       erro instanceof Error ? erro.message : "Não foi possível atualizar o recebimento.",

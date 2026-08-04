@@ -489,16 +489,16 @@ export default function TelesPage() {
   }) {
     if (!telePagamento) return null;
 
-    const resposta = await fetch("/api/teles", {
-      method: "PATCH",
+    const resposta = await fetch("/api/teles/recebimento", {
+      method: "PUT",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         id: telePagamento.id,
-        valorRecebido,
+        valor: valorRecebido,
         recebimento,
-        motoboyRecebedor,
+        motoboy: motoboyRecebedor,
       }),
     });
 

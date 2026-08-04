@@ -271,6 +271,11 @@ export async function GET(request: Request) {
               ordem: "asc",
             },
           },
+          recebimentosHistorico: {
+            orderBy: {
+              dataRecebimento: "asc",
+            },
+          },
         },
       }),
       prisma.itemFilaOperacionalMotoboy.findMany({

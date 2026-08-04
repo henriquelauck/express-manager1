@@ -15,6 +15,7 @@ import {
   Phone,
   Plus,
   ReceiptText,
+  Route,
   Search,
   Trash2,
   Users,
@@ -363,13 +364,21 @@ export default function ClientesPage() {
                     </div>
                   </div>
 
-                  <div className="p-5 pb-0">
+                  <div className="grid grid-cols-1 gap-2 p-5 pb-0 sm:grid-cols-2">
                     <Link
                       href={`/clientes/${cliente.id}`}
                       className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700"
                     >
                       <BarChart3 size={18} />
-                      Ver desempenho
+                      Desempenho
+                    </Link>
+
+                    <Link
+                      href={`/clientes/${cliente.id}/rotas`}
+                      className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+                    >
+                      <Route size={18} />
+                      Gerenciar rotas
                     </Link>
                   </div>
 
