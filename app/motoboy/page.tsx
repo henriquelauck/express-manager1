@@ -2470,7 +2470,7 @@ export default function MotoboyPage() {
 
         <section className="sm:mt-5">
           <div className="border-y border-slate-200 bg-white px-3 py-2.5 shadow-sm sm:rounded-3xl sm:border sm:px-4">
-            <div className="flex min-w-0 items-center gap-3">
+            <div className="relative z-40 flex min-w-0 items-center gap-3">
               <div
                 className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${statusPainel.iconeClasse}`}
               >
@@ -2502,9 +2502,23 @@ export default function MotoboyPage() {
 
               <button
                 type="button"
-                onClick={() => void (online ? ficarOffline() : ficarOnline())}
-                disabled={alterandoPresenca}
-                className={`flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl px-3 text-[11px] font-bold text-white transition disabled:cursor-wait disabled:opacity-60 ${
+                aria-disabled={alterandoPresenca}
+                onPointerDown={() => {
+                  setErroLocalizacao(
+                    alterandoPresenca
+                      ? "Toque detectado, mas uma tentativa anterior ainda esta em andamento."
+                      : "Toque no botao detectado. Iniciando verificacoes..."
+                  );
+                }}
+                onClick={() => {
+                  if (alterandoPresenca) return;
+                  void (online ? ficarOffline() : ficarOnline());
+                }}
+                className={`relative z-50 flex min-h-11 shrink-0 touch-manipulation select-none items-center justify-center gap-1.5 rounded-xl px-4 text-xs font-bold text-white shadow-sm active:scale-95 ${
+                  alterandoPresenca
+                    ? "cursor-wait opacity-70"
+                    : "cursor-pointer"
+                } ${
                   online
                     ? "bg-red-600 hover:bg-red-700"
                     : "bg-emerald-600 hover:bg-emerald-700"
