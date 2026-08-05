@@ -154,6 +154,7 @@ export default function TelesPage() {
   const [salvandoPagamento, setSalvandoPagamento] = useState(false);
   const [teleParaExcluir, setTeleParaExcluir] = useState<Tele | null>(null);
   const [excluindoTele, setExcluindoTele] = useState(false);
+  const [confirmandoOrcamentoId, setConfirmandoOrcamentoId] = useState<string | null>(null);
   const [erroExclusao, setErroExclusao] = useState("");
   const [localizacoesMotoboys, setLocalizacoesMotoboys] = useState<MotoboyLocalizacao[]>([]);
   const [erroLocalizacoes, setErroLocalizacoes] = useState("");
@@ -379,6 +380,79 @@ export default function TelesPage() {
     });
   }
 
+  async function confirmarOrcamentoComoTele(tele: Tele) {
+    if (!tele.id || confirmandoOrcamentoId) {
+      return;
+    }
+
+    const confirmou = window.confirm(
+      "O cliente confirmou este orÃ§amento? Ele serÃ¡ transformado em tele ativa e seguirÃ¡ para a escolha do motoboy."
+    );
+
+    if (!confirmou) {
+      return;
+    }
+
+    setConfirmandoOrcamentoId(tele.id);
+
+    try {
+      const teleConfirmada: Tele = {
+        ...tele,
+        orcamento: false,
+        status: "Aguardando motoboy dispon\u00edvel",
+        motoboy: "",
+        motoboyId: null,
+      };
+
+      const resposta = await fetch("/api/teles", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...teleConfirmada,
+          paradas: getParadas(teleConfirmada),
+        }),
+      });
+
+      let dados: Tele | { erro?: string };
+
+      try {
+        dados = await resposta.json();
+      } catch {
+        dados = {};
+      }
+
+      if (!resposta.ok) {
+        throw new Error(
+          "erro" in dados && dados.erro
+            ? dados.erro
+            : "NÃ£o foi possÃ­vel confirmar o orÃ§amento."
+        );
+      }
+
+      await recarregarDados();
+
+      const teleAtualizada =
+        dados && "id" in dados && dados.id
+          ? (dados as Tele)
+          : teleConfirmada;
+
+      setTeleEditando({
+        ...teleAtualizada,
+        paradas: getParadas(teleAtualizada),
+      });
+      setModalEdicaoAberto(true);
+    } catch (erroConfirmacao) {
+      alert(
+        erroConfirmacao instanceof Error
+          ? erroConfirmacao.message
+          : "NÃ£o foi possÃ­vel confirmar o orÃ§amento."
+      );
+    } finally {
+      setConfirmandoOrcamentoId(null);
+    }
+  }
   function iniciarArraste(event: React.DragEvent<HTMLDivElement>, teleId: string) {
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", teleId);
@@ -1182,7 +1256,25 @@ ${linkMaps}`
                     </div>
 
                     <div className="grid grid-cols-3 gap-2 border-t border-amber-100 bg-amber-50/50 p-4">
-                      <button
+                                            <button
+                        type="button"
+                        onClick={() => void confirmarOrcamentoComoTele(tele)}
+                        disabled={Boolean(confirmandoOrcamentoId)}
+                        className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-60"
+                      >
+                        {confirmandoOrcamentoId === tele.id ? (
+                          <>
+                            <Loader2 size={17} className="animate-spin" />
+                            Confirmando...
+                          </>
+                        ) : (
+                          <>
+                            <Bike size={17} />
+                            Cliente confirmou
+                          </>
+                        )}
+                      </button>
+<button
                         type="button"
                         onClick={() => gerarOrcamento(tele)}
                         className="flex h-11 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
