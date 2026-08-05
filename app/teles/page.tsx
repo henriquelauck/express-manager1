@@ -126,6 +126,23 @@ function dataHojeBrasilISO(data = new Date()) {
 type SituacaoCobranca = "pago" | "pago_parcial" | "fim_semana" | "precisa_cobrar";
 
 type RecebedorPagamento = "escritorio" | "motoboy";
+type MotoboySugeridoOrcamento = {
+  id: string;
+  nome: string;
+  moto?: string | null;
+  placa?: string | null;
+  entregasEmAndamento: number;
+  distanciaKm: number;
+  duracaoMinutos: number;
+};
+
+type ResultadoSugestaoOrcamento = {
+  sugestao: MotoboySugeridoOrcamento | null;
+  motoboys: MotoboySugeridoOrcamento[];
+  coleta?: {
+    enderecoFormatado?: string;
+  };
+};
 
 export default function TelesPage() {
   const { clientes, motoboys, teles, setTeles, recarregarDados } = useExpressManager();
@@ -155,6 +172,13 @@ export default function TelesPage() {
   const [teleParaExcluir, setTeleParaExcluir] = useState<Tele | null>(null);
   const [excluindoTele, setExcluindoTele] = useState(false);
   const [confirmandoOrcamentoId, setConfirmandoOrcamentoId] = useState<string | null>(null);
+  const [modalMotoboyOrcamentoAberto, setModalMotoboyOrcamentoAberto] = useState(false);
+  const [teleConfirmadaId, setTeleConfirmadaId] = useState<string | null>(null);
+  const [carregandoSugestaoOrcamento, setCarregandoSugestaoOrcamento] = useState(false);
+  const [atribuindoMotoboyOrcamentoId, setAtribuindoMotoboyOrcamentoId] = useState<string | null>(null);
+  const [erroSugestaoOrcamento, setErroSugestaoOrcamento] = useState("");
+  const [resultadoSugestaoOrcamento, setResultadoSugestaoOrcamento] =
+    useState<ResultadoSugestaoOrcamento | null>(null);
   const [erroExclusao, setErroExclusao] = useState("");
   const [localizacoesMotoboys, setLocalizacoesMotoboys] = useState<MotoboyLocalizacao[]>([]);
   const [erroLocalizacoes, setErroLocalizacoes] = useState("");
@@ -380,78 +404,144 @@ export default function TelesPage() {
     });
   }
 
+  function enderecoPrimeiraColetaOrcamento(tele: Tele) {
+    const paradas = getParadas(tele);
+    const coleta =
+      paradas.find((parada) =>
+        ["Coleta", "Trocar", "Entrega e coleta"].includes(String(parada.tipo))
+      ) ?? paradas[0];
+
+    return coleta?.endereco?.trim() || "";
+  }
+
+  async function carregarSugestaoOrcamento(enderecoColeta: string) {
+    setCarregandoSugestaoOrcamento(true);
+    setErroSugestaoOrcamento("");
+    setResultadoSugestaoOrcamento(null);
+
+    try {
+      const resposta = await fetch("/api/motoboys/sugestao-proximos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enderecoColeta }),
+      });
+
+      const dados = await resposta.json().catch(() => ({}));
+
+      if (!resposta.ok) {
+        throw new Error(
+          typeof dados?.erro === "string"
+            ? dados.erro
+            : "Nao foi possivel localizar os motoboys."
+        );
+      }
+
+      setResultadoSugestaoOrcamento(dados as ResultadoSugestaoOrcamento);
+    } catch (erro) {
+      setErroSugestaoOrcamento(
+        erro instanceof Error ? erro.message : "Nao foi possivel localizar os motoboys."
+      );
+    } finally {
+      setCarregandoSugestaoOrcamento(false);
+    }
+  }
+
   async function confirmarOrcamentoComoTele(tele: Tele) {
     if (!tele.id || confirmandoOrcamentoId) {
       return;
     }
 
-    const confirmou = window.confirm(
-      "O cliente confirmou este orÃ§amento? Ele serÃ¡ transformado em tele ativa e seguirÃ¡ para a escolha do motoboy."
-    );
-
-    if (!confirmou) {
-      return;
-    }
-
     setConfirmandoOrcamentoId(tele.id);
+    setErroSugestaoOrcamento("");
 
     try {
-      const teleConfirmada: Tele = {
-        ...tele,
-        orcamento: false,
-        status: "Aguardando motoboy dispon\u00edvel",
-        motoboy: "",
-        motoboyId: null,
-      };
-
-      const resposta = await fetch("/api/teles", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ...teleConfirmada,
-          paradas: getParadas(teleConfirmada),
-        }),
+      const resposta = await fetch("/api/teles/confirmar-orcamento", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teleId: tele.id }),
       });
 
-      let dados: Tele | { erro?: string };
-
-      try {
-        dados = await resposta.json();
-      } catch {
-        dados = {};
-      }
+      const dados = await resposta.json().catch(() => ({}));
 
       if (!resposta.ok) {
         throw new Error(
-          "erro" in dados && dados.erro
+          typeof dados?.erro === "string"
             ? dados.erro
-            : "NÃ£o foi possÃ­vel confirmar o orÃ§amento."
+            : "Nao foi possivel confirmar o orcamento."
         );
       }
 
+      const enderecoColeta = enderecoPrimeiraColetaOrcamento(tele);
+
+      setTeleConfirmadaId(tele.id);
+      setModalMotoboyOrcamentoAberto(true);
       await recarregarDados();
 
-      const teleAtualizada =
-        dados && "id" in dados && dados.id
-          ? (dados as Tele)
-          : teleConfirmada;
+      if (!enderecoColeta) {
+        setErroSugestaoOrcamento(
+          "A tele foi confirmada, mas nao foi encontrado um endereco de coleta."
+        );
+        return;
+      }
 
-      setTeleEditando({
-        ...teleAtualizada,
-        paradas: getParadas(teleAtualizada),
-      });
-      setModalEdicaoAberto(true);
-    } catch (erroConfirmacao) {
+      await carregarSugestaoOrcamento(enderecoColeta);
+    } catch (erro) {
       alert(
-        erroConfirmacao instanceof Error
-          ? erroConfirmacao.message
-          : "NÃ£o foi possÃ­vel confirmar o orÃ§amento."
+        erro instanceof Error ? erro.message : "Nao foi possivel confirmar o orcamento."
       );
     } finally {
       setConfirmandoOrcamentoId(null);
     }
+  }
+
+  async function atribuirMotoboyAoOrcamento(motoboy: MotoboySugeridoOrcamento) {
+    if (!teleConfirmadaId || atribuindoMotoboyOrcamentoId) {
+      return;
+    }
+
+    setAtribuindoMotoboyOrcamentoId(motoboy.id);
+    setErroSugestaoOrcamento("");
+
+    try {
+      const resposta = await fetch("/api/teles/atribuir-motoboy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          teleId: teleConfirmadaId,
+          motoboyId: motoboy.id,
+        }),
+      });
+
+      const dados = await resposta.json().catch(() => ({}));
+
+      if (!resposta.ok) {
+        throw new Error(
+          typeof dados?.erro === "string"
+            ? dados.erro
+            : "Nao foi possivel enviar a tele para o motoboy."
+        );
+      }
+
+      await recarregarDados();
+      setModalMotoboyOrcamentoAberto(false);
+      setTeleConfirmadaId(null);
+      setResultadoSugestaoOrcamento(null);
+    } catch (erro) {
+      setErroSugestaoOrcamento(
+        erro instanceof Error ? erro.message : "Nao foi possivel enviar a tele."
+      );
+    } finally {
+      setAtribuindoMotoboyOrcamentoId(null);
+    }
+  }
+
+  function fecharSugestaoOrcamento() {
+    if (atribuindoMotoboyOrcamentoId) return;
+
+    setModalMotoboyOrcamentoAberto(false);
+    setTeleConfirmadaId(null);
+    setResultadoSugestaoOrcamento(null);
+    setErroSugestaoOrcamento("");
   }
   function iniciarArraste(event: React.DragEvent<HTMLDivElement>, teleId: string) {
     event.dataTransfer.effectAllowed = "move";
@@ -842,7 +932,7 @@ export default function TelesPage() {
         ? teleEditando.motoboyRecebedor || teleEditando.motoboy || null
         : null;
 
-    await salvarTeleNoBanco({
+    const dadosAtualizados = {
       ...teleEditando,
       valorBase: valorNumerico,
       total: valorNumerico,
@@ -857,12 +947,49 @@ export default function TelesPage() {
       contato: primeiraParada.contato,
       observacao: primeiraParada.observacao,
       paradas: teleEditando.paradas,
-    });
+    };
+
+    if (teleEditando.orcamento) {
+      const resposta = await fetch("/api/teles/editar-orcamento", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...dadosAtualizados,
+          orcamento: true,
+          motoboy: "",
+          motoboyId: null,
+          recebimento: "pendente",
+          recebido: false,
+          valorRecebido: 0,
+          motoboyRecebedor: null,
+          fechamentoId: null,
+        }),
+      });
+
+      const dados = await resposta.json().catch(() => ({}));
+
+      if (!resposta.ok) {
+        alert(
+          typeof dados?.erro === "string"
+            ? dados.erro
+            : "Nao foi possivel editar o orcamento."
+        );
+        return;
+      }
+
+      await recarregarDados();
+      setModalEdicaoAberto(false);
+      setTeleEditando(null);
+      return;
+    }
+
+    await salvarTeleNoBanco(dadosAtualizados);
 
     setModalEdicaoAberto(false);
     setTeleEditando(null);
   }
-
   async function concluirTele(id: string) {
     return alterarStatus(id, "Entregue");
   }
@@ -1690,6 +1817,189 @@ ${linkMaps}`
         </aside>
       </div>
 
+      {modalMotoboyOrcamentoAberto && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="titulo-motoboy-orcamento"
+        >
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-5 sm:px-6">
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                  <Bike size={22} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-emerald-700">
+                    Orcamento confirmado
+                  </p>
+                  <h2 id="titulo-motoboy-orcamento" className="mt-1 text-xl font-bold text-slate-900">
+                    Providenciar motoboy
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Motoboys ordenados pela distancia ate a primeira coleta.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={fecharSugestaoOrcamento}
+                disabled={Boolean(atribuindoMotoboyOrcamentoId)}
+                className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 disabled:opacity-50"
+                aria-label="Fechar"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="max-h-[62vh] overflow-y-auto p-5 sm:p-6">
+              {carregandoSugestaoOrcamento && (
+                <div className="flex min-h-52 flex-col items-center justify-center text-center">
+                  <Loader2 size={32} className="animate-spin text-emerald-600" />
+                  <p className="mt-4 font-semibold text-slate-800">
+                    Localizando os motoboys...
+                  </p>
+                </div>
+              )}
+
+              {!carregandoSugestaoOrcamento && erroSugestaoOrcamento && (
+                <div className="mb-4 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+                  <AlertTriangle size={20} className="mt-0.5 shrink-0" />
+                  <span>{erroSugestaoOrcamento}</span>
+                </div>
+              )}
+
+              {!carregandoSugestaoOrcamento &&
+                resultadoSugestaoOrcamento?.coleta?.enderecoFormatado && (
+                  <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      Primeira coleta
+                    </p>
+                    <p className="mt-1 text-sm font-medium text-slate-700">
+                      {resultadoSugestaoOrcamento.coleta.enderecoFormatado}
+                    </p>
+                  </div>
+                )}
+
+              {!carregandoSugestaoOrcamento &&
+                resultadoSugestaoOrcamento &&
+                resultadoSugestaoOrcamento.motoboys.length === 0 && (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-center">
+                    <AlertTriangle size={28} className="mx-auto text-amber-600" />
+                    <h3 className="mt-3 font-bold text-slate-900">
+                      Nenhum motoboy disponivel
+                    </h3>
+                    <p className="mt-2 text-sm text-slate-600">
+                      A tele ja foi confirmada e pode permanecer sem motoboy.
+                    </p>
+                  </div>
+                )}
+
+              {!carregandoSugestaoOrcamento &&
+                resultadoSugestaoOrcamento &&
+                resultadoSugestaoOrcamento.motoboys.length > 0 && (
+                  <div className="space-y-3">
+                    {resultadoSugestaoOrcamento.motoboys.map((motoboy, index) => {
+                      const sugerido =
+                        resultadoSugestaoOrcamento.sugestao?.id === motoboy.id;
+                      const atribuindo =
+                        atribuindoMotoboyOrcamentoId === motoboy.id;
+
+                      return (
+                        <button
+                          key={motoboy.id}
+                          type="button"
+                          onClick={() => void atribuirMotoboyAoOrcamento(motoboy)}
+                          disabled={Boolean(atribuindoMotoboyOrcamentoId)}
+                          className={`w-full rounded-2xl border p-4 text-left transition disabled:cursor-wait disabled:opacity-60 ${
+                            sugerido
+                              ? "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-100"
+                              : "border-slate-200 bg-white hover:border-emerald-300"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-bold ${
+                                sugerido
+                                  ? "bg-emerald-600 text-white"
+                                  : "bg-slate-100 text-slate-600"
+                              }`}>
+                                {index + 1}
+                              </span>
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <strong className="text-slate-900">{motoboy.nome}</strong>
+                                  {sugerido && (
+                                    <span className="rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white">
+                                      Mais proximo
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="mt-1 text-sm text-slate-500">
+                                  {[motoboy.moto, motoboy.placa].filter(Boolean).join(" - ") ||
+                                    "Motoboy online"}
+                                </p>
+                                <p className="mt-1 text-xs text-slate-400">
+                                  {motoboy.entregasEmAndamento} em andamento
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="shrink-0 text-right">
+                              <p className="font-bold text-slate-900">
+                                {motoboy.distanciaKm.toFixed(1)} km
+                              </p>
+                              <p className="mt-1 text-sm text-slate-500">
+                                cerca de {motoboy.duracaoMinutos} min
+                              </p>
+                              {atribuindo && (
+                                <Loader2 size={18} className="ml-auto mt-2 animate-spin text-emerald-600" />
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+            </div>
+
+            <div className="flex flex-col-reverse gap-3 border-t border-slate-100 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+              <button
+                type="button"
+                onClick={fecharSugestaoOrcamento}
+                disabled={Boolean(atribuindoMotoboyOrcamentoId)}
+                className="min-h-12 rounded-xl border border-slate-200 bg-white px-5 font-semibold text-slate-700 disabled:opacity-50"
+              >
+                Deixar sem motoboy
+              </button>
+
+              {resultadoSugestaoOrcamento?.sugestao && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    void atribuirMotoboyAoOrcamento(
+                      resultadoSugestaoOrcamento.sugestao as MotoboySugeridoOrcamento
+                    )
+                  }
+                  disabled={Boolean(atribuindoMotoboyOrcamentoId)}
+                  className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 font-semibold text-white disabled:opacity-60"
+                >
+                  {atribuindoMotoboyOrcamentoId ===
+                  resultadoSugestaoOrcamento.sugestao.id ? (
+                    <Loader2 size={18} className="animate-spin" />
+                  ) : (
+                    <Send size={18} />
+                  )}
+                  Enviar para {resultadoSugestaoOrcamento.sugestao.nome}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {modalAberto && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
           <div className="bg-white w-[95vw] max-w-[650px] rounded-3xl p-5 md:p-8 shadow-xl">

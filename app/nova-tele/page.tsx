@@ -1041,7 +1041,7 @@ export default function NovaTelePage() {
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Finalizar cadastro</h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Revise os dados acima antes de criar a tele.
+                  Revise os dados acima antes de salvar o orÃ§amento.
                 </p>
               </div>
             </div>
@@ -1075,7 +1075,7 @@ export default function NovaTelePage() {
               </p>
             </div>
 
-            <div className="flex w-full flex-col gap-3 sm:flex-row md:w-auto">
+            <div className="flex w-full flex-col gap-3 sm:w-auto">
               <button
                 type="button"
                 onClick={criarOrcamento}
@@ -1095,25 +1095,7 @@ export default function NovaTelePage() {
                 )}
               </button>
 
-              <button
-                type="button"
-                onClick={criarTele}
-                disabled={salvando || salvandoOrcamento}
-                className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-7 py-4 font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-              >
-                {salvando ? (
-                  <>
-                    <Loader2 size={21} className="animate-spin" />
-                    Criando tele...
-                  </>
-                ) : (
-                  <>
-                    <Send size={20} />
-                    Criar tele
-                    <ArrowRight size={20} />
-                  </>
-                )}
-              </button>
+
             </div>
           </div>
         </section>

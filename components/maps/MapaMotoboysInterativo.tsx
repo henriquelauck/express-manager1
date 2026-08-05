@@ -9,6 +9,11 @@ type MotoboyMapa = {
   latitude?: number | null;
   longitude?: number | null;
   localizacaoRecente: boolean;
+  teleAtual?: {
+    id: string;
+    etapaMotoboy?: string | null;
+    ordemMotoboy?: number | null;
+  } | null;
 };
 
 type Props = {
@@ -139,6 +144,13 @@ export default function MapaMotoboysInterativo({
   const rotaPolylineRef = useRef<any>(null);
   const marcadorDestinoRef = useRef<any>(null);
   const ultimoSelecionadoRef = useRef<string | null | undefined>(undefined);
+  const ultimaReferenciaRotaRef = useRef<{
+    motoboyId: string;
+    latitude: number;
+    longitude: number;
+    chaveEtapa: string;
+  } | null>(null);
+  const carregandoRotaRef = useRef(false);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
 
@@ -300,20 +312,66 @@ export default function MapaMotoboysInterativo({
     const maps = janela.google?.maps;
     const mapa = mapaRef.current;
 
-    async function limparRota() {
+    function limparRota() {
       rotaPolylineRef.current?.setMap(null);
       rotaPolylineRef.current = null;
 
       marcadorDestinoRef.current?.setMap(null);
       marcadorDestinoRef.current = null;
+
+      ultimaReferenciaRotaRef.current = null;
     }
 
     async function carregarRotaSelecionada() {
-      await limparRota();
-
       if (!motoboySelecionadoId || !maps || !mapa) {
+        limparRota();
         return;
       }
+
+      const selecionado = motoboys.find(
+        (motoboy) =>
+          motoboy.id === motoboySelecionadoId &&
+          motoboy.localizacaoRecente &&
+          coordenadaValida(motoboy.latitude) &&
+          coordenadaValida(motoboy.longitude)
+      );
+
+      if (!selecionado || carregandoRotaRef.current) {
+        return;
+      }
+
+      const latitude = selecionado.latitude as number;
+      const longitude = selecionado.longitude as number;
+      const chaveEtapa = [
+        selecionado.teleAtual?.id || "",
+        selecionado.teleAtual?.etapaMotoboy || "",
+        String(selecionado.teleAtual?.ordemMotoboy ?? ""),
+      ].join("|");
+
+      const ultima = ultimaReferenciaRotaRef.current;
+      const mudouMotoboy = !ultima || ultima.motoboyId !== motoboySelecionadoId;
+      const mudouEtapa = !ultima || ultima.chaveEtapa !== chaveEtapa;
+
+      let distanciaMetros = Number.POSITIVE_INFINITY;
+
+      if (ultima && !mudouMotoboy) {
+        distanciaMetros = maps.geometry.spherical.computeDistanceBetween(
+          new maps.LatLng(ultima.latitude, ultima.longitude),
+          new maps.LatLng(latitude, longitude)
+        );
+      }
+
+      const precisaAtualizar =
+        mudouMotoboy ||
+        mudouEtapa ||
+        !rotaPolylineRef.current ||
+        distanciaMetros >= 20;
+
+      if (!precisaAtualizar) {
+        return;
+      }
+
+      carregandoRotaRef.current = true;
 
       try {
         const resposta = await fetch(
@@ -324,7 +382,7 @@ export default function MapaMotoboysInterativo({
         );
 
         if (!resposta.ok) {
-          let mensagem = "Não foi possível carregar a rota atual.";
+          let mensagem = "Nao foi possivel carregar a rota atual.";
 
           try {
             const dadosErro = await resposta.json();
@@ -336,13 +394,18 @@ export default function MapaMotoboysInterativo({
 
         const dados = await resposta.json();
 
-        if (cancelado || !dados?.possuiRota || !dados?.polyline || !dados?.destino) {
+        if (cancelado) {
+          return;
+        }
+
+        if (!dados?.possuiRota || !dados?.polyline || !dados?.destino) {
+          limparRota();
           return;
         }
 
         const caminho = maps.geometry.encoding.decodePath(dados.polyline);
 
-        rotaPolylineRef.current = new maps.Polyline({
+        const novaPolyline = new maps.Polyline({
           map: mapa,
           path: caminho,
           geodesic: true,
@@ -351,7 +414,7 @@ export default function MapaMotoboysInterativo({
           strokeWeight: 6,
         });
 
-        marcadorDestinoRef.current = new maps.Marker({
+        const novoMarcadorDestino = new maps.Marker({
           map: mapa,
           position: {
             lat: Number(dados.destino.latitude),
@@ -365,28 +428,45 @@ export default function MapaMotoboysInterativo({
           },
         });
 
-        const limites = new maps.LatLngBounds();
+        const polylineAnterior = rotaPolylineRef.current;
+        const marcadorAnterior = marcadorDestinoRef.current;
 
-        caminho.forEach((ponto: any) => limites.extend(ponto));
+        rotaPolylineRef.current = novaPolyline;
+        marcadorDestinoRef.current = novoMarcadorDestino;
 
-        const marcadorMotoboy = marcadoresRef.current.get(motoboySelecionadoId);
+        polylineAnterior?.setMap(null);
+        marcadorAnterior?.setMap(null);
 
-        const posicaoMotoboy = marcadorMotoboy?.getPosition?.();
+        ultimaReferenciaRotaRef.current = {
+          motoboyId: motoboySelecionadoId,
+          latitude,
+          longitude,
+          chaveEtapa,
+        };
 
-        if (posicaoMotoboy) {
-          limites.extend(posicaoMotoboy);
+        if (mudouMotoboy || mudouEtapa) {
+          const limites = new maps.LatLngBounds();
+
+          caminho.forEach((ponto: any) => limites.extend(ponto));
+
+          limites.extend({
+            lat: latitude,
+            lng: longitude,
+          });
+
+          limites.extend({
+            lat: Number(dados.destino.latitude),
+            lng: Number(dados.destino.longitude),
+          });
+
+          mapa.fitBounds(limites, 90);
         }
-
-        limites.extend({
-          lat: Number(dados.destino.latitude),
-          lng: Number(dados.destino.longitude),
-        });
-
-        mapa.fitBounds(limites, 90);
       } catch (erroRota) {
         if (!cancelado) {
           console.error("Erro ao desenhar rota do motoboy:", erroRota);
         }
+      } finally {
+        carregandoRotaRef.current = false;
       }
     }
 
