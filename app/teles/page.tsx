@@ -590,6 +590,36 @@ export default function TelesPage() {
     await recarregarDados();
   }
 
+  async function corrigirEtapaMotoboy(
+    teleId: string,
+    etapaMotoboy: string
+  ) {
+    const resposta = await fetch("/api/teles/corrigir-etapa-motoboy", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        teleId,
+        etapaMotoboy,
+      }),
+    });
+
+    const dados = await resposta.json().catch(() => ({}));
+
+    if (!resposta.ok) {
+      throw new Error(
+        typeof dados?.erro === "string"
+          ? dados.erro
+          : "Nao foi possivel corrigir a etapa."
+      );
+    }
+
+    await recarregarDados();
+    await carregarLocalizacoes();
+
+    return dados;
+  }
   async function alterarMotoboy(id: string, motoboy: string) {
     const tele = teles.find((item: Tele) => item.id === id);
     if (!tele) return false;
@@ -1795,6 +1825,7 @@ ${linkMaps}`
                   motoboys={motoboys}
                   alterarStatus={alterarStatus}
                   alterarMotoboy={alterarMotoboy}
+                  corrigirEtapaMotoboy={corrigirEtapaMotoboy}
                   alterarEspera={alterarEspera}
                   alterarSituacaoCobranca={alterarSituacaoCobranca}
                   descobrirSituacaoCobranca={descobrirSituacaoCobranca}
@@ -2999,6 +3030,7 @@ function TeleCard({
   motoboys,
   alterarStatus,
   alterarMotoboy,
+  corrigirEtapaMotoboy,
   alterarEspera,
   alterarSituacaoCobranca,
   descobrirSituacaoCobranca,
@@ -3017,6 +3049,14 @@ function TeleCard({
 }: any) {
   const [expandido, setExpandido] = useState(false);
   const [acaoSalvando, setAcaoSalvando] = useState<string | null>(null);
+  const [etapaCorrecao, setEtapaCorrecao] = useState(
+    tele.etapaMotoboy || ""
+  );
+  const [erroCorrecaoEtapa, setErroCorrecaoEtapa] = useState("");
+
+  useEffect(() => {
+    setEtapaCorrecao(tele.etapaMotoboy || "");
+  }, [tele.etapaMotoboy]);
 
   async function executarAcao(chave: string, acao: () => Promise<unknown>) {
     if (acaoSalvando) return;
@@ -3030,6 +3070,25 @@ function TeleCard({
     }
   }
 
+  async function salvarCorrecaoEtapa() {
+    if (!etapaCorrecao || etapaCorrecao === tele.etapaMotoboy) {
+      return;
+    }
+
+    setErroCorrecaoEtapa("");
+
+    try {
+      await executarAcao("corrigir-etapa", async () => {
+        await corrigirEtapaMotoboy(tele.id, etapaCorrecao);
+      });
+    } catch (erro) {
+      setErroCorrecaoEtapa(
+        erro instanceof Error
+          ? erro.message
+          : "Nao foi possivel corrigir a etapa."
+      );
+    }
+  }
   const espera = tele.esperaMinutos || 0;
   const acrescimoEspera = valorEspera(espera);
   const paradas = getParadas(tele);
@@ -3376,6 +3435,86 @@ function TeleCard({
             </div>
           </div>
 
+          {tele.motoboy &&
+            tele.statusAceite === "ACEITA" &&
+            tele.status !== "Entregue" && (
+              <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle
+                    size={18}
+                    className="mt-0.5 shrink-0 text-amber-700"
+                  />
+
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-amber-900">
+                      Corrigir etapa do motoboy
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-amber-800">
+                      Use quando o motoboy tocar na etapa errada. Os horarios
+                      posteriores serao apagados automaticamente.
+                    </p>
+
+                    <div className="mt-3 grid grid-cols-1 gap-2">
+                      <select
+                        value={etapaCorrecao}
+                        onChange={(event) => {
+                          setEtapaCorrecao(event.target.value);
+                          setErroCorrecaoEtapa("");
+                        }}
+                        disabled={Boolean(acaoSalvando)}
+                        className="h-11 w-full rounded-xl border border-amber-200 bg-white px-3 text-sm outline-none focus:border-amber-500 disabled:opacity-60"
+                      >
+                        <option value="">Selecionar etapa correta</option>
+                        <option value="AGUARDANDO_INICIO_COLETA">
+                          Aguardando inicio da coleta
+                        </option>
+                        <option value="EM_ROTA_COLETA">
+                          Em rota para coleta
+                        </option>
+                        <option value="CHEGOU_NA_COLETA">
+                          Chegou na coleta
+                        </option>
+                        <option value="EM_ROTA_ENTREGA">
+                          Em rota para entrega
+                        </option>
+                        <option value="CHEGOU_NA_ENTREGA">
+                          Chegou na entrega
+                        </option>
+                      </select>
+
+                      <button
+                        type="button"
+                        onClick={() => void salvarCorrecaoEtapa()}
+                        disabled={
+                          Boolean(acaoSalvando) ||
+                          !etapaCorrecao ||
+                          etapaCorrecao === tele.etapaMotoboy
+                        }
+                        className="flex h-11 items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 text-sm font-bold text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {acaoSalvando === "corrigir-etapa" ? (
+                          <>
+                            <Loader2 size={16} className="animate-spin" />
+                            Corrigindo...
+                          </>
+                        ) : (
+                          <>
+                            <RotateCcw size={16} />
+                            Salvar etapa correta
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {erroCorrecaoEtapa && (
+                      <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                        {erroCorrecaoEtapa}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </section>
+            )}
           {/* Financeiro */}
           <div className="border-t border-slate-100 bg-emerald-50/70 p-4">
             <div className="space-y-2">
