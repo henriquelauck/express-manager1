@@ -318,8 +318,8 @@ export async function POST(request: Request) {
                 descricao: "Pagamento direto do cliente",
                 teleId: estado.tele.id,
                 fechamentoId: fechamento.id,
-                dataReferenciaInicio: inicio,
-                dataReferenciaFim: fim,
+                dataReferenciaInicio: estado.tele.dataTele,
+                dataReferenciaFim: estado.tele.dataTele,
               },
             });
           }

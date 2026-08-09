@@ -9,6 +9,7 @@ import {
   Home,
   KeyRound,
   LogOut,
+  ListTodo,
   Moon,
   Package,
   Sun,
@@ -132,6 +133,13 @@ export default function Sidebar() {
           icon={<ClipboardList size={22} />}
           text="Operações"
           ativo={rotaAtiva("/teles")}
+        />
+
+        <MenuLink
+          href="/tarefas"
+          icon={<ListTodo size={22} />}
+          text="Tarefas"
+          ativo={rotaAtiva("/tarefas")}
         />
 
         <MenuLink

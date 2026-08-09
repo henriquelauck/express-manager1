@@ -140,11 +140,31 @@ type AtualizacaoNativaPlugin = {
   }>;
 };
 
-const LocalizacaoNativa = registerPlugin<LocalizacaoNativaPlugin>("LocalizacaoNativa");
+type RegistroPluginsExpress = typeof globalThis & {
+  __expressLocalizacaoNativa?: LocalizacaoNativaPlugin;
+  __expressCredenciaisNativas?: CredenciaisNativasPlugin;
+  __expressAtualizacaoNativa?: AtualizacaoNativaPlugin;
+};
 
-const CredenciaisNativas = registerPlugin<CredenciaisNativasPlugin>("CredenciaisNativas");
+const registroPluginsExpress = globalThis as RegistroPluginsExpress;
 
-const AtualizacaoNativa = registerPlugin<AtualizacaoNativaPlugin>("AtualizacaoNativa");
+const LocalizacaoNativa =
+  registroPluginsExpress.__expressLocalizacaoNativa ??
+  registerPlugin<LocalizacaoNativaPlugin>("LocalizacaoNativa");
+
+registroPluginsExpress.__expressLocalizacaoNativa = LocalizacaoNativa;
+
+const CredenciaisNativas =
+  registroPluginsExpress.__expressCredenciaisNativas ??
+  registerPlugin<CredenciaisNativasPlugin>("CredenciaisNativas");
+
+registroPluginsExpress.__expressCredenciaisNativas = CredenciaisNativas;
+
+const AtualizacaoNativa =
+  registroPluginsExpress.__expressAtualizacaoNativa ??
+  registerPlugin<AtualizacaoNativaPlugin>("AtualizacaoNativa");
+
+registroPluginsExpress.__expressAtualizacaoNativa = AtualizacaoNativa;
 
 function executandoNoAppAndroid() {
   /*
@@ -306,6 +326,7 @@ export default function MotoboyPage() {
   const atualizacaoAutomaticaEmAndamentoRef = useRef(false);
   const teleAtualizandoRef = useRef<string | null>(null);
   const miniMapasConsultadosRef = useRef<Set<string>>(new Set());
+
 
   async function verificarPermissoesLocalizacao() {
     if (!executandoNoAppAndroid()) {
@@ -636,6 +657,7 @@ export default function MotoboyPage() {
 
     const verificarAoRetornar = () => {
       if (document.visibilityState === "visible") {
+        void carregarPresenca();
         void verificarPermissoesLocalizacao();
         void verificarAtualizacaoDoAplicativo();
       }
@@ -699,21 +721,23 @@ export default function MotoboyPage() {
   }
 
   async function carregarMiniMapa(tele: Tele) {
+    // O minimapa serve apenas como prévia antes do aceite.
+    // Cada tele é calculada no máximo uma vez enquanto aguarda aceite.
+    const chaveConsulta = `aceite-${tele.id}`;
+
+    if (miniMapasConsultadosRef.current.has(chaveConsulta)) {
+      return;
+    }
+
     const paradasValidas = Array.isArray(tele.paradas)
       ? [...tele.paradas]
           .sort((a, b) => Number(a.ordem || 0) - Number(b.ordem || 0))
           .filter((parada) => String(parada.endereco || "").trim())
       : [];
 
+    miniMapasConsultadosRef.current.add(chaveConsulta);
+
     if (paradasValidas.length < 2) {
-      const chaveSemRota = `${tele.id}-sem-rota`;
-
-      if (miniMapasConsultadosRef.current.has(chaveSemRota)) {
-        return;
-      }
-
-      miniMapasConsultadosRef.current.add(chaveSemRota);
-
       setMiniMapas((atuais) => ({
         ...atuais,
         [tele.id]: {
@@ -722,21 +746,8 @@ export default function MotoboyPage() {
           resultado: null,
         },
       }));
-
       return;
     }
-
-    const latitudeChave =
-      latitudeAtual !== null ? latitudeAtual.toFixed(3) : "sem-latitude";
-    const longitudeChave =
-      longitudeAtual !== null ? longitudeAtual.toFixed(3) : "sem-longitude";
-    const chaveConsulta = `${tele.id}-${latitudeChave}-${longitudeChave}`;
-
-    if (miniMapasConsultadosRef.current.has(chaveConsulta)) {
-      return;
-    }
-
-    miniMapasConsultadosRef.current.add(chaveConsulta);
 
     setMiniMapas((atuais) => ({
       ...atuais,
@@ -756,6 +767,10 @@ export default function MotoboyPage() {
 
       const paradasParaCalculo = paradasValidas.filter(
         (parada) => String(parada.tipo || "").toUpperCase() !== "RETORNO"
+      );
+
+      const enderecosTele = paradasParaCalculo.map((parada) =>
+        String(parada.endereco || "").trim()
       );
 
       async function calcularRota(enderecos: string[], retorno: boolean) {
@@ -786,12 +801,11 @@ export default function MotoboyPage() {
         return (await resposta.json()) as ResultadoMiniMapa;
       }
 
-      const enderecosTele = paradasParaCalculo.map((parada) =>
-        String(parada.endereco || "").trim()
-      );
-
+      // 1) Rota da própria tele.
       const rotaTele = await calcularRota(enderecosTele, temRetorno);
 
+      // 2) Uma única estimativa considerando a posição atual até a coleta.
+      // Não será recalculada enquanto o motoboy se desloca.
       let rotaTotal: ResultadoMiniMapa | null = null;
 
       if (latitudeAtual !== null && longitudeAtual !== null) {
@@ -828,6 +842,9 @@ export default function MotoboyPage() {
         },
       }));
     } catch (erroMiniMapa) {
+      // Em caso de erro temporário, libera uma nova tentativa.
+      miniMapasConsultadosRef.current.delete(chaveConsulta);
+
       setMiniMapas((atuais) => ({
         ...atuais,
         [tele.id]: {
@@ -862,6 +879,24 @@ export default function MotoboyPage() {
       setLongitudeAtual(typeof presenca.longitude === "number" ? presenca.longitude : null);
 
       if (presenca.online) {
+        if (executandoNoAppAndroid()) {
+          try {
+            await garantirTokenNativo();
+
+            const estadoNativo = await LocalizacaoNativa.verificarPermissoes();
+            setPermissoesLocalizacao(estadoNativo);
+
+            if (estadoNativo.prontoParaFicarOnline && !estadoNativo.servicoAtivo) {
+              await LocalizacaoNativa.iniciar();
+            }
+          } catch (erroRecuperacaoNativa) {
+            console.error(
+              "Não foi possível recuperar a autenticação/serviço nativo:",
+              erroRecuperacaoNativa
+            );
+          }
+        }
+
         iniciarWatchPosition();
       }
     } catch (erroPresenca) {
@@ -902,6 +937,32 @@ export default function MotoboyPage() {
     }
 
     const dados = await resposta.json();
+
+    if (dados?.offlineAutomatico || dados?.motoboy?.online === false) {
+      pararMonitoramentoLocal();
+      setOnline(false);
+      setPrecisaoLocalizacao(
+        typeof dados?.motoboy?.precisao === "number"
+          ? dados.motoboy.precisao
+          : typeof dados?.motoboy?.precisaoLocalizacao === "number"
+            ? dados.motoboy.precisaoLocalizacao
+            : null
+      );
+      setLocalizacaoAtualizadaEm(dados?.motoboy?.localizacaoAtualizadaEm || null);
+
+      if (executandoNoAppAndroid()) {
+        try {
+          await LocalizacaoNativa.parar();
+        } catch (erroPararAutomatico) {
+          console.error(
+            "Nao foi possivel parar o servico nativo apos o offline automatico:",
+            erroPararAutomatico
+          );
+        }
+      }
+
+      return;
+    }
 
     setOnline(true);
     setPrecisaoLocalizacao(posicao.coords.accuracy);
@@ -1010,6 +1071,8 @@ export default function MotoboyPage() {
       await enviarLocalizacao("ONLINE", posicao);
 
       if (executandoNoAppAndroid()) {
+        await garantirTokenNativo();
+
         const resultado = await LocalizacaoNativa.iniciar();
 
         if (!resultado?.ativo) {
@@ -1525,17 +1588,12 @@ export default function MotoboyPage() {
   );
 
   useEffect(() => {
-    const telesComRota = [...telesAguardandoAceite, ...entregasAndamento];
-
-    for (const tele of telesComRota) {
+    // A prévia da rota é calculada apenas uma vez para teles aguardando aceite.
+    // Depois do aceite, o minimapa deixa de gerar novas chamadas ao Google Maps.
+    for (const tele of telesAguardandoAceite) {
       void carregarMiniMapa(tele);
     }
-  }, [
-    telesAguardandoAceite,
-    entregasAndamento,
-    latitudeAtual,
-    longitudeAtual,
-  ]);
+  }, [telesAguardandoAceite]);
 
   const entregasConcluidas = useMemo(
     () =>

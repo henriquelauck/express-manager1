@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { obterCoordenadasPersistentes } from "@/lib/google-maps/geocodificacaoPersistente";
+import { registrarUsoGoogle } from "@/lib/google-maps/usoApi";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
@@ -40,33 +42,7 @@ function segundosDaDuracao(duracao: string | undefined) {
 }
 
 async function geocodificarEndereco(endereco: string, chave: string) {
-  const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
-
-  url.searchParams.set("address", endereco);
-  url.searchParams.set("language", "pt-BR");
-  url.searchParams.set("region", "BR");
-  url.searchParams.set("key", chave);
-
-  const resposta = await fetch(url, { cache: "no-store" });
-  const dados = await resposta.json();
-
-  if (!resposta.ok || dados?.status !== "OK") {
-    console.error("Falha ao geocodificar a coleta:", dados);
-    return null;
-  }
-
-  const resultado = dados?.results?.[0];
-  const localizacao = resultado?.geometry?.location;
-
-  if (!coordenadaValida(localizacao?.lat) || !coordenadaValida(localizacao?.lng)) {
-    return null;
-  }
-
-  return {
-    latitude: localizacao.lat as number,
-    longitude: localizacao.lng as number,
-    enderecoFormatado: texto(resultado?.formatted_address) || endereco,
-  };
+  return obterCoordenadasPersistentes(endereco, chave, "SUGESTAO_MOTOBOY");
 }
 
 async function calcularMatrizRotas({
@@ -118,6 +94,13 @@ async function calcularMatrizRotas({
       cache: "no-store",
     }
   );
+
+  await registrarUsoGoogle({
+    servico: "Routes API",
+    sku: "Compute Route Matrix",
+    origem: "SUGESTAO_MOTOBOY",
+    quantidade: origens.length,
+  });
 
   const dados = await resposta.json();
 

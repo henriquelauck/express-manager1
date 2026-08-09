@@ -65,6 +65,7 @@ export async function PUT(request: Request) {
         orcamento: true,
         motoboyId: true,
         statusAceite: true,
+        etapaMotoboy: true,
         paradaAtualMotoboy: true,
         rotaColetaIniciadaEm: true,
         chegouNaColetaEm: true,
@@ -87,6 +88,8 @@ export async function PUT(request: Request) {
             id: true,
             paradaId: true,
             ordem: true,
+            iniciadaEm: true,
+            concluidaEm: true,
           },
         },
       },
@@ -174,7 +177,8 @@ export async function PUT(request: Request) {
         entregaIniciadaEm: null,
         chegouNaEntregaEm: null,
         concluidaPeloMotoboyEm: null,
-        esperaAtualIniciadaEm: tele.esperaAtualIniciadaEm || agora,
+        esperaAtualIniciadaEm:
+          tele.esperaAtualIniciadaEm || tele.chegouNaColetaEm || agora,
         blocosEsperaAtual: 0,
       },
       EM_ROTA_ENTREGA: {
@@ -198,10 +202,22 @@ export async function PUT(request: Request) {
         entregaIniciadaEm: tele.entregaIniciadaEm || agora,
         chegouNaEntregaEm: tele.chegouNaEntregaEm || agora,
         concluidaPeloMotoboyEm: null,
-        esperaAtualIniciadaEm: tele.esperaAtualIniciadaEm || agora,
+        esperaAtualIniciadaEm:
+          tele.esperaAtualIniciadaEm || tele.chegouNaEntregaEm || agora,
         blocosEsperaAtual: 0,
       },
     };
+
+    const inicioEtapaCorrigida =
+      etapa === "EM_ROTA_COLETA"
+        ? tele.rotaColetaIniciadaEm || agora
+        : etapa === "CHEGOU_NA_COLETA"
+          ? tele.chegouNaColetaEm || tele.rotaColetaIniciadaEm || agora
+          : etapa === "EM_ROTA_ENTREGA"
+            ? tele.entregaIniciadaEm || tele.chegouNaColetaEm || agora
+            : etapa === "CHEGOU_NA_ENTREGA"
+              ? tele.chegouNaEntregaEm || tele.entregaIniciadaEm || agora
+              : agora;
 
     const teleAtualizada = await prisma.$transaction(async (tx) => {
       /*
@@ -229,8 +245,8 @@ export async function PUT(request: Request) {
 
         if (indiceItem < indiceAtual) {
           status = "CONCLUIDO";
-          iniciadaEm = agora;
-          concluidaEm = agora;
+          iniciadaEm = item.iniciadaEm || inicioEtapaCorrigida;
+          concluidaEm = item.concluidaEm || inicioEtapaCorrigida;
         } else if (indiceItem > indiceAtual) {
           status = "PENDENTE";
         } else if (
@@ -238,14 +254,14 @@ export async function PUT(request: Request) {
           etapa === "EM_ROTA_ENTREGA"
         ) {
           status = "EM_ANDAMENTO";
-          iniciadaEm = agora;
+          iniciadaEm = item.iniciadaEm || inicioEtapaCorrigida;
         } else if (
           etapa === "CHEGOU_NA_COLETA" ||
           etapa === "CHEGOU_NA_ENTREGA"
         ) {
           status = "CONCLUIDO";
-          iniciadaEm = agora;
-          concluidaEm = agora;
+          iniciadaEm = item.iniciadaEm || inicioEtapaCorrigida;
+          concluidaEm = item.concluidaEm || inicioEtapaCorrigida;
         } else {
           status = "PENDENTE";
         }
@@ -260,6 +276,20 @@ export async function PUT(request: Request) {
           },
         });
       }
+
+      await tx.motoboyPontuacao.create({
+        data: {
+          motoboyId: tele.motoboyId!,
+          teleId,
+          tipo: "CORRECAO_ETAPA",
+          titulo: "CorreÃ§Ã£o de etapa",
+          descricao: `Gestor corrigiu a etapa de ${tele.etapaMotoboy || "nÃ£o informada"} para ${etapa}.`,
+          pontos: -2,
+          origem: "AUTOMATICA",
+          ocorridoEm: agora,
+          criadoPor: userId,
+        },
+      });
 
       return tx.tele.update({
         where: { id: teleId },

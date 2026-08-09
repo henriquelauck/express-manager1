@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { MapaRota } from "@/components/maps";
 import { ListaParadas, ResumoFinanceiro } from "@/components/nova-tele";
@@ -111,6 +111,8 @@ type ResultadoSugestaoMotoboy = {
   criterio?: string;
 };
 
+
+
 function paradaPodeSerColeta(tipo: Parada["tipo"]) {
   return tipo === "Coleta" || tipo === "Trocar" || tipo === "Entrega e coleta";
 }
@@ -162,6 +164,7 @@ export default function NovaTelePage() {
   const router = useRouter();
   const { clientes, teles, recarregarDados } = useExpressManager();
   const [solicitante, setSolicitante] = useState("");
+  const [mostrarTodosSolicitantes, setMostrarTodosSolicitantes] = useState(false);
   const [dataTele, setDataTele] = useState(() => dataHojeBrasilISO());
   const [valorBase, setValorBase] = useState("14,00");
   const [observacaoGeral, setObservacaoGeral] = useState("");
@@ -252,6 +255,7 @@ export default function NovaTelePage() {
   }, [solicitante]);
 
   const locaisDoHistorico = obterLocaisFrequentes(teles, solicitante);
+
   const locaisFrequentes = [
     ...locaisSalvos.map((local) => ({
       cliente: local.cliente,
@@ -262,7 +266,9 @@ export default function NovaTelePage() {
     ...locaisDoHistorico.filter(
       (historico) =>
         !locaisSalvos.some(
-          (salvo) => salvo.cliente.trim().toLowerCase() === historico.cliente.trim().toLowerCase()
+          (salvo) =>
+            salvo.cliente.trim().toLowerCase() ===
+            historico.cliente.trim().toLowerCase()
         )
     ),
   ];
@@ -430,6 +436,7 @@ export default function NovaTelePage() {
       setCalculandoRota(false);
     }
   }
+
 
   function obterEnderecoPrimeiraColeta() {
     const primeiraColeta = paradas.find((parada) => paradaPodeSerColeta(parada.tipo)) ?? paradas[0];
@@ -698,6 +705,79 @@ export default function NovaTelePage() {
   const duracaoOperacionalAtual =
     rotaSelecionada?.duracaoOperacionalMin ?? rotaSelecionada?.duracaoMin ?? 0;
 
+  const limiteSolicitantesRecentes = new Date();
+  limiteSolicitantesRecentes.setHours(0, 0, 0, 0);
+  limiteSolicitantesRecentes.setDate(limiteSolicitantesRecentes.getDate() - 60);
+
+  const ultimaTelePorSolicitante = new Map<string, number>();
+
+  teles.forEach((tele) => {
+    const nomeSolicitante = String(tele.solicitante || "").trim();
+
+    if (!nomeSolicitante) return;
+
+    const dataReferencia =
+      tele.dataTele ||
+      tele.criadoEm ||
+      tele.dataOperacao;
+
+    if (!dataReferencia) return;
+
+    const timestamp = new Date(
+      /^\d{4}-\d{2}-\d{2}$/.test(dataReferencia)
+        ? `${dataReferencia}T12:00:00`
+        : dataReferencia
+    ).getTime();
+
+    if (!Number.isFinite(timestamp)) return;
+
+    const chave = nomeSolicitante.toLocaleLowerCase("pt-BR");
+    const atual = ultimaTelePorSolicitante.get(chave) || 0;
+
+    if (timestamp > atual) {
+      ultimaTelePorSolicitante.set(chave, timestamp);
+    }
+  });
+
+  const clientesOrdenadosPorAtividade = [...clientes].sort((clienteA, clienteB) => {
+    const ultimaTeleA =
+      ultimaTelePorSolicitante.get(clienteA.nome.trim().toLocaleLowerCase("pt-BR")) || 0;
+    const ultimaTeleB =
+      ultimaTelePorSolicitante.get(clienteB.nome.trim().toLocaleLowerCase("pt-BR")) || 0;
+
+    if (ultimaTeleA !== ultimaTeleB) {
+      return ultimaTeleB - ultimaTeleA;
+    }
+
+    return clienteA.nome.localeCompare(clienteB.nome, "pt-BR");
+  });
+
+  const clientesRecentes = clientesOrdenadosPorAtividade.filter((cliente) => {
+    const ultimaTele =
+      ultimaTelePorSolicitante.get(cliente.nome.trim().toLocaleLowerCase("pt-BR")) || 0;
+
+    return ultimaTele >= limiteSolicitantesRecentes.getTime();
+  });
+
+  const nomesRecentes = new Set(
+    clientesRecentes.map((cliente) => cliente.nome.trim().toLocaleLowerCase("pt-BR"))
+  );
+
+  const clientesAntigos = clientesOrdenadosPorAtividade.filter(
+    (cliente) => !nomesRecentes.has(cliente.nome.trim().toLocaleLowerCase("pt-BR"))
+  );
+
+  const clienteSelecionadoForaDosRecentes =
+    solicitante &&
+    clientesAntigos.find((cliente) => cliente.nome === solicitante);
+
+  const clientesVisiveis = mostrarTodosSolicitantes
+    ? clientesOrdenadosPorAtividade
+    : [
+        ...clientesRecentes,
+        ...(clienteSelecionadoForaDosRecentes ? [clienteSelecionadoForaDosRecentes] : []),
+      ];
+
   return (
     <PageContainer>
       <div className="mb-8">
@@ -715,12 +795,32 @@ export default function NovaTelePage() {
           >
             <option value="">Selecione o cliente solicitante</option>
 
-            {clientes.map((cliente) => (
+            {clientesVisiveis.map((cliente) => (
               <option key={cliente.id || cliente.nome} value={cliente.nome}>
                 {cliente.nome}
               </option>
             ))}
           </select>
+
+          {clientesAntigos.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs text-slate-500">
+                {mostrarTodosSolicitantes
+                  ? `${clientes.length} solicitantes disponíveis`
+                  : `${clientesRecentes.length} com tele nos últimos 60 dias`}
+              </p>
+
+              <button
+                type="button"
+                onClick={() => setMostrarTodosSolicitantes((atual) => !atual)}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-50"
+              >
+                {mostrarTodosSolicitantes
+                  ? "Mostrar somente recentes"
+                  : `Ver mais solicitantes (${clientesAntigos.length})`}
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="mb-8">
@@ -1041,7 +1141,7 @@ export default function NovaTelePage() {
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Finalizar cadastro</h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Revise os dados acima antes de salvar o orÃ§amento.
+                  Revise os dados acima antes de salvar o orçamento.
                 </p>
               </div>
             </div>

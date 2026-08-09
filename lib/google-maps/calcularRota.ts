@@ -1,3 +1,5 @@
+import { obterCoordenadasPersistentes } from "@/lib/google-maps/geocodificacaoPersistente";
+import { registrarUsoGoogle } from "@/lib/google-maps/usoApi";
 export type ParadaCalculoRota = {
   endereco: string;
 };
@@ -138,42 +140,20 @@ function converterDuracaoParaMinutos(duracao: string | undefined) {
 }
 
 async function geocodificar(endereco: string, chaveGoogleMaps: string): Promise<Coordenada | null> {
-  const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
-
-  url.searchParams.set("address", endereco);
-  url.searchParams.set("region", "br");
-  url.searchParams.set("key", chaveGoogleMaps);
-
-  const resposta = await fetch(url, {
-    cache: "no-store",
-  });
-
-  const dados = (await resposta.json()) as RespostaGeocodificacaoGoogle;
-
-  if (!resposta.ok) {
-    throw new ErroCalculoRota(
-      dados.error_message || "Erro ao consultar o endereço no Google Maps."
-    );
-  }
-
-  const resultado = dados.results?.[0];
-  const latitude = resultado?.geometry?.location?.lat;
-  const longitude = resultado?.geometry?.location?.lng;
-
-  if (!resultado || typeof latitude !== "number" || typeof longitude !== "number") {
-    return null;
-  }
-
-  const componenteCidade = resultado.address_components?.find((componente) =>
-    componente.types?.includes("administrative_area_level_2")
+  const ponto = await obterCoordenadasPersistentes(
+    endereco,
+    chaveGoogleMaps,
+    "CALCULAR_ROTA"
   );
 
-  return {
-    lat: latitude,
-    lng: longitude,
-    cidade: componenteCidade?.long_name || "",
-    enderecoEncontrado: resultado.formatted_address || endereco,
-  };
+  return ponto
+    ? {
+        lat: ponto.latitude,
+        lng: ponto.longitude,
+        cidade: ponto.cidade,
+        enderecoEncontrado: ponto.enderecoFormatado,
+      }
+    : null;
 }
 
 async function consultarRotasGoogle(
@@ -229,6 +209,12 @@ async function consultarRotasGoogle(
     }),
 
     cache: "no-store",
+  });
+
+  await registrarUsoGoogle({
+    servico: "Routes API",
+    sku: "Compute Routes",
+    origem: "CALCULAR_ROTA",
   });
 
   const dadosRota = (await respostaRota.json()) as RespostaRotasGoogle;

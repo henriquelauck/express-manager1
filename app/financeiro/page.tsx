@@ -1,17 +1,15 @@
 "use client";
 
-import ExtratoFinanceiro from "@/components/financeiro/ExtratoFinanceiro";
-import FechamentosFinanceiro from "@/components/financeiro/FechamentosFinanceiro";
+import CobrancasFinanceiro from "@/components/financeiro/CobrancasFinanceiro";import ExtratoFinanceiro from "@/components/financeiro/ExtratoFinanceiro";
 import FinanceiroMotoboys from "@/components/financeiro/FinanceiroMotoboys";
-import RecebimentosFinanceiro from "@/components/financeiro/RecebimentosFinanceiro";
 import ResumoFinanceiro from "@/components/financeiro/ResumoFinanceiro";
 import PageContainer from "@/components/ui/PageContainer";
 import PageHeader from "@/components/ui/PageHeader";
-import { BarChart3, Bike, DollarSign, FileText, ReceiptText, Upload } from "lucide-react";
+import { BarChart3, Bike, DollarSign, FileText, Upload } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
-type AbaFinanceiro = "resumo" | "recebimentos" | "fechamentos" | "extrato" | "motoboys";
+type AbaFinanceiro = "resumo" | "cobrancas" | "extrato" | "motoboys";
 
 type ModuloFinanceiro = {
   id: AbaFinanceiro;
@@ -26,18 +24,11 @@ const MODULOS: ModuloFinanceiro[] = [
     titulo: "Resumo",
     descricao: "Visão geral financeira",
     icon: <BarChart3 size={22} />,
-  },
-  {
-    id: "recebimentos",
-    titulo: "Recebimentos",
-    descricao: "Pendentes, parciais e pagos",
+  },  {
+    id: "cobrancas",
+    titulo: "CobranÃ§as",
+    descricao: "Recebimentos e fechamentos",
     icon: <DollarSign size={22} />,
-  },
-  {
-    id: "fechamentos",
-    titulo: "Fechamentos",
-    descricao: "Fechamento de clientes",
-    icon: <ReceiptText size={22} />,
   },
   {
     id: "extrato",
@@ -62,7 +53,7 @@ export default function FinanceiroPage() {
     <PageContainer>
       <PageHeader titulo="Financeiro" descricao="Central financeira completa do Express Manager." />
 
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6">
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {MODULOS.map((modulo) => (
           <ModuloButton
             key={modulo.id}
@@ -102,8 +93,7 @@ export default function FinanceiroPage() {
       </div>
 
       {aba === "resumo" && <ResumoFinanceiro />}
-      {aba === "recebimentos" && <RecebimentosFinanceiro />}
-      {aba === "fechamentos" && <FechamentosFinanceiro />}
+      {aba === "cobrancas" && <CobrancasFinanceiro />}
       {aba === "extrato" && <ExtratoFinanceiro />}
       {aba === "motoboys" && <FinanceiroMotoboys />}
     </PageContainer>

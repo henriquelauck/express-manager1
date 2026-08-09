@@ -9,6 +9,12 @@ const motoboys = [
 ];
 
 export async function GET() {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json(
+      { erro: "Rota de desenvolvimento indisponÃ­vel em produÃ§Ã£o." },
+      { status: 404 }
+    );
+  }
   const senha = "123456";
   const senhaHash = await bcrypt.hash(senha, 10);
 

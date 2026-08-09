@@ -46,3 +46,5 @@ next-env.d.ts
 vapid-keys.txt
 .vercel
 .env*
+# Express Manager - backups locais
+/backup-*/

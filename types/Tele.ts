@@ -47,6 +47,7 @@ export type Tele = {
   statusAceite?: StatusAceiteTele;
   etapaMotoboy?: EtapaMotoboyTele | null;
 
+  confirmadaComoTeleEm?: string | null;
   atribuidaAoMotoboyEm?: string | null;
   aceitaPeloMotoboyEm?: string | null;
   recusadaPeloMotoboyEm?: string | null;

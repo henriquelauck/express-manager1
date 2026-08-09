@@ -226,6 +226,8 @@ export async function PUT(request: Request) {
         status: true,
         statusAceite: true,
         etapaMotoboy: true,
+        aceitaPeloMotoboyEm: true,
+        ordemMotoboy: true,
         paradaAtualMotoboy: true,
         motoboyId: true,
         espera: true,
@@ -505,6 +507,49 @@ export async function PUT(request: Request) {
       }
 
       const agora = new Date();
+
+      if (
+        novaEtapa === "EM_ROTA_COLETA" &&
+        etapaAtual === "AGUARDANDO_INICIO_COLETA" &&
+        tele.ordemMotoboy === 1 &&
+        tele.aceitaPeloMotoboyEm
+      ) {
+        const minutosParaIniciar = Math.floor(
+          (agora.getTime() - tele.aceitaPeloMotoboyEm.getTime()) / 60_000
+        );
+
+        if (minutosParaIniciar > 10) {
+          const existente = await prisma.motoboyPontuacao.findFirst({
+            where: {
+              motoboyId: usuario.motoboy.id,
+              teleId: tele.id,
+              tipo: "DEMORA_INICIO",
+            },
+            select: { id: true },
+          });
+
+          if (!existente) {
+            const descricao = `Levou ${minutosParaIniciar} minutos entre aceitar a tele e iniciar a rota. Limite automÃ¡tico: 10 minutos.`;
+
+            await prisma.motoboyPontuacao.create({
+              data: {
+                motoboyId: usuario.motoboy.id,
+                teleId: tele.id,
+                tipo: "DEMORA_INICIO",
+                titulo: "Demora apÃ³s aceitar",
+                descricao,
+                descricaoOriginal: descricao,
+                pontos: -4,
+                pontosOriginais: -4,
+                origem: "AUTOMATICA",
+                status: "ATIVA",
+                ocorridoEm: agora,
+              },
+            });
+          }
+        }
+      }
+
       const dadosEtapa = dadosDaEtapa(novaEtapa);
       const iniciouDeslocamento = novaEtapa === "EM_ROTA_COLETA" || novaEtapa === "EM_ROTA_ENTREGA";
       const confirmouChegada =

@@ -176,6 +176,7 @@ enum StatusItemFilaMotoboy {
 }
 
 enum TipoTarefaGestor {
+  MANUAL
   MARCOS_MANUTENCOES
   SAVECELL_PENDENCIAS
   FECHAMENTO_SEXTA_ESPECIAIS
@@ -242,6 +243,7 @@ model Motoboy {
   notificacoesGestor    NotificacaoGestor[]
   controlesDiarios      ControleDiarioMotoboy[]
   sessoesOnline         SessaoOnlineMotoboy[]
+  pontuacoes            MotoboyPontuacao[]
   historicosMensais     HistoricoMensalMotoboy[]
   importacoesHistorico  ImportacaoHistoricoMotoboy[]
 
@@ -425,6 +427,51 @@ model LocalSolicitante {
   @@index([solicitante, cliente])
 }
 
+model CacheGeocodificacao {
+  id                  String   @id @default(cuid())
+  enderecoNormalizado String   @unique
+  enderecoOriginal    String
+  enderecoFormatado   String?
+  cidade               String?
+  latitude            Float
+  longitude           Float
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  ultimoUsoEm         DateTime @default(now())
+
+  @@index([ultimoUsoEm])
+}
+
+model UsoApiExterna {
+  id         String   @id @default(cuid())
+  fornecedor String
+  servico    String
+  sku        String?
+  origem     String?
+  quantidade Int      @default(1)
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([fornecedor, servico, createdAt])
+}
+
+
+model CacheBillingApi {
+  id             String   @id @default(cuid())
+  chave          String   @unique
+  projeto        String
+  dataReferencia String
+  total          Float?
+  moeda          String?
+  itens          Json?
+  erro           String?
+  consultadoEm   DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([consultadoEm])
+  @@index([projeto, dataReferencia])
+}
 model RotaSalva {
   id String @id @default(cuid())
 
@@ -492,6 +539,12 @@ model Tele {
 
   statusAceite StatusAceiteTele @default(NAO_ENVIADA)
   ordemMotoboy Int?
+
+  /**
+   * Momento em que um orçamento foi confirmado e passou a ser uma tele.
+   * É o início do prazo operacional, sem interferir no prazo de aceite do motoboy.
+   */
+  confirmadaComoTeleEm DateTime?
 
   atribuidaAoMotoboyEm  DateTime?
   aceitaPeloMotoboyEm   DateTime?
@@ -597,18 +650,50 @@ model InscricaoPushGestor {
   userAgent String?
   ativa     Boolean @default(true)
 
-  ultimoUsoEm DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  ultimaVerificacaoEm DateTime?
+  ultimoUsoEm         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   @@index([userId, ativa])
   @@index([ativa, updatedAt])
 }
 
+model RegraTarefaGestor {
+  id String @id @default(cuid())
+
+  titulo    String
+  descricao String @default("")
+
+  hora   Int @default(19)
+  minuto Int @default(0)
+
+  diasSemana Int[]     @default([])
+  recorrente Boolean   @default(true)
+  dataUnica  DateTime?
+
+  ativa Boolean @default(true)
+
+  ultimaVerificacaoEm DateTime?
+  tipoCondicao        String    @default("NENHUMA")
+  solicitanteFiltro   String?
+
+  ocorrencias TarefaGestor[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ativa, hora, minuto])
+}
+
 model TarefaGestor {
   id String @id @default(cuid())
 
-  tipo TipoTarefaGestor
+  regraId String?
+  regra   RegraTarefaGestor? @relation(fields: [regraId], references: [id], onDelete: SetNull)
+
+  chaveOcorrencia String?          @unique
+  tipo            TipoTarefaGestor
 
   dataReferencia DateTime
 
@@ -628,6 +713,7 @@ model TarefaGestor {
   @@unique([tipo, dataReferencia])
   @@index([concluida, dataReferencia])
   @@index([tipo, concluida])
+  @@index([regraId, concluida])
 }
 
 model FechamentoFinanceiro {
@@ -1019,4 +1105,39 @@ model RecebimentoTele {
   @@index([motoboyId, dataRecebimento])
   @@index([recebedor, dataRecebimento])
   @@index([fechamentoId])
+}
+
+model MotoboyPontuacao {
+  id String @id @default(cuid())
+
+  motoboyId String
+  motoboy   Motoboy @relation(fields: [motoboyId], references: [id], onDelete: Cascade)
+
+  teleId String?
+
+  tipo      String
+  titulo    String
+  descricao String
+  pontos    Int
+
+  origem     String   @default("MANUAL")
+  status     String   @default("ATIVA")
+  ocorridoEm DateTime @default(now())
+  criadoPor  String?
+
+  pontosOriginais    Int?
+  descricaoOriginal  String?
+  editadoEm           DateTime?
+  editadoPor          String?
+  anuladoEm           DateTime?
+  anuladoPor          String?
+  motivoAnulacao      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([motoboyId, ocorridoEm])
+  @@index([tipo, ocorridoEm])
+  @@index([teleId])
+  @@index([status, ocorridoEm])
 }

@@ -26,6 +26,7 @@ import {
   Send,
   Timer,
   Trash2,
+  Users,
   WalletCards,
   Wifi,
   WifiOff,
@@ -144,6 +145,35 @@ type ResultadoSugestaoOrcamento = {
   };
 };
 
+
+type OportunidadeEncaixe = {
+  clienteId: string;
+  cliente: string;
+  telefone: string;
+  probabilidade: number;
+  distanciaKm: number;
+  quantidadeHistorico: number;
+  quantidadeRegiao: number;
+  ultimaTeleEm: string | null;
+  destinosExemplo: string[];
+  motivos: string[];
+};
+
+type ResultadoOportunidadesEncaixe = {
+  destino: {
+    enderecoInformado: string;
+    enderecoFormatado: string;
+    latitude: number;
+    longitude: number;
+  };
+  periodoDias: number;
+  raioKm: number;
+  analisados: number;
+  oportunidades: OportunidadeEncaixe[];
+};
+
+type EtapaModalOrcamento = "encaixe" | "motoboy";
+
 export default function TelesPage() {
   const { clientes, motoboys, teles, setTeles, recarregarDados } = useExpressManager();
 
@@ -172,6 +202,9 @@ export default function TelesPage() {
   const [teleParaExcluir, setTeleParaExcluir] = useState<Tele | null>(null);
   const [excluindoTele, setExcluindoTele] = useState(false);
   const [confirmandoOrcamentoId, setConfirmandoOrcamentoId] = useState<string | null>(null);
+  const [orcamentosExpandidos, setOrcamentosExpandidos] = useState<Set<string>>(
+    () => new Set()
+  );
   const [modalMotoboyOrcamentoAberto, setModalMotoboyOrcamentoAberto] = useState(false);
   const [teleConfirmadaId, setTeleConfirmadaId] = useState<string | null>(null);
   const [carregandoSugestaoOrcamento, setCarregandoSugestaoOrcamento] = useState(false);
@@ -179,6 +212,14 @@ export default function TelesPage() {
   const [erroSugestaoOrcamento, setErroSugestaoOrcamento] = useState("");
   const [resultadoSugestaoOrcamento, setResultadoSugestaoOrcamento] =
     useState<ResultadoSugestaoOrcamento | null>(null);
+  const [etapaModalOrcamento, setEtapaModalOrcamento] =
+    useState<EtapaModalOrcamento>("encaixe");
+  const [teleConfirmadaEncaixe, setTeleConfirmadaEncaixe] = useState<Tele | null>(null);
+  const [enderecoEncaixeSelecionado, setEnderecoEncaixeSelecionado] = useState("");
+  const [carregandoEncaixes, setCarregandoEncaixes] = useState(false);
+  const [erroEncaixes, setErroEncaixes] = useState("");
+  const [resultadoEncaixes, setResultadoEncaixes] =
+    useState<ResultadoOportunidadesEncaixe | null>(null);
   const [erroExclusao, setErroExclusao] = useState("");
   const [localizacoesMotoboys, setLocalizacoesMotoboys] = useState<MotoboyLocalizacao[]>([]);
   const [erroLocalizacoes, setErroLocalizacoes] = useState("");
@@ -446,6 +487,158 @@ export default function TelesPage() {
     }
   }
 
+
+  function enderecosDisponiveisDaTele(tele: Tele | null) {
+    if (!tele) return [];
+
+    return getParadas(tele)
+      .filter(
+        (parada) =>
+          String(parada.tipo).toUpperCase() !== "RETORNO" &&
+          Boolean(parada.endereco?.trim())
+      )
+      .map((parada, index) => ({
+        chave: `${index}-${parada.endereco}`,
+        rotulo: `${index + 1}. ${parada.tipo} - ${
+          parada.cliente || "Sem cliente"
+        }`,
+        endereco: parada.endereco.trim(),
+      }));
+  }
+
+  function enderecoAnaliseEncaixeAtual() {
+    const enderecos = enderecosDisponiveisDaTele(teleConfirmadaEncaixe);
+    const selecionadoExiste = enderecos.some(
+      (item) => item.endereco === enderecoEncaixeSelecionado
+    );
+
+    if (selecionadoExiste) return enderecoEncaixeSelecionado;
+
+    return enderecos[enderecos.length - 1]?.endereco || "";
+  }
+
+  async function buscarOportunidadesEncaixe() {
+    if (carregandoEncaixes || !teleConfirmadaEncaixe) return;
+
+    const enderecoDestino = enderecoAnaliseEncaixeAtual();
+
+    if (!enderecoDestino) {
+      setErroEncaixes("Selecione um endereco da rota antes de buscar oportunidades.");
+      return;
+    }
+
+    setCarregandoEncaixes(true);
+    setErroEncaixes("");
+    setResultadoEncaixes(null);
+
+    try {
+      const resposta = await fetch("/api/oportunidades-encaixe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          solicitanteAtual: teleConfirmadaEncaixe.solicitante,
+          enderecoDestino,
+          dataReferencia: teleConfirmadaEncaixe.dataTele,
+          raioKm: 10,
+          periodoDias: 180,
+        }),
+      });
+
+      const dados = (await resposta.json().catch(() => ({}))) as
+        | ResultadoOportunidadesEncaixe
+        | { erro?: string };
+
+      if (!resposta.ok) {
+        throw new Error(
+          "erro" in dados && dados.erro
+            ? dados.erro
+            : "Nao foi possivel buscar oportunidades de encaixe."
+        );
+      }
+
+      setResultadoEncaixes(dados as ResultadoOportunidadesEncaixe);
+    } catch (erro) {
+      setErroEncaixes(
+        erro instanceof Error
+          ? erro.message
+          : "Nao foi possivel buscar oportunidades de encaixe."
+      );
+    } finally {
+      setCarregandoEncaixes(false);
+    }
+  }
+
+  function mensagemEncaixe(oportunidade: OportunidadeEncaixe) {
+    const destino =
+      resultadoEncaixes?.destino.enderecoFormatado ||
+      resultadoEncaixes?.destino.enderecoInformado ||
+      "essa regiao";
+
+    return `Ola! Estamos com uma entrega indo para ${destino} hoje. Caso tenha alguma entrega para essa regiao, consigo fazer em valor de encaixe. Tem algo para enviar?`;
+  }
+
+  async function copiarMensagemEncaixe(oportunidade: OportunidadeEncaixe) {
+    const texto = mensagemEncaixe(oportunidade);
+
+    try {
+      await navigator.clipboard.writeText(texto);
+      alert(`Mensagem para ${oportunidade.cliente} copiada.`);
+    } catch {
+      alert(texto);
+    }
+  }
+
+  function abrirWhatsAppEncaixe(oportunidade: OportunidadeEncaixe) {
+    const telefone = String(oportunidade.telefone || "").replace(/\D/g, "");
+
+    if (!telefone) {
+      void copiarMensagemEncaixe(oportunidade);
+      return;
+    }
+
+    const telefoneBrasil = telefone.startsWith("55") ? telefone : `55${telefone}`;
+    window.open(
+      `https://wa.me/${telefoneBrasil}?text=${encodeURIComponent(
+        mensagemEncaixe(oportunidade)
+      )}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  }
+
+  async function continuarParaMotoboyOrcamento() {
+    if (!teleConfirmadaEncaixe) return;
+
+    const enderecoColeta = enderecoPrimeiraColetaOrcamento(teleConfirmadaEncaixe);
+
+    setEtapaModalOrcamento("motoboy");
+    setErroSugestaoOrcamento("");
+    setResultadoSugestaoOrcamento(null);
+
+    if (!enderecoColeta) {
+      setErroSugestaoOrcamento(
+        "A tele foi confirmada, mas nao foi encontrado um endereco de coleta."
+      );
+      return;
+    }
+
+    await carregarSugestaoOrcamento(enderecoColeta);
+  }
+
+  function alternarOrcamentoExpandido(teleId: string) {
+    setOrcamentosExpandidos((atuais) => {
+      const proximos = new Set(atuais);
+
+      if (proximos.has(teleId)) {
+        proximos.delete(teleId);
+      } else {
+        proximos.add(teleId);
+      }
+
+      return proximos;
+    });
+  }
+
   async function confirmarOrcamentoComoTele(tele: Tele) {
     if (!tele.id || confirmandoOrcamentoId) {
       return;
@@ -471,20 +664,18 @@ export default function TelesPage() {
         );
       }
 
-      const enderecoColeta = enderecoPrimeiraColetaOrcamento(tele);
+      const enderecos = enderecosDisponiveisDaTele(tele);
+      const enderecoPadrao = enderecos[enderecos.length - 1]?.endereco || "";
 
       setTeleConfirmadaId(tele.id);
+      setTeleConfirmadaEncaixe(tele);
+      setEnderecoEncaixeSelecionado(enderecoPadrao);
+      setResultadoEncaixes(null);
+      setErroEncaixes("");
+      setEtapaModalOrcamento("encaixe");
       setModalMotoboyOrcamentoAberto(true);
+
       await recarregarDados();
-
-      if (!enderecoColeta) {
-        setErroSugestaoOrcamento(
-          "A tele foi confirmada, mas nao foi encontrado um endereco de coleta."
-        );
-        return;
-      }
-
-      await carregarSugestaoOrcamento(enderecoColeta);
     } catch (erro) {
       alert(
         erro instanceof Error ? erro.message : "Nao foi possivel confirmar o orcamento."
@@ -525,7 +716,11 @@ export default function TelesPage() {
       await recarregarDados();
       setModalMotoboyOrcamentoAberto(false);
       setTeleConfirmadaId(null);
+      setTeleConfirmadaEncaixe(null);
       setResultadoSugestaoOrcamento(null);
+      setResultadoEncaixes(null);
+      setEnderecoEncaixeSelecionado("");
+      setEtapaModalOrcamento("encaixe");
     } catch (erro) {
       setErroSugestaoOrcamento(
         erro instanceof Error ? erro.message : "Nao foi possivel enviar a tele."
@@ -536,13 +731,19 @@ export default function TelesPage() {
   }
 
   function fecharSugestaoOrcamento() {
-    if (atribuindoMotoboyOrcamentoId) return;
+    if (atribuindoMotoboyOrcamentoId || carregandoEncaixes) return;
 
     setModalMotoboyOrcamentoAberto(false);
     setTeleConfirmadaId(null);
+    setTeleConfirmadaEncaixe(null);
     setResultadoSugestaoOrcamento(null);
+    setResultadoEncaixes(null);
+    setEnderecoEncaixeSelecionado("");
     setErroSugestaoOrcamento("");
+    setErroEncaixes("");
+    setEtapaModalOrcamento("encaixe");
   }
+
   function iniciarArraste(event: React.DragEvent<HTMLDivElement>, teleId: string) {
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", teleId);
@@ -1188,13 +1389,15 @@ ${linkMaps}`
     (motoboy) => motoboy.online && !motoboy.localizacaoRecente
   );
 
-  const motoboysComLocalizacaoRecente = motoboysOnline;
+  const motoboysComLocalizacaoNoMapa = localizacoesMotoboys.filter(
+    (motoboy) => motoboy.possuiCoordenadas
+  );
 
   const motoboySelecionado =
     localizacoesMotoboys.find((motoboy) => motoboy.id === motoboySelecionadoId) || null;
 
   function selecionarMotoboyNoMapa(motoboy: MotoboyLocalizacao) {
-    if (!motoboy.localizacaoRecente) {
+    if (!motoboy.possuiCoordenadas) {
       return;
     }
 
@@ -1204,7 +1407,7 @@ ${linkMaps}`
   function selecionarMotoboyPeloMapa(motoboyId: string) {
     const motoboy = localizacoesMotoboys.find((item) => item.id === motoboyId);
 
-    if (!motoboy || !motoboy.localizacaoRecente) {
+    if (!motoboy || !motoboy.possuiCoordenadas) {
       return;
     }
 
@@ -1357,107 +1560,132 @@ ${linkMaps}`
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <div className="space-y-2">
               {orcamentosFiltrados.map((tele: Tele) => {
                 const paradas = getParadas(tele);
+                const expandido = orcamentosExpandidos.has(tele.id);
 
                 return (
                   <article
                     key={tele.id}
-                    className="overflow-hidden rounded-3xl border border-amber-200 bg-white shadow-sm"
+                    className="overflow-hidden rounded-2xl border border-amber-200 bg-white shadow-sm"
                   >
-                    <div className="border-b border-amber-100 bg-amber-50/70 p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <span className="inline-flex rounded-lg bg-amber-500 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
-                            Orçamento
-                          </span>
-                          <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                            {tele.solicitante}
-                          </p>
-                          <h3 className="mt-1 break-words font-bold text-slate-900">
-                            {resumoDaRota(paradas)}
-                          </h3>
-                        </div>
+                    <button
+                      type="button"
+                      onClick={() => alternarOrcamentoExpandido(tele.id)}
+                      className="flex w-full items-center justify-between gap-4 bg-amber-50/70 px-4 py-3 text-left transition hover:bg-amber-100/70"
+                      aria-expanded={expandido}
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white">
+                          <ReceiptText size={16} />
+                        </span>
 
-                        <strong className="shrink-0 whitespace-nowrap text-lg text-amber-700">
-                          R$ {tele.valor}
+                        <strong className="truncate text-sm font-semibold text-slate-900">
+                          {tele.solicitante}
                         </strong>
                       </div>
-                    </div>
 
-                    <div className="space-y-3 p-4">
-                      {paradas.map((parada: Parada, index: number) => (
-                        <div
-                          key={parada.id || `${tele.id}-${index}`}
-                          className="rounded-2xl border border-slate-100 bg-slate-50 p-3"
-                        >
-                          <div className="flex items-start gap-3">
-                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">
-                              {index + 1}
-                            </span>
+                      <span className="shrink-0 text-amber-700">
+                        {expandido ? <ChevronUp size={19} /> : <ChevronDown size={19} />}
+                      </span>
+                    </button>
+
+                    {expandido && (
+                      <>
+                        <div className="border-t border-amber-100 px-4 py-4">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <div className="min-w-0">
                               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                                {parada.tipo}
+                                Rota
                               </p>
-                              <p className="mt-1 font-semibold text-slate-800">
-                                {parada.cliente || parada.nomeCliente || "Local não informado"}
-                              </p>
-                              <p className="mt-1 break-words text-sm text-slate-500">
-                                {parada.endereco || "Endereço não informado"}
-                              </p>
+                              <h3 className="mt-1 break-words font-bold text-slate-900">
+                                {resumoDaRota(paradas)}
+                              </h3>
                             </div>
+
+                            <strong className="shrink-0 whitespace-nowrap text-lg text-amber-700">
+                              R$ {tele.valor}
+                            </strong>
+                          </div>
+
+                          <div className="mt-4 space-y-3">
+                            {paradas.map((parada: Parada, index: number) => (
+                              <div
+                                key={parada.id || `${tele.id}-${index}`}
+                                className="rounded-2xl border border-slate-100 bg-slate-50 p-3"
+                              >
+                                <div className="flex items-start gap-3">
+                                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">
+                                    {index + 1}
+                                  </span>
+
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                      {parada.tipo}
+                                    </p>
+                                    <p className="mt-1 font-semibold text-slate-800">
+                                      {parada.cliente || parada.nomeCliente || "Local não informado"}
+                                    </p>
+                                    <p className="mt-1 break-words text-sm text-slate-500">
+                                      {parada.endereco || "Endereço não informado"}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
-                      ))}
-                    </div>
 
-                    <div className="grid grid-cols-3 gap-2 border-t border-amber-100 bg-amber-50/50 p-4">
-                                            <button
-                        type="button"
-                        onClick={() => void confirmarOrcamentoComoTele(tele)}
-                        disabled={Boolean(confirmandoOrcamentoId)}
-                        className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-60"
-                      >
-                        {confirmandoOrcamentoId === tele.id ? (
-                          <>
-                            <Loader2 size={17} className="animate-spin" />
-                            Confirmando...
-                          </>
-                        ) : (
-                          <>
-                            <Bike size={17} />
-                            Cliente confirmou
-                          </>
-                        )}
-                      </button>
-<button
-                        type="button"
-                        onClick={() => gerarOrcamento(tele)}
-                        className="flex h-11 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
-                      >
-                        <MessageCircle size={16} />
-                        Enviar
-                      </button>
+                        <div className="grid grid-cols-2 gap-2 border-t border-amber-100 bg-amber-50/50 p-4 lg:grid-cols-4">
+                          <button
+                            type="button"
+                            onClick={() => void confirmarOrcamentoComoTele(tele)}
+                            disabled={Boolean(confirmandoOrcamentoId)}
+                            className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-60"
+                          >
+                            {confirmandoOrcamentoId === tele.id ? (
+                              <>
+                                <Loader2 size={17} className="animate-spin" />
+                                Confirmando...
+                              </>
+                            ) : (
+                              <>
+                                <Bike size={17} />
+                                Cliente confirmou
+                              </>
+                            )}
+                          </button>
 
-                      <button
-                        type="button"
-                        onClick={() => editarTele(tele.id)}
-                        className="flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                      >
-                        <Pencil size={16} />
-                        Editar
-                      </button>
+                          <button
+                            type="button"
+                            onClick={() => gerarOrcamento(tele)}
+                            className="flex h-11 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
+                          >
+                            <MessageCircle size={16} />
+                            Enviar
+                          </button>
 
-                      <button
-                        type="button"
-                        onClick={() => solicitarExclusao(tele)}
-                        className="flex h-11 items-center justify-center gap-2 rounded-xl border border-red-200 bg-white text-sm font-semibold text-red-700 transition hover:bg-red-50"
-                      >
-                        <Trash2 size={16} />
-                        Excluir
-                      </button>
-                    </div>
+                          <button
+                            type="button"
+                            onClick={() => editarTele(tele.id)}
+                            className="flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                          >
+                            <Pencil size={16} />
+                            Editar
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => solicitarExclusao(tele)}
+                            className="flex h-11 items-center justify-center gap-2 rounded-xl border border-red-200 bg-white text-sm font-semibold text-red-700 transition hover:bg-red-50"
+                          >
+                            <Trash2 size={16} />
+                            Excluir
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </article>
                 );
               })}
@@ -1507,7 +1735,7 @@ ${linkMaps}`
                   <h2 className="text-lg font-bold text-slate-900">Mapa dos motoboys</h2>
 
                   <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-                    {motoboysComLocalizacaoRecente.length} com posição recente
+                    {motoboysOnline.length} com posição recente
                   </span>
                 </div>
 
@@ -1551,9 +1779,9 @@ ${linkMaps}`
                 <Loader2 size={20} className="animate-spin" />
                 Carregando posições...
               </div>
-            ) : motoboysComLocalizacaoRecente.length > 0 ? (
+            ) : motoboysComLocalizacaoNoMapa.length > 0 ? (
               <MapaMotoboysInterativo
-                motoboys={motoboysComLocalizacaoRecente}
+                motoboys={motoboysComLocalizacaoNoMapa}
                 motoboySelecionadoId={motoboySelecionadoId}
                 onSelecionarMotoboy={selecionarMotoboyPeloMapa}
                 className="h-[520px] lg:h-[620px] 2xl:h-[680px]"
@@ -1564,11 +1792,10 @@ ${linkMaps}`
                   <MapPin size={25} />
                 </div>
 
-                <h3 className="mt-4 font-bold text-slate-800">Nenhuma posição recente no mapa</h3>
+                <h3 className="mt-4 font-bold text-slate-800">Nenhuma localização disponível</h3>
 
                 <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">
-                  O motoboy precisa estar online, com GPS ativo e ter atualizado sua localização nos
-                  últimos dois minutos.
+                  Nenhum motoboy possui uma última coordenada salva para ser exibida no mapa.
                 </p>
               </div>
             )}
@@ -1855,21 +2082,39 @@ ${linkMaps}`
           aria-modal="true"
           aria-labelledby="titulo-motoboy-orcamento"
         >
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+          <div className="max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-3xl bg-white shadow-2xl">
             <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-5 sm:px-6">
               <div className="flex items-start gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
-                  <Bike size={22} />
+                <div
+                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
+                    etapaModalOrcamento === "encaixe"
+                      ? "bg-violet-100 text-violet-700"
+                      : "bg-emerald-100 text-emerald-700"
+                  }`}
+                >
+                  {etapaModalOrcamento === "encaixe" ? (
+                    <Users size={22} />
+                  ) : (
+                    <Bike size={22} />
+                  )}
                 </div>
+
                 <div>
                   <p className="text-sm font-semibold text-emerald-700">
                     Orcamento confirmado
                   </p>
-                  <h2 id="titulo-motoboy-orcamento" className="mt-1 text-xl font-bold text-slate-900">
-                    Providenciar motoboy
+                  <h2
+                    id="titulo-motoboy-orcamento"
+                    className="mt-1 text-xl font-bold text-slate-900"
+                  >
+                    {etapaModalOrcamento === "encaixe"
+                      ? "Verificar oportunidades de encaixe"
+                      : "Providenciar motoboy"}
                   </h2>
                   <p className="mt-1 text-sm text-slate-500">
-                    Motoboys ordenados pela distancia ate a primeira coleta.
+                    {etapaModalOrcamento === "encaixe"
+                      ? "Analise clientes proximos antes de enviar a tele ao motoboy."
+                      : "Motoboys ordenados pela distancia ate a primeira coleta."}
                   </p>
                 </div>
               </div>
@@ -1877,7 +2122,9 @@ ${linkMaps}`
               <button
                 type="button"
                 onClick={fecharSugestaoOrcamento}
-                disabled={Boolean(atribuindoMotoboyOrcamentoId)}
+                disabled={
+                  Boolean(atribuindoMotoboyOrcamentoId) || carregandoEncaixes
+                }
                 className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 disabled:opacity-50"
                 aria-label="Fechar"
               >
@@ -1885,147 +2132,361 @@ ${linkMaps}`
               </button>
             </div>
 
-            <div className="max-h-[62vh] overflow-y-auto p-5 sm:p-6">
-              {carregandoSugestaoOrcamento && (
-                <div className="flex min-h-52 flex-col items-center justify-center text-center">
-                  <Loader2 size={32} className="animate-spin text-emerald-600" />
-                  <p className="mt-4 font-semibold text-slate-800">
-                    Localizando os motoboys...
-                  </p>
-                </div>
-              )}
+            <div className="max-h-[68vh] overflow-y-auto p-5 sm:p-6">
+              {etapaModalOrcamento === "encaixe" ? (
+                <div>
+                  <div className="rounded-2xl border border-violet-200 bg-violet-50/60 p-4">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-violet-700">
+                      Endereco que sera analisado
+                    </label>
 
-              {!carregandoSugestaoOrcamento && erroSugestaoOrcamento && (
-                <div className="mb-4 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-                  <AlertTriangle size={20} className="mt-0.5 shrink-0" />
-                  <span>{erroSugestaoOrcamento}</span>
-                </div>
-              )}
+                    <select
+                      value={enderecoAnaliseEncaixeAtual()}
+                      onChange={(event) => {
+                        setEnderecoEncaixeSelecionado(event.target.value);
+                        setResultadoEncaixes(null);
+                        setErroEncaixes("");
+                      }}
+                      className="mt-2 h-12 w-full rounded-xl border border-violet-200 bg-white px-3 text-sm text-slate-800 outline-none transition focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
+                    >
+                      {enderecosDisponiveisDaTele(teleConfirmadaEncaixe).length ===
+                      0 ? (
+                        <option value="">Nenhum endereco disponivel</option>
+                      ) : (
+                        enderecosDisponiveisDaTele(teleConfirmadaEncaixe).map(
+                          (item) => (
+                            <option key={item.chave} value={item.endereco}>
+                              {item.rotulo} - {item.endereco}
+                            </option>
+                          )
+                        )
+                      )}
+                    </select>
 
-              {!carregandoSugestaoOrcamento &&
-                resultadoSugestaoOrcamento?.coleta?.enderecoFormatado && (
-                  <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                      Primeira coleta
-                    </p>
-                    <p className="mt-1 text-sm font-medium text-slate-700">
-                      {resultadoSugestaoOrcamento.coleta.enderecoFormatado}
-                    </p>
-                  </div>
-                )}
-
-              {!carregandoSugestaoOrcamento &&
-                resultadoSugestaoOrcamento &&
-                resultadoSugestaoOrcamento.motoboys.length === 0 && (
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-center">
-                    <AlertTriangle size={28} className="mx-auto text-amber-600" />
-                    <h3 className="mt-3 font-bold text-slate-900">
-                      Nenhum motoboy disponivel
-                    </h3>
-                    <p className="mt-2 text-sm text-slate-600">
-                      A tele ja foi confirmada e pode permanecer sem motoboy.
+                    <p className="mt-2 text-xs leading-5 text-violet-700/80">
+                      Escolha coleta, parada intermediaria ou entrega. A busca usa um
+                      raio de 10 km.
                     </p>
                   </div>
-                )}
 
-              {!carregandoSugestaoOrcamento &&
-                resultadoSugestaoOrcamento &&
-                resultadoSugestaoOrcamento.motoboys.length > 0 && (
-                  <div className="space-y-3">
-                    {resultadoSugestaoOrcamento.motoboys.map((motoboy, index) => {
-                      const sugerido =
-                        resultadoSugestaoOrcamento.sugestao?.id === motoboy.id;
-                      const atribuindo =
-                        atribuindoMotoboyOrcamentoId === motoboy.id;
+                  <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs leading-5 text-slate-500">
+                      A estimativa usa os ultimos 180 dias, frequencia, recencia,
+                      dia da semana e faixa de horario.
+                    </p>
 
-                      return (
-                        <button
-                          key={motoboy.id}
-                          type="button"
-                          onClick={() => void atribuirMotoboyAoOrcamento(motoboy)}
-                          disabled={Boolean(atribuindoMotoboyOrcamentoId)}
-                          className={`w-full rounded-2xl border p-4 text-left transition disabled:cursor-wait disabled:opacity-60 ${
-                            sugerido
-                              ? "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-100"
-                              : "border-slate-200 bg-white hover:border-emerald-300"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-4">
-                            <div className="flex min-w-0 items-center gap-3">
-                              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-bold ${
-                                sugerido
-                                  ? "bg-emerald-600 text-white"
-                                  : "bg-slate-100 text-slate-600"
-                              }`}>
-                                {index + 1}
-                              </span>
-                              <div className="min-w-0">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <strong className="text-slate-900">{motoboy.nome}</strong>
-                                  {sugerido && (
-                                    <span className="rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white">
-                                      Mais proximo
+                    <button
+                      type="button"
+                      onClick={() => void buscarOportunidadesEncaixe()}
+                      disabled={carregandoEncaixes}
+                      className="flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 font-semibold text-white transition hover:bg-violet-700 disabled:cursor-wait disabled:opacity-60"
+                    >
+                      {carregandoEncaixes ? (
+                        <Loader2 size={18} className="animate-spin" />
+                      ) : (
+                        <Users size={18} />
+                      )}
+                      {carregandoEncaixes
+                        ? "Analisando historico..."
+                        : "Buscar oportunidades"}
+                    </button>
+                  </div>
+
+                  {erroEncaixes && (
+                    <div className="mt-4 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800">
+                      <AlertTriangle size={19} className="mt-0.5 shrink-0" />
+                      <p className="text-sm">{erroEncaixes}</p>
+                    </div>
+                  )}
+
+                  {resultadoEncaixes && (
+                    <div className="mt-5">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                          Endereco analisado
+                        </p>
+                        <p className="mt-1 text-sm font-medium text-slate-700">
+                          {resultadoEncaixes.destino.enderecoFormatado}
+                        </p>
+                        <p className="mt-2 text-xs text-slate-500">
+                          {resultadoEncaixes.analisados} clientes analisados nos
+                          ultimos {resultadoEncaixes.periodoDias} dias.
+                        </p>
+                      </div>
+
+                      {resultadoEncaixes.oportunidades.length === 0 ? (
+                        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-center">
+                          <Users size={28} className="mx-auto text-amber-600" />
+                          <h4 className="mt-3 font-bold text-slate-900">
+                            Nenhum encaixe forte encontrado
+                          </h4>
+                          <p className="mt-2 text-sm text-slate-600">
+                            Nao ha historico suficiente de outros clientes dentro
+                            do raio de {resultadoEncaixes.raioKm} km.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="mt-4 space-y-3">
+                          {resultadoEncaixes.oportunidades.map((oportunidade) => (
+                            <article
+                              key={oportunidade.clienteId}
+                              className="rounded-2xl border border-slate-200 bg-white p-4"
+                            >
+                              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <strong className="text-slate-900">
+                                      {oportunidade.cliente}
+                                    </strong>
+                                    <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-bold text-violet-700">
+                                      {oportunidade.probabilidade}% de oportunidade
                                     </span>
+                                  </div>
+
+                                  <p className="mt-2 text-sm text-slate-600">
+                                    {oportunidade.quantidadeRegiao} entregas proximas
+                                    {" - "}
+                                    {oportunidade.distanciaKm.toFixed(1)} km do
+                                    endereco analisado
+                                  </p>
+
+                                  {oportunidade.motivos.length > 0 && (
+                                    <p className="mt-2 text-xs leading-5 text-slate-500">
+                                      {oportunidade.motivos.join(" - ")}
+                                    </p>
+                                  )}
+
+                                  {oportunidade.destinosExemplo.length > 0 && (
+                                    <p className="mt-2 truncate text-xs text-slate-400">
+                                      Ex.: {oportunidade.destinosExemplo[0]}
+                                    </p>
                                   )}
                                 </div>
-                                <p className="mt-1 text-sm text-slate-500">
-                                  {[motoboy.moto, motoboy.placa].filter(Boolean).join(" - ") ||
-                                    "Motoboy online"}
-                                </p>
-                                <p className="mt-1 text-xs text-slate-400">
-                                  {motoboy.entregasEmAndamento} em andamento
-                                </p>
-                              </div>
-                            </div>
 
-                            <div className="shrink-0 text-right">
-                              <p className="font-bold text-slate-900">
-                                {motoboy.distanciaKm.toFixed(1)} km
-                              </p>
-                              <p className="mt-1 text-sm text-slate-500">
-                                cerca de {motoboy.duracaoMinutos} min
-                              </p>
-                              {atribuindo && (
-                                <Loader2 size={18} className="ml-auto mt-2 animate-spin text-emerald-600" />
-                              )}
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+                                <div className="flex shrink-0 flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      void copiarMensagemEncaixe(oportunidade)
+                                    }
+                                    className="flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                                  >
+                                    <Copy size={16} />
+                                    Copiar
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      abrirWhatsAppEncaixe(oportunidade)
+                                    }
+                                    className="flex min-h-10 items-center gap-2 rounded-xl bg-emerald-600 px-3 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                                  >
+                                    <MessageCircle size={16} />
+                                    WhatsApp
+                                  </button>
+                                </div>
+                              </div>
+                            </article>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <>
+                  {carregandoSugestaoOrcamento && (
+                    <div className="flex min-h-52 flex-col items-center justify-center text-center">
+                      <Loader2 size={32} className="animate-spin text-emerald-600" />
+                      <p className="mt-4 font-semibold text-slate-800">
+                        Localizando os motoboys...
+                      </p>
+                    </div>
+                  )}
+
+                  {!carregandoSugestaoOrcamento && erroSugestaoOrcamento && (
+                    <div className="mb-4 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+                      <AlertTriangle size={20} className="mt-0.5 shrink-0" />
+                      <span>{erroSugestaoOrcamento}</span>
+                    </div>
+                  )}
+
+                  {!carregandoSugestaoOrcamento &&
+                    resultadoSugestaoOrcamento?.coleta?.enderecoFormatado && (
+                      <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                          Primeira coleta
+                        </p>
+                        <p className="mt-1 text-sm font-medium text-slate-700">
+                          {resultadoSugestaoOrcamento.coleta.enderecoFormatado}
+                        </p>
+                      </div>
+                    )}
+
+                  {!carregandoSugestaoOrcamento &&
+                    resultadoSugestaoOrcamento &&
+                    resultadoSugestaoOrcamento.motoboys.length === 0 && (
+                      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-center">
+                        <AlertTriangle size={28} className="mx-auto text-amber-600" />
+                        <h3 className="mt-3 font-bold text-slate-900">
+                          Nenhum motoboy disponivel
+                        </h3>
+                        <p className="mt-2 text-sm text-slate-600">
+                          A tele ja foi confirmada e pode permanecer sem motoboy.
+                        </p>
+                      </div>
+                    )}
+
+                  {!carregandoSugestaoOrcamento &&
+                    resultadoSugestaoOrcamento &&
+                    resultadoSugestaoOrcamento.motoboys.length > 0 && (
+                      <div className="space-y-3">
+                        {resultadoSugestaoOrcamento.motoboys.map(
+                          (motoboy, index) => {
+                            const sugerido =
+                              resultadoSugestaoOrcamento.sugestao?.id ===
+                              motoboy.id;
+                            const atribuindo =
+                              atribuindoMotoboyOrcamentoId === motoboy.id;
+
+                            return (
+                              <button
+                                key={motoboy.id}
+                                type="button"
+                                onClick={() =>
+                                  void atribuirMotoboyAoOrcamento(motoboy)
+                                }
+                                disabled={Boolean(
+                                  atribuindoMotoboyOrcamentoId
+                                )}
+                                className={`w-full rounded-2xl border p-4 text-left transition disabled:cursor-wait disabled:opacity-60 ${
+                                  sugerido
+                                    ? "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-100"
+                                    : "border-slate-200 bg-white hover:border-emerald-300"
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-4">
+                                  <div className="flex min-w-0 items-center gap-3">
+                                    <span
+                                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-bold ${
+                                        sugerido
+                                          ? "bg-emerald-600 text-white"
+                                          : "bg-slate-100 text-slate-600"
+                                      }`}
+                                    >
+                                      {index + 1}
+                                    </span>
+                                    <div className="min-w-0">
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <strong className="text-slate-900">
+                                          {motoboy.nome}
+                                        </strong>
+                                        {sugerido && (
+                                          <span className="rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white">
+                                            Mais proximo
+                                          </span>
+                                        )}
+                                      </div>
+                                      <p className="mt-1 text-sm text-slate-500">
+                                        {[motoboy.moto, motoboy.placa]
+                                          .filter(Boolean)
+                                          .join(" - ") || "Motoboy online"}
+                                      </p>
+                                      <p className="mt-1 text-xs text-slate-400">
+                                        {motoboy.entregasEmAndamento} em andamento
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="shrink-0 text-right">
+                                    <p className="font-bold text-slate-900">
+                                      {motoboy.distanciaKm.toFixed(1)} km
+                                    </p>
+                                    <p className="mt-1 text-sm text-slate-500">
+                                      cerca de {motoboy.duracaoMinutos} min
+                                    </p>
+                                    {atribuindo && (
+                                      <Loader2
+                                        size={18}
+                                        className="ml-auto mt-2 animate-spin text-emerald-600"
+                                      />
+                                    )}
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          }
+                        )}
+                      </div>
+                    )}
+                </>
+              )}
             </div>
 
             <div className="flex flex-col-reverse gap-3 border-t border-slate-100 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
-              <button
-                type="button"
-                onClick={fecharSugestaoOrcamento}
-                disabled={Boolean(atribuindoMotoboyOrcamentoId)}
-                className="min-h-12 rounded-xl border border-slate-200 bg-white px-5 font-semibold text-slate-700 disabled:opacity-50"
-              >
-                Deixar sem motoboy
-              </button>
+              {etapaModalOrcamento === "encaixe" ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={fecharSugestaoOrcamento}
+                    disabled={carregandoEncaixes}
+                    className="min-h-12 rounded-xl border border-slate-200 bg-white px-5 font-semibold text-slate-700 disabled:opacity-50"
+                  >
+                    Deixar sem motoboy
+                  </button>
 
-              {resultadoSugestaoOrcamento?.sugestao && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    void atribuirMotoboyAoOrcamento(
-                      resultadoSugestaoOrcamento.sugestao as MotoboySugeridoOrcamento
-                    )
-                  }
-                  disabled={Boolean(atribuindoMotoboyOrcamentoId)}
-                  className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 font-semibold text-white disabled:opacity-60"
-                >
-                  {atribuindoMotoboyOrcamentoId ===
-                  resultadoSugestaoOrcamento.sugestao.id ? (
-                    <Loader2 size={18} className="animate-spin" />
-                  ) : (
-                    <Send size={18} />
+                  <button
+                    type="button"
+                    onClick={() => void continuarParaMotoboyOrcamento()}
+                    disabled={carregandoEncaixes}
+                    className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 font-semibold text-white disabled:opacity-60"
+                  >
+                    <Bike size={18} />
+                    Continuar para motoboy
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setEtapaModalOrcamento("encaixe")}
+                    disabled={Boolean(atribuindoMotoboyOrcamentoId)}
+                    className="min-h-12 rounded-xl border border-violet-200 bg-white px-5 font-semibold text-violet-700 disabled:opacity-50"
+                  >
+                    Voltar aos encaixes
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={fecharSugestaoOrcamento}
+                    disabled={Boolean(atribuindoMotoboyOrcamentoId)}
+                    className="min-h-12 rounded-xl border border-slate-200 bg-white px-5 font-semibold text-slate-700 disabled:opacity-50"
+                  >
+                    Deixar sem motoboy
+                  </button>
+
+                  {resultadoSugestaoOrcamento?.sugestao && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void atribuirMotoboyAoOrcamento(
+                          resultadoSugestaoOrcamento.sugestao as MotoboySugeridoOrcamento
+                        )
+                      }
+                      disabled={Boolean(atribuindoMotoboyOrcamentoId)}
+                      className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 font-semibold text-white disabled:opacity-60"
+                    >
+                      {atribuindoMotoboyOrcamentoId ===
+                      resultadoSugestaoOrcamento.sugestao.id ? (
+                        <Loader2 size={18} className="animate-spin" />
+                      ) : (
+                        <Send size={18} />
+                      )}
+                      Enviar para {resultadoSugestaoOrcamento.sugestao.nome}
+                    </button>
                   )}
-                  Enviar para {resultadoSugestaoOrcamento.sugestao.nome}
-                </button>
+                </>
               )}
             </div>
           </div>
@@ -3727,9 +4188,13 @@ function formatarDuracaoCronometro(totalSegundos: number) {
 }
 
 function calcularPrazoOperacional(tele: any, agora: number) {
-  if (!tele.atribuidaAoMotoboyEm) return null;
+  const inicioInformado =
+    tele.confirmadaComoTeleEm ||
+    tele.atribuidaAoMotoboyEm;
 
-  const inicio = new Date(tele.atribuidaAoMotoboyEm).getTime();
+  if (!inicioInformado) return null;
+
+  const inicio = new Date(inicioInformado).getTime();
 
   if (!Number.isFinite(inicio)) return null;
 

@@ -140,6 +140,7 @@ function formatarTeleParaTela(tele: any) {
     motoboy: tele.motoboyNome || tele.motoboy?.nome || "",
     statusAceite: tele.statusAceite,
     ordemMotoboy: tele.ordemMotoboy,
+    confirmadaComoTeleEm: tele.confirmadaComoTeleEm,
     atribuidaAoMotoboyEm: tele.atribuidaAoMotoboyEm,
     aceitaPeloMotoboyEm: tele.aceitaPeloMotoboyEm,
     recusadaPeloMotoboyEm: tele.recusadaPeloMotoboyEm,
@@ -226,6 +227,17 @@ async function sincronizarRecebimentoMotoboy({
 }) {
   const tipoMovimento: TipoMovimentoFinanceiro = "CLIENTE";
 
+  const teleReferencia = await tx.tele.findUnique({
+    where: {
+      id: teleId,
+    },
+    select: {
+      dataTele: true,
+    },
+  });
+
+  const dataCompetencia = teleReferencia?.dataTele || null;
+
   const deveTerMovimento =
     recebimento === "motoboy" && valorRecebido > 0.009 && Boolean(motoboyRecebedor);
 
@@ -274,6 +286,8 @@ async function sincronizarRecebimentoMotoboy({
     descricao: `Recebimento da tele de ${solicitante}`,
     teleId,
     fechamentoId: null,
+    dataReferenciaInicio: dataCompetencia,
+    dataReferenciaFim: dataCompetencia,
   };
 
   if (movimentosExistentes.length === 0) {
@@ -374,6 +388,7 @@ export async function POST(request: Request) {
 
         statusAceite: motoboy ? "AGUARDANDO_ACEITE" : "NAO_ENVIADA",
         ordemMotoboy: null,
+        confirmadaComoTeleEm: ehOrcamento ? null : new Date(),
         atribuidaAoMotoboyEm: motoboy ? new Date() : null,
         aceitaPeloMotoboyEm: null,
         recusadaPeloMotoboyEm: null,
@@ -490,6 +505,7 @@ export async function PUT(request: Request) {
         aceitaPeloMotoboyEm: true,
         recusadaPeloMotoboyEm: true,
         motivoRecusaMotoboy: true,
+        concluidaPeloMotoboyEm: true,
       },
     });
 
@@ -542,6 +558,18 @@ export async function PUT(request: Request) {
     const statusAtualizado =
       deveReiniciarAceite || removeuMotoboy ? "AGUARDANDO_MOTOBOY" : statusParaBanco(body.status);
 
+    /*
+     * O cronometro operacional da Central usa concluidaPeloMotoboyEm
+     * como instante final. Quando o gestor conclui a tele manualmente,
+     * precisamos registrar esse horario tambem.
+     *
+     * Se o motoboy ja concluiu pelo app, preservamos o horario original.
+     */
+    const conclusaoOperacionalEm =
+      statusAtualizado === "ENTREGUE"
+        ? teleAtualAntesDaEdicao.concluidaPeloMotoboyEm || new Date()
+        : undefined;
+
     const paradasOperacionais = montarParadasOperacionais(body.paradas);
 
     if (paradasOperacionais.length === 0) {
@@ -572,6 +600,9 @@ export async function PUT(request: Request) {
           ...dadosAceite,
 
           status: statusAtualizado,
+          ...(conclusaoOperacionalEm
+            ? { concluidaPeloMotoboyEm: conclusaoOperacionalEm }
+            : {}),
           tipoRota: body.tipoRota || "Entrega",
 
           valorBase: body.valorBase || Number(String(body.valor || "0").replace(",", ".")),

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { otimizarFilaOperacionalPorProximidade } from "@/lib/google-maps/otimizarFilaOperacional";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
@@ -488,6 +489,8 @@ export async function POST(request: Request) {
     let totalTelesSincronizadas = 0;
 
     for (const [idMotoboy, teles] of telesPorMotoboy) {
+      let criadosNesteMotoboy = 0;
+
       const maiorOrdemAtual = await prisma.itemFilaOperacionalMotoboy.aggregate({
         where: {
           motoboyId: idMotoboy,
@@ -529,7 +532,16 @@ export async function POST(request: Request) {
 
         if (resultado.count > 0) {
           totalCriados += resultado.count;
+          criadosNesteMotoboy += resultado.count;
           totalTelesSincronizadas += 1;
+        }
+      }
+
+      if (criadosNesteMotoboy > 0) {
+        const chaveGoogleMaps = process.env.GOOGLE_MAPS_API_KEY;
+
+        if (chaveGoogleMaps) {
+          await otimizarFilaOperacionalPorProximidade(idMotoboy, chaveGoogleMaps);
         }
       }
     }

@@ -59,6 +59,28 @@ type MotoboyOnline = {
   telesEmAndamento: number;
 };
 
+type CustosApis = {
+  atualizadoEm: string;
+  usoInterno: Array<{
+    servico: string;
+    sku?: string | null;
+    quantidade: number;
+  }>;
+  billing: {
+    configurado: boolean;
+    erro?: string;
+    total: number | null;
+    moeda: string | null;
+    itens: Array<{
+      servico: string;
+      sku: string;
+      moeda: string;
+      custo: number;
+    }>;
+  };
+};
+
+
 export default function Dashboard() {
   const { teles, motoboys } = useExpressManager();
   const [motoboysOnline, setMotoboysOnline] = useState<MotoboyOnline[]>([]);
@@ -68,6 +90,22 @@ export default function Dashboard() {
   const [carregandoTarefas, setCarregandoTarefas] = useState(true);
   const [erroTarefas, setErroTarefas] = useState("");
   const [tarefaConcluindo, setTarefaConcluindo] = useState<string | null>(null);
+  const [custosApis, setCustosApis] = useState<CustosApis | null>(null);
+  const [carregandoCustosApis, setCarregandoCustosApis] = useState(true);
+
+
+  async function carregarCustosApis() {
+    try {
+      const resposta = await fetch("/api/custos-apis", { cache: "no-store" });
+      if (!resposta.ok) return;
+
+      setCustosApis((await resposta.json()) as CustosApis);
+    } catch (erro) {
+      console.error("Falha ao carregar custos de APIs:", erro);
+    } finally {
+      setCarregandoCustosApis(false);
+    }
+  }
 
   async function carregarTarefasGestor(mostrarCarregamento = false) {
     if (mostrarCarregamento) {
@@ -140,6 +178,16 @@ export default function Dashboard() {
       setTarefaConcluindo(null);
     }
   }
+
+  useEffect(() => {
+    void carregarCustosApis();
+
+    const intervaloCustos = window.setInterval(() => {
+      void carregarCustosApis();
+    }, 5 * 60 * 1000);
+
+    return () => window.clearInterval(intervaloCustos);
+  }, []);
 
   useEffect(() => {
     void carregarTarefasGestor(true);
@@ -435,6 +483,84 @@ export default function Dashboard() {
           description="Teles concluídas neste mês"
           tone="violet"
         />
+      </div>
+
+      <div className="mb-6">
+        <Panel title="Custos de APIs hoje">
+          {carregandoCustosApis ? (
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <Loader2 size={18} className="animate-spin" />
+              Carregando custos...
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Google faturado hoje
+                  </p>
+                  <strong className="mt-2 block text-2xl text-slate-900">
+                    {custosApis?.billing?.total !== null &&
+                    custosApis?.billing?.total !== undefined
+                      ? `${custosApis.billing.moeda === "BRL" ? "R$" : custosApis.billing.moeda || ""} ${custosApis.billing.total.toFixed(2).replace(".", ",")}`
+                      : "Aguardando"}
+                  </strong>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Valor oficial do Cloud Billing Export.
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Chamadas registradas
+                  </p>
+                  <strong className="mt-2 block text-2xl text-slate-900">
+                    {custosApis?.usoInterno?.reduce(
+                      (total, item) => total + item.quantidade,
+                      0
+                    ) || 0}
+                  </strong>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Contador interno do Express Manager.
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Billing
+                  </p>
+                  <strong className="mt-2 block text-lg text-slate-900">
+                    {custosApis?.billing?.configurado ? "Conectado" : "Configurar"}
+                  </strong>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {custosApis?.billing?.erro ||
+                      (custosApis?.billing?.configurado
+                        ? "Exportação oficial disponível."
+                        : "Falta ligar Cloud Billing Export + BigQuery.")}
+                  </p>
+                </div>
+              </div>
+
+              {custosApis?.usoInterno && custosApis.usoInterno.length > 0 && (
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
+                  {custosApis.usoInterno.map((item) => (
+                    <div
+                      key={`${item.servico}-${item.sku || ""}`}
+                      className="rounded-xl border border-slate-100 px-3 py-2"
+                    >
+                      <p className="text-xs font-semibold text-slate-700">
+                        {item.sku || item.servico}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {item.quantidade} chamada{item.quantidade === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </Panel>
       </div>
 
       <div className="mb-6">

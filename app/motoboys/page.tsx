@@ -272,7 +272,14 @@ export default function MotoboysPage() {
       <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <PageHeader titulo="Motoboys" descricao="Cadastre e acompanhe o desempenho dos motoboys." />
 
-        <button
+                <a
+          href="/motoboys/pontuacao"
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-6 py-4 font-semibold text-emerald-700 shadow-sm transition hover:bg-emerald-100 lg:w-auto"
+        >
+          <ClipboardList size={21} />
+          PontuaÃ§Ã£o
+        </a>
+<button
           type="button"
           onClick={abrirCadastro}
           className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 py-4 font-semibold text-white shadow-sm transition hover:bg-emerald-700 lg:w-auto"

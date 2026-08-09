@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { obterCoordenadasPersistentes } from "@/lib/google-maps/geocodificacaoPersistente";
+import { registrarUsoGoogle } from "@/lib/google-maps/usoApi";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
@@ -34,35 +36,7 @@ function destinoDaEtapa(etapa: string | null, paradas: Array<{ endereco: string 
 }
 
 async function geocodificarDestino(endereco: string, chave: string) {
-  const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
-
-  url.searchParams.set("address", endereco);
-  url.searchParams.set("language", "pt-BR");
-  url.searchParams.set("region", "BR");
-  url.searchParams.set("key", chave);
-
-  const resposta = await fetch(url, {
-    cache: "no-store",
-  });
-
-  const dados = await resposta.json();
-
-  if (!resposta.ok || dados?.status !== "OK") {
-    console.error("Não foi possível geocodificar o destino:", dados?.status, dados?.error_message);
-
-    return null;
-  }
-
-  const localizacao = dados?.results?.[0]?.geometry?.location;
-
-  if (!coordenadasValidas(localizacao?.lat, localizacao?.lng)) {
-    return null;
-  }
-
-  return {
-    latitude: localizacao.lat as number,
-    longitude: localizacao.lng as number,
-  };
+  return obterCoordenadasPersistentes(endereco, chave, "ROTA_ATUAL_MOTOBOY");
 }
 
 async function buscarPolylineRota({
@@ -108,6 +82,12 @@ async function buscarPolylineRota({
       units: "METRIC",
     }),
     cache: "no-store",
+  });
+
+  await registrarUsoGoogle({
+    servico: "Routes API",
+    sku: "Compute Routes",
+    origem: "ROTA_ATUAL_MOTOBOY",
   });
 
   const dados = await resposta.json();

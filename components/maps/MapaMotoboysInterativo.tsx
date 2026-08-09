@@ -6,8 +6,11 @@ import { useEffect, useRef, useState } from "react";
 type MotoboyMapa = {
   id: string;
   nome: string;
+  online?: boolean;
   latitude?: number | null;
   longitude?: number | null;
+  localizacaoAtualizadaEm?: string | null;
+  segundosSemAtualizar?: number | null;
   localizacaoRecente: boolean;
   teleAtual?: {
     id: string;
@@ -30,6 +33,33 @@ type GoogleMapsWindow = Window & {
 
 function coordenadaValida(valor: unknown): valor is number {
   return typeof valor === "number" && Number.isFinite(valor);
+}
+
+
+function formatarTempoSemAtualizar(segundos?: number | null) {
+  if (segundos === null || segundos === undefined || !Number.isFinite(segundos)) {
+    return "horário desconhecido";
+  }
+
+  if (segundos < 60) {
+    return `${Math.max(0, Math.floor(segundos))}s`;
+  }
+
+  const minutos = Math.floor(segundos / 60);
+
+  if (minutos < 60) {
+    return `${minutos} min`;
+  }
+
+  const horas = Math.floor(minutos / 60);
+  const minutosRestantes = minutos % 60;
+
+  if (horas < 24) {
+    return minutosRestantes > 0 ? `${horas}h ${minutosRestantes}min` : `${horas}h`;
+  }
+
+  const dias = Math.floor(horas / 24);
+  return `${dias} ${dias === 1 ? "dia" : "dias"}`;
 }
 
 async function carregarGoogleMaps() {
@@ -213,7 +243,6 @@ export default function MapaMotoboysInterativo({
 
     const motoboysValidos = motoboys.filter(
       (motoboy) =>
-        motoboy.localizacaoRecente &&
         coordenadaValida(motoboy.latitude) &&
         coordenadaValida(motoboy.longitude)
     );
@@ -235,16 +264,38 @@ export default function MapaMotoboysInterativo({
 
       const marcadorExistente = marcadoresRef.current.get(motoboy.id);
 
+      const localizacaoRecente = motoboy.localizacaoRecente;
+      const tempoSemAtualizar = formatarTempoSemAtualizar(motoboy.segundosSemAtualizar);
+      const tituloMarcador = localizacaoRecente
+        ? `${motoboy.nome} • localização atual`
+        : `${motoboy.nome} • última localização há ${tempoSemAtualizar}`;
+
+      const iconeMarcador = {
+        path: maps.SymbolPath.CIRCLE,
+        scale: localizacaoRecente ? 17 : 16,
+        fillColor: localizacaoRecente ? "#16a34a" : "#64748b",
+        fillOpacity: localizacaoRecente ? 1 : 0.82,
+        strokeColor: "#ffffff",
+        strokeOpacity: 1,
+        strokeWeight: 3,
+      };
+
       if (marcadorExistente) {
         marcadorExistente.setPosition(posicao);
-        marcadorExistente.setTitle(motoboy.nome);
+        marcadorExistente.setTitle(tituloMarcador);
+        marcadorExistente.setIcon(iconeMarcador);
+        marcadorExistente.setOpacity(localizacaoRecente ? 1 : 0.72);
+        marcadorExistente.setZIndex(localizacaoRecente ? 20 : 10);
         continue;
       }
 
       const marcador = new maps.Marker({
         map: mapa,
         position: posicao,
-        title: motoboy.nome,
+        title: tituloMarcador,
+        icon: iconeMarcador,
+        opacity: localizacaoRecente ? 1 : 0.72,
+        zIndex: localizacaoRecente ? 20 : 10,
         label: {
           text: motoboy.nome.trim().charAt(0).toUpperCase() || "M",
           color: "#ffffff",
@@ -352,20 +403,10 @@ export default function MapaMotoboysInterativo({
       const mudouMotoboy = !ultima || ultima.motoboyId !== motoboySelecionadoId;
       const mudouEtapa = !ultima || ultima.chaveEtapa !== chaveEtapa;
 
-      let distanciaMetros = Number.POSITIVE_INFINITY;
-
-      if (ultima && !mudouMotoboy) {
-        distanciaMetros = maps.geometry.spherical.computeDistanceBetween(
-          new maps.LatLng(ultima.latitude, ultima.longitude),
-          new maps.LatLng(latitude, longitude)
-        );
-      }
-
-      const precisaAtualizar =
-        mudouMotoboy ||
-        mudouEtapa ||
-        !rotaPolylineRef.current ||
-        distanciaMetros >= 20;
+      // A rota da Central é recalculada apenas quando muda o motoboy
+      // selecionado ou a etapa/destino operacional. O marcador de posição
+      // continua atualizando sem nova chamada de Routes.
+      const precisaAtualizar = mudouMotoboy || mudouEtapa;
 
       if (!precisaAtualizar) {
         return;
@@ -501,9 +542,22 @@ export default function MapaMotoboysInterativo({
       )}
 
       {!carregando && !erro && (
-        <div className="pointer-events-none absolute bottom-3 left-3 rounded-xl bg-white/95 px-3 py-2 text-xs font-medium text-slate-600 shadow-sm">
-          Arraste para mover • Ctrl + roda do mouse para zoom • Clique no motoboy para ver a rota
-        </div>
+        <>
+          <div className="pointer-events-none absolute bottom-3 left-3 rounded-xl bg-white/95 px-3 py-2 text-xs font-medium text-slate-600 shadow-sm">
+            Arraste para mover • Ctrl + roda do mouse para zoom • Clique no motoboy para ver a rota
+          </div>
+
+          <div className="pointer-events-none absolute right-3 top-3 rounded-xl bg-white/95 px-3 py-2 text-xs text-slate-600 shadow-sm">
+            <div className="flex items-center gap-2">
+              <span className="h-3 w-3 rounded-full bg-green-600" />
+              Localização atual
+            </div>
+            <div className="mt-1.5 flex items-center gap-2">
+              <span className="h-3 w-3 rounded-full bg-slate-500 opacity-80" />
+              Última localização conhecida
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

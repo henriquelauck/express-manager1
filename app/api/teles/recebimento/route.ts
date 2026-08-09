@@ -26,6 +26,15 @@ function recebimentoParaBanco(tipo: TipoRecebedorTela) {
 }
 
 async function reconstruirMovimentosMotoboy(tx: any, teleId: string, solicitante: string) {
+  const teleReferencia = await tx.tele.findUnique({
+    where: {
+      id: teleId,
+    },
+    select: {
+      dataTele: true,
+    },
+  });
+
   await tx.movimentoFinanceiroMotoboy.deleteMany({
     where: {
       teleId,
@@ -59,8 +68,8 @@ async function reconstruirMovimentosMotoboy(tx: any, teleId: string, solicitante
         descricao: `Recebimento da tele de ${solicitante}`,
         teleId,
         fechamentoId: recebimento.fechamentoId || null,
-        dataReferenciaInicio: recebimento.dataRecebimento,
-        dataReferenciaFim: recebimento.dataRecebimento,
+        dataReferenciaInicio: teleReferencia?.dataTele || recebimento.dataRecebimento,
+        dataReferenciaFim: teleReferencia?.dataTele || recebimento.dataRecebimento,
       },
     });
   }

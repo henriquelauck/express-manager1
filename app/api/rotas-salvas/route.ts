@@ -123,6 +123,55 @@ async function atualizarLocais(
   }
 }
 
+
+async function removerLocaisSemRota(
+  solicitante: string,
+  clientesCandidatos: string[]
+) {
+  const candidatosNormalizados = Array.from(
+    new Set(clientesCandidatos.map((cliente) => texto(cliente)).filter(Boolean))
+  );
+
+  if (candidatosNormalizados.length === 0) {
+    return;
+  }
+
+  const rotasAtuais = await prisma.rotaSalva.findMany({
+    where: { solicitante },
+    select: {
+      paradas: {
+        select: {
+          cliente: true,
+        },
+      },
+    },
+  });
+
+  const clientesAindaUtilizados = new Set(
+    rotasAtuais
+      .flatMap((rota) => rota.paradas)
+      .map((parada) => normalizarTexto(parada.cliente))
+      .filter(Boolean)
+  );
+
+  const clientesParaExcluir = candidatosNormalizados.filter(
+    (cliente) => !clientesAindaUtilizados.has(normalizarTexto(cliente))
+  );
+
+  if (clientesParaExcluir.length === 0) {
+    return;
+  }
+
+  await prisma.localSolicitante.deleteMany({
+    where: {
+      solicitante,
+      cliente: {
+        in: clientesParaExcluir,
+      },
+    },
+  });
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -330,7 +379,6 @@ export async function POST(request: Request) {
       });
 
       if (ignorada?.motivo === "EXCLUIDA") {
-        await atualizarLocais(solicitante, paradas);
         return NextResponse.json({
           sucesso: true,
           ignorada: true,
@@ -349,12 +397,25 @@ export async function POST(request: Request) {
       },
     });
 
-    const rota = await prisma.$transaction(async (tx) => {
-      const rotaIdParaAtualizar =
-        id && !id.startsWith("historico-")
-          ? id
-          : rotaMesmaAssinatura?.id || null;
+    const rotaIdParaAtualizar =
+      id && !id.startsWith("historico-")
+        ? id
+        : rotaMesmaAssinatura?.id || null;
 
+    const rotaAnterior = rotaIdParaAtualizar
+      ? await prisma.rotaSalva.findUnique({
+          where: { id: rotaIdParaAtualizar },
+          select: {
+            paradas: {
+              select: {
+                cliente: true,
+              },
+            },
+          },
+        })
+      : null;
+
+    const rota = await prisma.$transaction(async (tx) => {
       if (rotaIdParaAtualizar) {
         const existente = await tx.rotaSalva.findUnique({
           where: { id: rotaIdParaAtualizar },
@@ -414,6 +475,11 @@ export async function POST(request: Request) {
     }
 
     await atualizarLocais(solicitante, paradas);
+
+    await removerLocaisSemRota(
+      solicitante,
+      rotaAnterior?.paradas.map((parada) => parada.cliente || "") || []
+    );
 
     return NextResponse.json({
       ...rota,
@@ -501,6 +567,11 @@ export async function DELETE(request: Request) {
       }),
       prisma.rotaSalva.delete({ where: { id } }),
     ]);
+
+    await removerLocaisSemRota(
+      rota.solicitante,
+      rota.paradas.map((parada) => parada.cliente || "")
+    );
 
     return NextResponse.json({ sucesso: true });
   } catch (error) {

@@ -3,6 +3,12 @@ import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
 export async function GET() {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json(
+      { erro: "Rota de desenvolvimento indisponÃ­vel em produÃ§Ã£o." },
+      { status: 404 }
+    );
+  }
   const email = "motoboy@expressmanager.com";
   const senha = "123456";
 

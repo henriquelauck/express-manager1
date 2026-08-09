@@ -50,6 +50,18 @@ function hashesIguais(hashA: string, hashB: string) {
   }
 }
 
+function horaBrasil(data = new Date()) {
+  const partes = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(data);
+
+  const hora = Number(partes.find((parte) => parte.type === "hour")?.value || 0);
+
+  return Number.isFinite(hora) ? hora : 0;
+}
+
 function dataReferenciaBrasil(data = new Date()) {
   const partes = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Sao_Paulo",
@@ -327,6 +339,58 @@ export async function GET(request: Request) {
   }
 }
 
+function regraPontuacaoPresenca(data: Date) {
+  const partes = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(data);
+
+  const weekday = partes.find((p) => p.type === "weekday")?.value || "";
+  const hora = Number(partes.find((p) => p.type === "hour")?.value || 0);
+  const minuto = Number(partes.find((p) => p.type === "minute")?.value || 0);
+  const minutos = hora * 60 + minuto;
+
+  const mapaDia: Record<string, number> = {
+    Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+  };
+  const dia = mapaDia[weekday] ?? 0;
+
+  const inicioPrevisto = dia === 6 ? 9 * 60 : 8 * 60 + 30;
+  const emExpediente =
+    dia >= 1 && dia <= 5
+      ? (minutos >= 8 * 60 + 30 && minutos < 12 * 60) ||
+        (minutos >= 13 * 60 + 30 && minutos < 19 * 60)
+      : dia === 6
+        ? minutos >= 9 * 60 && minutos < 16 * 60
+        : false;
+
+  const deveTrabalhar = dia >= 1 && dia <= 6;
+
+  return {
+    dia,
+    minutos,
+    inicioPrevisto,
+    atrasadoPrimeiroOnline: deveTrabalhar && minutos > inicioPrevisto + 15,
+    emExpediente,
+  };
+}
+
+function intervaloDiaPontuacao(data: Date) {
+  const dataISO = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(data);
+
+  return {
+    inicio: new Date(`${dataISO}T00:00:00-03:00`),
+    fim: new Date(`${dataISO}T23:59:59.999-03:00`),
+  };
+}
 export async function PUT(request: Request) {
   try {
     const motoboy = await obterMotoboyAutenticado(request);
@@ -343,9 +407,101 @@ export async function PUT(request: Request) {
     }
 
     const agora = new Date();
+    const regraPresenca = regraPontuacaoPresenca(agora);
+    const intervaloHojePontuacao = intervaloDiaPontuacao(agora);
+
+    /*
+     * Offline automatico apos 19h (America/Sao_Paulo).
+     *
+     * Uma rota e considerada ativa somente quando a tele foi aceita
+     * pelo motoboy e ainda nao foi entregue. Assim:
+     * - sem rota ativa apos 19h => encerra a sessao e fica offline;
+     * - com rota ativa => continua online normalmente;
+     * - ao concluir a ultima rota, a proxima atualizacao de localizacao
+     *   encerra a presenca automaticamente.
+     *
+     * A regra usa a propria atualizacao de localizacao que ja existe,
+     * sem Cron e sem API externa.
+     */
+    const offlineAutomatico19h =
+      (acao === "ONLINE" || acao === "ATUALIZAR") && horaBrasil(agora) >= 19;
+
+    if (offlineAutomatico19h) {
+      const rotasAtivas = await prisma.tele.count({
+        where: {
+          motoboyId: motoboy.id,
+          statusAceite: "ACEITA",
+          status: {
+            not: "ENTREGUE",
+          },
+        },
+      });
+
+      if (rotasAtivas === 0) {
+        const atualizado = await prisma.$transaction(async (tx) => {
+          await encerrarSessoesAbertas(tx, motoboy.id, agora);
+
+          return tx.motoboy.update({
+            where: {
+              id: motoboy.id,
+            },
+            data: {
+              online: false,
+              onlineDesde: null,
+            },
+            select: {
+              id: true,
+              nome: true,
+              online: true,
+              latitude: true,
+              longitude: true,
+              precisaoLocalizacao: true,
+              onlineDesde: true,
+              localizacaoAtualizadaEm: true,
+            },
+          });
+        });
+
+        return NextResponse.json({
+          ok: true,
+          offlineAutomatico: true,
+          motivoOfflineAutomatico: "Encerramento automatico apos 19h sem rota ativa.",
+          motoboy: atualizado,
+        });
+      }
+    }
 
     if (acao === "OFFLINE") {
       const atualizado = await prisma.$transaction(async (tx) => {
+        if (regraPresenca.emExpediente) {
+          const doisMinutosAtras = new Date(agora.getTime() - 2 * 60_000);
+          const duplicada = await tx.motoboyPontuacao.findFirst({
+            where: {
+              motoboyId: motoboy.id,
+              tipo: "OFFLINE_EXPEDIENTE",
+              ocorridoEm: { gte: doisMinutosAtras },
+            },
+            select: { id: true },
+          });
+
+          if (!duplicada) {
+            await tx.motoboyPontuacao.create({
+              data: {
+                motoboyId: motoboy.id,
+                tipo: "OFFLINE_EXPEDIENTE",
+                titulo: "Offline durante o expediente",
+                descricao: "Ficou offline manualmente durante o horÃ¡rio operacional.",
+                descricaoOriginal: "Ficou offline manualmente durante o horÃ¡rio operacional.",
+                pontos: -5,
+                pontosOriginais: -5,
+                origem: "AUTOMATICA",
+                status: "ATIVA",
+                ocorridoEm: agora,
+              },
+            });
+          }
+        }
+
         await encerrarSessoesAbertas(tx, motoboy.id, agora);
 
         return tx.motoboy.update({
@@ -414,6 +570,53 @@ export async function PUT(request: Request) {
       });
 
       if (acao === "ONLINE" && !motoboy.online) {
+        if (regraPresenca.atrasadoPrimeiroOnline) {
+          const primeiraSessaoHoje = await tx.sessaoOnlineMotoboy.findFirst({
+            where: {
+              motoboyId: motoboy.id,
+              iniciadaEm: {
+                gte: intervaloHojePontuacao.inicio,
+                lte: intervaloHojePontuacao.fim,
+              },
+            },
+            select: { id: true },
+          });
+
+          const ocorrenciaHoje = await tx.motoboyPontuacao.findFirst({
+            where: {
+              motoboyId: motoboy.id,
+              tipo: "ATRASO_ONLINE",
+              ocorridoEm: {
+                gte: intervaloHojePontuacao.inicio,
+                lte: intervaloHojePontuacao.fim,
+              },
+            },
+            select: { id: true },
+          });
+
+          if (!primeiraSessaoHoje && !ocorrenciaHoje) {
+            const horaPrevista = regraPresenca.dia === 6 ? "09:00" : "08:30";
+            const horaReal = `${String(Math.floor(regraPresenca.minutos / 60)).padStart(2, "0")}:${String(
+              regraPresenca.minutos % 60
+            ).padStart(2, "0")}`;
+
+            await tx.motoboyPontuacao.create({
+              data: {
+                motoboyId: motoboy.id,
+                tipo: "ATRASO_ONLINE",
+                titulo: "Atraso para ficar online",
+                descricao: `Primeiro online do dia Ã s ${horaReal}. Previsto ${horaPrevista}, com tolerÃ¢ncia de 15 minutos.`,
+                descricaoOriginal: `Primeiro online do dia Ã s ${horaReal}. Previsto ${horaPrevista}, com tolerÃ¢ncia de 15 minutos.`,
+                pontos: -5,
+                pontosOriginais: -5,
+                origem: "AUTOMATICA",
+                status: "ATIVA",
+                ocorridoEm: agora,
+              },
+            });
+          }
+        }
+
         if (sessao) {
           await encerrarSessoesAbertas(tx, motoboy.id, agora);
           sessao = null;

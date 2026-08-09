@@ -109,7 +109,7 @@ export async function PUT(request: Request) {
       Date.now() - atribuidaEm >= PRAZO_ACEITE_MS;
 
     if (prazoExpirado) {
-      await prisma.tele.updateMany({
+      const expiracaoAtualizada = await prisma.tele.updateMany({
         where: {
           id: teleId,
           motoboyId: usuario.motoboy.id,
@@ -128,6 +128,34 @@ export async function PUT(request: Request) {
           status: "AGUARDANDO_MOTOBOY",
         },
       });
+
+      if (expiracaoAtualizada.count > 0) {
+        const existente = await prisma.motoboyPontuacao.findFirst({
+          where: {
+            motoboyId: usuario.motoboy.id,
+            teleId,
+            tipo: "EXPIRACAO_ACEITE",
+          },
+          select: {
+            id: true,
+          },
+        });
+
+        if (!existente) {
+          await prisma.motoboyPontuacao.create({
+            data: {
+              motoboyId: usuario.motoboy.id,
+              teleId,
+              tipo: "EXPIRACAO_ACEITE",
+              titulo: "Prazo de aceite expirado",
+              descricao: `NÃ£o respondeu a tele de ${teleAtual.solicitante} dentro do prazo de 5 minutos.`,
+              pontos: -8,
+              origem: "AUTOMATICA",
+              ocorridoEm: new Date(),
+            },
+          });
+        }
+      }
 
       return respostaErro(
         "O prazo de 5 minutos para aceitar esta tele expirou. Ela voltou para a Central.",
@@ -258,6 +286,34 @@ export async function PUT(request: Request) {
           },
         },
       });
+
+      const ocorrenciaExistente = await tx.motoboyPontuacao.findFirst({
+        where: {
+          motoboyId: usuario.motoboy!.id,
+          teleId,
+          tipo: "RECUSA_TELE",
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (!ocorrenciaExistente) {
+        await tx.motoboyPontuacao.create({
+          data: {
+            motoboyId: usuario.motoboy!.id,
+            teleId,
+            tipo: "RECUSA_TELE",
+            titulo: "Recusa de tele",
+            descricao: motivo
+              ? `Recusou a tele de ${teleAtual.solicitante}. Motivo informado: ${motivo}`
+              : `Recusou a tele de ${teleAtual.solicitante} sem informar motivo.`,
+            pontos: -8,
+            origem: "AUTOMATICA",
+            ocorridoEm: new Date(),
+          },
+        });
+      }
 
       const notificacao = {
         tipo: "TELE_RECUSADA",

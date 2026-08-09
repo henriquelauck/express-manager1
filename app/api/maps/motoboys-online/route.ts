@@ -1,3 +1,4 @@
+import { registrarUsoGoogle } from "@/lib/google-maps/usoApi";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
@@ -324,6 +325,12 @@ export async function GET(request: Request) {
         cache: "no-store",
       }
     );
+
+    await registrarUsoGoogle({
+      servico: "Maps Static API",
+      sku: "Static Maps",
+      origem: "MOTOBOYS_ONLINE_MAPA",
+    });
 
     if (!respostaMapa.ok) {
       console.error(

@@ -60,6 +60,7 @@ export async function POST(request: Request) {
       where: { id: teleId },
       data: {
         orcamento: false,
+        confirmadaComoTeleEm: new Date(),
         status: "AGUARDANDO_MOTOBOY",
         motoboyId: null,
         motoboyNome: null,

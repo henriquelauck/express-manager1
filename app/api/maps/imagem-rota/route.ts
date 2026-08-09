@@ -1,3 +1,4 @@
+import { registrarUsoGoogle } from "@/lib/google-maps/usoApi";
 import { NextResponse } from "next/server";
 
 type Ponto = {
@@ -293,6 +294,12 @@ export async function GET(request: Request) {
 
       const respostaGoogle = await fetch(urlGoogle, {
         cache: "no-store",
+      });
+
+      await registrarUsoGoogle({
+        servico: "Maps Static API",
+        sku: "Static Maps",
+        origem: "IMAGEM_ROTA",
       });
 
       const tipoConteudo = respostaGoogle.headers.get("content-type") || "";

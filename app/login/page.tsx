@@ -9,7 +9,17 @@ type CredenciaisNativasPlugin = {
   salvarToken(opcoes: { token: string }): Promise<{ salvo: boolean }>;
 };
 
-const CredenciaisNativas = registerPlugin<CredenciaisNativasPlugin>("CredenciaisNativas");
+type RegistroCredenciaisExpress = typeof globalThis & {
+  __expressCredenciaisNativas?: CredenciaisNativasPlugin;
+};
+
+const registroCredenciaisExpress = globalThis as RegistroCredenciaisExpress;
+
+const CredenciaisNativas =
+  registroCredenciaisExpress.__expressCredenciaisNativas ??
+  registerPlugin<CredenciaisNativasPlugin>("CredenciaisNativas");
+
+registroCredenciaisExpress.__expressCredenciaisNativas = CredenciaisNativas;
 
 function executandoNoAppAndroid() {
   return (
